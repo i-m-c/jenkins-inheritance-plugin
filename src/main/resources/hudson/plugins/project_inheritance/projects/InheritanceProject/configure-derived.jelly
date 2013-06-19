@@ -1,0 +1,39 @@
+<!--
+ Copyright (c) 2011-2013, Intel Mobile Communications GmbH
+ 
+ 
+ This file is part of the Inheritance plug-in for Jenkins.
+ 
+ The Inheritance plug-in is free software: you can redistribute it
+ and/or modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation in version 3
+ of the License
+ 
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!--
+  Inheritance Hetero-list entry
+-->
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:f="/lib/form">
+	<f:section title="Inherited properties">
+		<f:description>
+			Please do note, that these derived objects are <b>read-only</b>.
+			Changes will not be saved and the content will only be refreshed
+			when you <b>re-open</b> this configuration screen.
+		</f:description>
+		<f:advanced align="left" title="Expand inherited properties">
+			<st:include page="config-derived-parameters.jelly"/>
+			<st:include page="config-derived-buildWrappers.jelly"/>
+			<st:include page="config-derived-builders.jelly"/>
+			<st:include page="config-derived-publishers.jelly"/>
+		</f:advanced>
+	</f:section>
+</j:jelly>

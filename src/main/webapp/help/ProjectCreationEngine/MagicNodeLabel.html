@@ -1,0 +1,17 @@
+<div>
+You can set a specific node label here, which will be treated as a "magic"
+value during the evaluation of the restrictions on running jobs.
+<p>
+	If a value is set here and you start a job that is an Inheritance Job
+	<b>and</b> has restrictions on labels, Jenkins will check if you make any
+	reference of the "magic" value in the label expression.
+</p>
+<p>
+	If not, Jenkins will add an "and" term with the negated magic value.
+	That means, these jobs will <b>not</b> run on nodes that carry the magic
+	label.<br/>
+	If there is a reference, Jenkins will do nothing and just return the
+	label that you specified. This way, you can select manually whether or not
+	to run jobs on test-machines that are marked with the "magic" label.
+</p>
+</div>

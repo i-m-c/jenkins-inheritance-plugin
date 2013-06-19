@@ -1,0 +1,84 @@
+<!--
+The MIT License
+
+Copyright (c) 2004-2009, Sun Microsystems, Inc., Kohsuke Kawaguchi, Erik Ramfelt, Tom Huybrechts, id:cactusman
+
+Copyright (c) 2012, Intel Mobile Communications GmbH
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+-->
+
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core"
+		xmlns:st="jelly:stapler"
+		xmlns:l="/lib/layout"
+		xmlns:t="/lib/hudson"
+		xmlns:f="/lib/form"
+		xmlns:pf="/form"
+>
+	<j:set var="helpRoot" value="/plugin/project-inheritance/help"/>
+	
+	<l:layout title="${it.displayName}">
+		<st:include page="sidepanel.jelly" />
+		<l:main-panel>
+			<h1>${it.pronoun} ${it.displayName}</h1>
+			
+			<!-- Printing a humonguous warning if the project has a cyclic dependency -->
+			<j:if test="${it.hasCyclicDependency()}">
+				<h2 style="color:red">
+					This project has a
+					<a style="color:red" href="http://en.wikipedia.org/wiki/Cycle_detection">cyclic</a>,
+					<a style="color:red" href="http://en.wikipedia.org/wiki/Diamond_problem">diamond</a> or repeated dependency!
+				</h2>
+			</j:if>
+			
+			<!-- Then, we check if there are any invalid parameters -->
+			<j:invoke
+				var="paramCheck"
+				method="getParameterSanity"
+				on="${it}"
+			/>
+			<j:if test="${paramCheck.getKey() == false}">
+				<h2 style="color:red">
+					This project has a parameter inconsistency!
+				</h2>
+				Reason: ${paramCheck.getValue()}
+			</j:if>
+			
+			<!-- Printing invalid project references -->
+			<j:invoke
+				var="referenceIssues"
+				on="${it}" method="getProjectReferenceIssues"
+			/>
+			<j:forEach items="${referenceIssues}" var="i">
+				<h3 style="color:red">${i}</h3>
+			</j:forEach>
+			
+			
+			<t:editableDescription permission="${it.CONFIGURE}"/>
+			
+			<st:include page="jobpropertysummaries.jelly" />
+			
+			<!-- inject main part here -->
+			<st:include page="main.jelly" />
+			
+			<st:include page="permalinks.jelly" />
+		</l:main-panel>
+	</l:layout>
+</j:jelly>

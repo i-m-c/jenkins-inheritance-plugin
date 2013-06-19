@@ -1,0 +1,28 @@
+<!--
+ Copyright (c) 2011-2013, Intel Mobile Communications GmbH
+ 
+ 
+ This file is part of the Inheritance plug-in for Jenkins.
+ 
+ The Inheritance plug-in is free software: you can redistribute it
+ and/or modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation in version 3
+ of the License
+ 
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!--
+  This view is used to render the installed plugins page.
+-->
+<div>
+    This plugin adds inheritance between jobs to Jenkins. To learn how this
+    plugin is used, refer to
+    <a href="http://youtu.be/DNUI7DRi6XE">this YouTube video</a>.
+</div>

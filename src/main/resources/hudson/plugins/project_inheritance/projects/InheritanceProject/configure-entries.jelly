@@ -1,0 +1,109 @@
+<!--
+ Copyright (c) 2011-2013, Intel Mobile Communications GmbH
+ 
+ 
+ This file is part of the Inheritance plug-in for Jenkins.
+ 
+ The Inheritance plug-in is free software: you can redistribute it
+ and/or modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation in version 3
+ of the License
+ 
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<!--
+  Config page. derived class specific entries should go to configure-entries.jsp
+-->
+<?jelly escape-by-default='true'?>
+<j:jelly
+		xmlns:j="jelly:core"
+		xmlns:st="jelly:stapler"
+		xmlns:f="/lib/form"
+		xmlns:l="/lib/layout"
+		xmlns:pf="/form"
+>
+	<!-- Adding the standard transient job warnings/fields -->
+	<st:include page="transient-job-fields.jelly" />
+
+	<!--
+		Fetching the classloader that is capable of loading plugins.
+		This is necessary to get j:arg and j:new working right with our classes.
+	-->
+	<!-- Then, we need to get the plugin-aware ClassLoader for the arg tag -->
+	<j:invokeStatic var="hudson"
+		className="hudson.model.Hudson" method="getInstance"
+	/>
+	<j:set var="cl" value="${hudson.getPluginManager().uberClassLoader}" />
+	
+	
+	<!-- Then, we'll fetch a few ENUM constants -->
+	<j:set var="IMode_Type"
+		value="hudson.plugins.project_inheritance.projects.InheritanceProject$IMode"
+	/>
+	<j:invokeStatic var="IMode_INHERIT_FORCED"
+		method="valueOf"
+		className="hudson.plugins.project_inheritance.projects.InheritanceProject$IMode"
+	>
+		<j:arg type="java.lang.String" value="INHERIT_FORCED" />
+	</j:invokeStatic>
+	
+	
+	<!-- Adding the versioning box here -->
+	<j:if test="${it.getIsTransient() == false}">
+		<pf:colored-block backCol="Khaki" borderCol="navy">
+			<st:include page="configure-version-selection.jelly"/>
+		</pf:colored-block>
+	
+		<pf:colored-block backCol="PowderBlue" borderCol="navy">
+			<f:section title="${%Project Inheritance Options}">
+				<f:invisibleEntry title="${%Is Transient Project}" field="isTransient">
+					<f:checkbox />
+					<!-- 
+					<f:description>
+						If this is checked, the project will not be stored on disk.
+						Do note that this flag is read-only. Only projects automatically
+						created by the "Project Creation Engine" have this flag set.
+					</f:description>
+					-->
+				</f:invisibleEntry>
+			
+				<f:entry title="${%Is abstract project}" field="isAbstract">
+					<f:checkbox />
+					<f:description>
+						If this is checked, the project will be marked as abstract and
+						can not	be run directly. While this superficially sounds
+						similar to just deactivating the project, it additionally
+						relaxes certain checks related to inheritance of values.
+						One example is the error that occurs if you've not
+						given a default value to a mandatory variable.
+					</f:description>
+				</f:entry>
+			</f:section>
+		</pf:colored-block>
+	</j:if>
+	
+	
+	<!-- Including the inheritance selection box -->
+	<pf:colored-block backCol="LightGreen" borderCol="navy">
+		<st:include page="configure-inheritance.jelly"/>
+	</pf:colored-block>
+	
+	<!-- Showing the derived properties -->
+	<!-- TODO: Move these to their own page
+	<pf:colored-block backCol="LightPink" borderCol="navy">
+		<st:include page="configure-derived.jelly"/>
+	</pf:colored-block>
+	 -->
+	
+	
+	<!-- Showing the properties of the shadowed Project class -->
+	<f:section title = "${%Base Project Configuration}" />
+	<st:include page="/hudson/model/Project/configure-entries.jelly" />
+</j:jelly>

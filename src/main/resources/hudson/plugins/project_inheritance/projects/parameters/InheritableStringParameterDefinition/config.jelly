@@ -1,0 +1,95 @@
+<!--
+The MIT License
+
+Copyright (c) 2004-2009, Sun Microsystems, Inc., Kohsuke Kawaguchi, Seiji Sogabe, Tom Huybrechts
+
+Copyright (c) 2012, Intel Mobile Communications GmbH
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+-->
+
+<?jelly escape-by-default='true'?>
+<j:jelly
+		xmlns:j="jelly:core"
+		xmlns:st="jelly:stapler"
+		xmlns:d="jelly:define"
+		xmlns:l="/lib/layout"
+		xmlns:t="/lib/hudson"
+		xmlns:f="/lib/form"
+		xmlns:i="jelly:fmt"
+		xmlns:p="/lib/hudson/project"
+>
+	<f:invisibleEntry>
+		<f:readOnlyTextbox name="projectName" default="${it.name}"/>
+	</f:invisibleEntry>
+	<f:entry title="${%Name}" help="/help/parameter/name.html">
+		<f:textbox field="name" />
+	</f:entry>
+	<f:entry title="${%Default Value}" help="/help/parameter/string-default.html">
+		<f:textbox field="defaultValue" />
+	</f:entry>
+	
+	<f:advanced align="left" title="Show advanced properties">
+		<f:entry title="${%Description}" help="/help/parameter/description.html">
+			<f:textarea field="description" />
+		</f:entry>
+		
+		<!-- Then, we add the boxes for the inheritance-specific tasks -->
+		<f:entry title="${%Inheritance Mode}">
+			<f:select field="inheritanceMode" />
+		</f:entry>
+		
+		<!-- Checkbox for "isHidden" property -->
+		<f:entry title="${%Hide behind button on build screen?}">
+			<f:checkbox field="isHidden" default="false"/>
+			<f:description>
+				If this is checked, the parameter will be hidden behind an
+				"advanced" button on the screen for starting a build.
+				For sanity's sake, you should set this for mandatory
+				variables.
+			</f:description>
+		</f:entry>
+		
+		<!-- Checkbox for automatic addition of spaces -->
+		<f:entry title="${%Automatically add spaces?}">
+			<f:checkbox field="autoAddSpaces" default="true"/>
+			<f:description>
+				If this is checked, the parameter will automatically have a space
+				prepended, if it extends a parameter from a parent project.
+			</f:description>
+		</f:entry>
+		
+		<!-- And the field, that determines if the parameter is mandatory -->
+		<f:entry title="${%Must have default?}">
+			<f:checkbox field="mustHaveDefaultValue"/>
+			<f:description>
+				If this is checked, the parameter has to have a default value set
+				at some point during inheritance.  
+			</f:description>
+		</f:entry>
+		<!-- And the field to determine, whether or not a field may be empty on build -->
+		<f:entry title="${%Must be assigned?}">
+			<f:checkbox field="mustBeAssigned"/>
+			<f:description>
+				If this is checked, it is impossible to start a build when this
+				parameter does not have a value set.
+			</f:description>
+		</f:entry>
+	</f:advanced>
+</j:jelly>

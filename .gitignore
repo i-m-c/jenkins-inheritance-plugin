@@ -1,0 +1,8 @@
+target
+work
+/archives
+/jobs.tar.gz
+/test_config
+.project
+.settings
+.classpath

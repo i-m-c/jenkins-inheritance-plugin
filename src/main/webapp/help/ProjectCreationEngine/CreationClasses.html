@@ -1,0 +1,35 @@
+<div>
+<p>
+In this section, you can define classes that can be assigned to
+"inheritance projects". This is used to group those projects together in a way,
+that allows Jenkins to automatically create new projects that inherit their
+properties from both classes.
+</p>
+<p>
+Imagine, that you define two classes "Car" and "Motor" here and then define a
+mating between those two classes in the section below.
+<br/>
+Imagine further, that you assign the jobs "Ford" and "BMW" to the "Cars"-class
+and "V8" and "V12" to the "Motor"-class.
+</p>
+<p>
+Given these conditions, this plugin will generate the following projects:
+<ul>
+	<li>Ford_V8</li>
+	<li>Ford_V12</li>
+	<li>BMW_V8</li>
+	<li>BMW_V12</li>
+</ul>
+The inheritance of properties and steps is ordered as stated. That means, for
+example, that steps defined in "Ford" will	be executed before those of "V8"
+and that parameters of "V8" will overwrite/extend those of "Ford".
+</p>
+<p>
+Also do note that all these classes will be created as transient projects.
+That means, that you will not be able to change their properties &mdash;
+except by altering their parent projects &mdash; and that they will also not
+be saved when Jenkins is shut down. Instead, they are regenerated from scratch.
+Only the builds that ran on them are saved to disk and loaded as soon as the
+projects are regenerated. 
+</p>
+</div>

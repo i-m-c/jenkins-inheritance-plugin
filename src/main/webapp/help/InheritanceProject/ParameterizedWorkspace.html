@@ -1,0 +1,24 @@
+<div>
+	If you enable this check-box, you can enter a directory name into the text
+	box. This name can contain an arbitrary amount of deeply nested variables.
+	<br/>
+	That means, that all variables will be repeatedly evaluated, until none
+	remain, two consecutive evaluations are identical or a preset (but high)
+	number of evaluations were done.<br/>
+	<br/>
+	The string generated in that way is then checked if it is an absolute path,
+	or a relative path. If absolute, it is used as-is; if relative, it is
+	expanded to rest below the normal "workspace" directory of the node.
+	<br/>
+	The resulting path is then used as the workspace-root for this compound.
+	This means, that if multiple compounds using this root are run at the same
+	time, multiple parallel workspaces are spawned. Each will be amended with
+	"@2", "@3", etc.<br/>
+	<br/>
+	This functionality is <b>highly useful</b>, if you have multiple different
+	compounds that reference the same source code repository and so do not need
+	to have fully distinct workspaces.
+	<br/>
+	In case this path evaluates to an empty string, or one only containing
+	whitespaces, the default behaviour of Jenkins is used.
+</div>

@@ -1,0 +1,71 @@
+<!--
+ Copyright (c) 2011-2013, Intel Mobile Communications GmbH
+ 
+ 
+ This file is part of the Inheritance plug-in for Jenkins.
+ 
+ The Inheritance plug-in is free software: you can redistribute it
+ and/or modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation in version 3
+ of the License
+ 
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<?jelly escape-by-default='true'?>
+<j:jelly
+		xmlns:j="jelly:core"
+		xmlns:st="jelly:stapler"
+		xmlns:f="/lib/form"
+		xmlns:l="/lib/layout"
+		xmlns:pf="/form"
+		xmlns:p="/lib/hudson/project">
+	<j:choose>
+		<j:when test="${it.getIsTransient()}">
+			<h1>Transient Job Configuration</h1>
+			<h3 style="color:red">Please note that this view is a read only view of the job configuration.
+				You cannot edit fields in this view. In order to change the displayed values, open the list
+				of <i>references</i> (left hand side menu) and perform the changes in the parent job definitions.
+				</h3>
+			<script language="JAVASCRIPT" type="TEXT/JAVASCRIPT">
+				// Add observer to window load event
+				Event.observe(window,"load",function(){
+					// Remove action from form tag in order to prevent submitting the form accidentelly
+					document.forms.config.action = "";
+
+					// Hide all buttons that do not expand or advance read-only options
+					document.forms.config.select(".first-child button").each(function(s) {
+						if ( ! s.innerHTML.match(/Expand|Advanced/) &amp;&amp;
+							! s.innerHTML.match(/\.\.\./) ) {
+							//s.style.border = "3px solid red";
+							s.hide();
+						}
+					});
+
+					// Make all input fields readonly/disabled
+					document.forms.config.select("input, textarea").each (function(s) { 
+					s.setAttribute("readonly", "readonly"); s.setAttribute("disabled", "disabled")
+					});
+				});
+			</script>
+		</j:when>
+		<j:otherwise>
+			<h1>Job configuration</h1>
+		</j:otherwise>
+	</j:choose>
+	
+	<!-- Printing a humongous warning if the project has a cyclic dependency -->
+	<j:if test="${it.hasCyclicDependency()}">
+		<h2 style="color:red">
+			This project has a
+			<a style="color:red" href="http://en.wikipedia.org/wiki/Cycle_detection">cyclic</a>,
+			<a style="color:red" href="http://en.wikipedia.org/wiki/Diamond_problem">diamond</a> or repeated dependency!
+		</h2>
+	</j:if>
+</j:jelly>

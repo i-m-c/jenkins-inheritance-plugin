@@ -1,0 +1,13 @@
+LGPLv3:
+	48x48:
+		format-line-spacing-double.png (http://www.oxygen-icons.org/ ; http://www.kde.org/)
+	
+	scalable:
+		svn-commit.svgz (http://www.oxygen-icons.org/ ; http://www.kde.org/)
+	
+	original:
+		BinaryTree.vsd (exported to: vectorized/BinaryTree.svgz)
+
+
+
+All other images are derived from those mentioned above.

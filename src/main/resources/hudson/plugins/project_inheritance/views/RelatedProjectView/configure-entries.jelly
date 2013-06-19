@@ -1,0 +1,92 @@
+<!--
+ Copyright (c) 2011-2013, Intel Mobile Communications GmbH
+ 
+ 
+ This file is part of the Inheritance plug-in for Jenkins.
+ 
+ The Inheritance plug-in is free software: you can redistribute it
+ and/or modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation in version 3
+ of the License
+ 
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<?jelly escape-by-default='true'?>
+<j:jelly
+		xmlns:j="jelly:core"
+		xmlns:st="jelly:stapler"
+		xmlns:d="jelly:define"
+		xmlns:l="/lib/layout"
+		xmlns:t="/lib/hudson"
+		xmlns:f="/lib/form"
+		xmlns:i="jelly:fmt"
+>
+	<f:section title="${%Job Selection}">
+		<j:invokeStatic var="pDescriptors"
+			method="all"
+			className="hudson.plugins.project_inheritance.projects.references.AbstractProjectReference"
+		>
+			<j:arg
+				type="java.lang.String"
+				value="SimpleProjectReference"
+			/>
+		</j:invokeStatic>
+		<f:block>
+			<f:hetero-list name="projects" hasHeader="true"
+					descriptors="${pDescriptors}"
+					items="${it.getProjectReferences()}"
+					addCaption="${%Add filtered project}"
+			/>
+		</f:block>
+	</f:section>
+	
+	<f:section title="${%Job Filters}">
+		<f:entry title="${%Type Filter}"> <!-- help="/help/view-config/statusFilter.html"> -->
+			<select name="typeFilter" class="setting-input">
+				<f:option value="ALL" selected="${it.typeFilter.matches(&quot;ALL&quot;)}">${%All projects}</f:option>
+				<f:option value="TRANSIENTS" selected="${it.typeFilter.matches(&quot;TRANSIENTS&quot;)}">${%Transient projects only}</f:option>
+				<f:option value="REGULARS" selected="${it.typeFilter.matches(&quot;REGULARS&quot;)}">${%Non-transient projects only}</f:option>
+		  </select>
+		</f:entry>
+
+		<f:entry title="${%Creation Class Filter}" field="creationClassFilter"> <!-- help="/help/view-config/statusFilter.html"> -->
+			<f:select name="creationClassFilter" default=""/>
+			<f:description>
+				Select the creation class to let Jenkins automatically produce
+				transient projects from two or more project definitions. The
+				list of available classes can be managed in the
+				"Project Creation Engine" section of Jenkins' management page.
+			</f:description>
+		</f:entry>
+
+		<f:entry title="${%Relationship Filter}">
+			<j:forEach var="relation" items="${it.getAllRelations()}">
+				<f:checkbox
+					name="relation_${relation.name()}"
+					checked="${it.getSelectedRelations().contains(relation)}"
+					title="${relation.toString()}"
+				/>
+				<br/>
+			</j:forEach>
+		</f:entry>
+		
+	
+	</f:section>
+
+	<f:section title="${%Columns}">
+		<j:invokeStatic var="allColumns" className="hudson.views.ListViewColumn" method="all"/>
+		<f:block>
+			<f:hetero-list name="columns" hasHeader="true"
+				descriptors="${allColumns}"
+				items="${it.columns}"
+				addCaption="${%Add column}"/>
+		</f:block>
+	</f:section>
+</j:jelly>

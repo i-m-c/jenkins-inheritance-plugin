@@ -1,0 +1,12 @@
+<div>
+	<p>
+		If you set this flag, "Inheritable Parameters" will automatically un-escape
+		"%xx" substrings into their respective 8-bit char; where xx is a
+		hexadecimal number. The translation will use UTF-16 for the unencoded
+		bytes and CP-1252 / ISO-8859-1 for the encoded bytes.
+	</p>
+	<p>
+		This is necessary, because the Jenkins CLI can't handle assignment of
+		the "=" character properly and truncates at the first such char.
+	</p>
+</div>

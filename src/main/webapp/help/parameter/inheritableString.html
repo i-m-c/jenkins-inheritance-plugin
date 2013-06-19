@@ -1,0 +1,78 @@
+<div>
+    Defines an inheritable text parameter, where users can enter a string value,
+    which you can use during a build, either as an environment variable, or
+    through variable substitution in some other parts of the configuration.<br/>
+    The difference to a normal String-Parameter is, that this parameter will
+    alter its behaviour when inherited to child projects.<br/>
+    You can either:
+    <ul>
+    	<li>
+    		Keep the old behaviour of the parameter being overwritten by
+    		the project with the highest priority,
+    	</li>
+    	<li>
+    		allow the parameter to be extended by higher-prioritised projects,
+    		or
+    	</li>
+    	<li>
+    		completely prevent any overwriting. In that case, the first project
+    		to set a variable (the one with the lowest priority) will set the
+    		variable.
+    	</li>
+    </ul>
+    Furthermore, you can toggle the mandatory flag between two states:
+    <ul>
+    	<li>
+    		If set to mandatory, the parameter has to be set,
+    		before a build can be started. This might happen automatically
+    		through a default value. The creator of a child project will be
+    		warned during configuration, if a particular parameter is not
+    		yet set.
+    	</li>
+    	<li>
+    		If set to optional, the parameter can be assigned freely.
+    	</li>
+    </ul>
+    Do note that children can alter these flags on inheriting them, with the
+    following exceptions:
+    <ul>
+    	<li>
+    		They may not change a mandatory field to be optional. They are
+    		allowed to set a default though, which makes this field effectively
+    		non-mandatory. 
+    	</li>
+    	<li>
+    		They are incapable (by design) of altering the overwritable
+    		flag. Of course, they can always set an overwritable parameter to
+    		non-overwritable.
+    	</li>
+    	<li>
+    		While allowed, changing the flag from overwritable to extensible
+    		and/or back can lead to surprising results, as the output depends
+    		on the serialisation of the parameters according to their order.<br/>
+    		Assume a parameter is overwritable in A and extensible in B and both
+    		are inherited by C.<br/>
+    		If A is ordered before B, then:
+    		<ul>
+    			<li>
+    				C will only get the value of B, and
+    			</li>
+    			<li>
+    				if C overwrites the value, it will extend the value.
+    			</li>
+    		</ul>
+    		If B is ordered before A, then:
+    		<ul>
+    			<li>
+    				C will get the value of B extended by A, and
+    			</li>
+    			<li>
+    				if C overwrites the value, it will replace it completely.
+    			</li>
+    		</ul> 
+    	</li>
+    </ul>
+    Violating these restrictions results in a non-buildable project and a
+    warning during configuration. This may happen insidiously, if a parameter
+    is defined separately in two parents with differing flags.
+</div>

@@ -1,0 +1,125 @@
+<!--
+ Copyright (c) 2011-2013, Intel Mobile Communications GmbH
+ 
+ 
+ This file is part of the Inheritance plug-in for Jenkins.
+ 
+ The Inheritance plug-in is free software: you can redistribute it
+ and/or modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation in version 3
+ of the License
+ 
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core"
+		xmlns:st="jelly:stapler"
+		xmlns:l="/lib/layout"
+		xmlns:t="/lib/hudson"
+		xmlns:f="/lib/form">
+	<l:main-panel>
+		<!-- A small header describing what this configuration page does -->
+		<h1>${it.pronoun} ${it.getDisplayName()}</h1>
+		
+		<f:form method="post" name="config" action="configSubmit">
+			<j:set var="instance" value="${it}" />
+			<j:set var="descriptor" value="${instance.descriptor}" />
+			
+			<f:section title="${%Global Inheritance Properties}">
+				<f:entry
+						title="${%Magic Node Label for Testing}"
+						help="${helpRoot}/${pce}/MagicNodeLabel.html">
+					<f:textbox field="magicNodeLabelForTesting"/>
+				</f:entry>
+				
+				<f:entry help="${helpRoot}/${pce}/EnableUnescapeEqualsInParam.html">
+					<f:checkbox
+						title="${%Enable unescaping of equals-char in parameters}"
+						field="unescapeEqualsCharInParams"
+					/>
+				</f:entry>
+			</f:section>
+			
+			<f:section title="${%Creation Options}">
+				<f:entry help="${helpRoot}/${pce}/EnableCreation.html">
+					<f:checkbox
+						title="${%Enable Job Creation}"
+						field="enableCreation"
+					/>
+				</f:entry>
+				<f:entry help="${helpRoot}/${pce}/TriggerOnStartup.html">
+					<f:checkbox
+						title="${%Trigger job creation when Jenkins is started}"
+						field="triggerOnStartup"
+					/>
+				</f:entry>
+				<f:entry help="${helpRoot}/${pce}/TriggerOnChange.html">
+					<f:checkbox
+						title="${%Trigger on new/changed/deleted Jobs}"
+						field="triggerOnChange"
+					/>
+				</f:entry>
+				<f:entry help="${helpRoot}/${pce}/CopyOnRename.html">
+					<f:checkbox
+						title="${%Copy job on renamed parents}"
+						field="copyOnRename"
+					/>
+				</f:entry>
+			</f:section>
+			
+			<!--
+				This section defines and shows which classes are available
+				for creation matching
+			-->
+			<f:section title="${%Creation Classes}">
+				<f:entry help="${helpRoot}/${pce}/CreationClasses.html" />
+				<f:block>
+					<f:hetero-list
+						name="creationClasses" hasHeader="true"
+						descriptors="${it.getCreationClassesDescriptors()}"
+						items="${it.creationClasses}"
+						addCaption="${%Add new creation class type}"/>
+				</f:block>
+			</f:section>
+			
+			
+			<f:section title="${%Mating Defintions}">
+				<f:entry help="${helpRoot}/${pce}/CreationMatings.html" />
+				<f:block>
+					<f:hetero-list
+						name="matings"
+						hasHeader="true"
+						descriptors="${it.getMatingDescriptors()}"
+						items="${it.matings}"
+						addCaption="${%Mark two classes as being able to produce a new project derived from both.}"/>
+				</f:block>
+			</f:section>
+			
+			
+			<!--
+				The very last one is the floating save button.
+				Do note that it does not move when help text or sections
+				are expanded. As such, if the page does not fill the screen,
+				it will not jump to the bottom. You may need a spacer
+				like this:
+				<div style="margin-top:10em;margin-bottom:10em" />
+				in case the page turns out to be short.
+			-->
+			<f:block>
+				<div style="margin-top:20em;margin-bottom:20em" />
+				<div id="bottom-sticker" >
+					<div class="bottom-sticker-inner">
+						<f:submit value="${%Save}" />
+					</div>
+				</div>
+			</f:block>
+		</f:form>
+	</l:main-panel>
+</j:jelly>
