@@ -12,7 +12,7 @@
 	
 	<groupId>hudson.plugins</groupId>
 	<artifactId>project-inheritance</artifactId>
-	<version>1.4.7</version>
+	<version>1.4.7-SNAPSHOT</version>
 	<packaging>hpi</packaging>
 
 	<!-- Forcing to use a newer maven-jenkins plugin -->
@@ -68,7 +68,7 @@
 	</scm>
 	
 	<!-- Link to wiki; not yet created -->
-	<url>http://wiki.jenkins-ci.org/display/JENKINS/inheritance-plugin</url>
+	<url>https://wiki.jenkins-ci.org/display/JENKINS/inheritance-plugin</url>
 	
 	<!-- Deployment to Jenkins Maven repository ; only needed on 1.395 and before ? -->
 	<!--
