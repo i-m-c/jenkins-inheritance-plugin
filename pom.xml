@@ -10,6 +10,7 @@
 		<version>1.509.1</version>
 	</parent>
 	
+	<name>inheritance-plugin</name>
 	<groupId>hudson.plugins</groupId>
 	<artifactId>project-inheritance</artifactId>
 	<version>1.4.7-SNAPSHOT</version>
