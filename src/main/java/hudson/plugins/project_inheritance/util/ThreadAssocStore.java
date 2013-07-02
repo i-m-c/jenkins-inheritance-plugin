@@ -21,6 +21,7 @@
 package hudson.plugins.project_inheritance.util;
 
 import hudson.Extension;
+import hudson.ExtensionList;
 import hudson.model.PeriodicWork;
 
 import java.util.HashMap;
@@ -28,6 +29,8 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Logger;
+
+import jenkins.model.Jenkins;
 
 
 /**
@@ -49,10 +52,10 @@ import java.util.logging.Logger;
  * @author mhschroe
  *
  */
+@Extension
 public class ThreadAssocStore extends PeriodicWork {
 	
-	@Extension
-	public static final ThreadAssocStore instance = new ThreadAssocStore();
+	private static transient ThreadAssocStore instance = null;
 	
 	private static final Logger log = Logger.getLogger(
 			ThreadAssocStore.class.toString()
@@ -65,12 +68,35 @@ public class ThreadAssocStore extends PeriodicWork {
 	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 	
 	/**
-	 * Private constructor to prevent multiple instances from being created.
+	 * Constructor used by the Extension annotation.
 	 * <p>
-	 * Use {@link ThreadAssocStore#instance} to get the singleton.
+	 * You should not need to spawn a {@link ThreadAssocStore} yourself.
+	 * Instead, use {@link #getInstance()} to get the singleton.
 	 */
-	private ThreadAssocStore() { }
-	
+	public ThreadAssocStore() {
+		//Nothing to do; we can't set the "instance" field here, as Jenkins
+		//might call this constructor multiple times.
+	}
+
+	public final static ThreadAssocStore getInstance() {
+		if (instance != null) {
+			return instance;
+		}
+		try {
+			Jenkins j = Jenkins.getInstance();
+			if (j == null) { return null; }
+			ExtensionList<ThreadAssocStore> list = j.getExtensionList(
+					ThreadAssocStore.class
+			);
+			if (list.isEmpty()) {
+				return null;
+			}
+			instance = list.get(0);
+			return instance;
+		} catch (Exception ex) {
+			return null;
+		}
+	}
 	
 	public void setValue(Thread t, String key, Object value) {
 		// Fetching a write lock
@@ -164,6 +190,7 @@ public class ThreadAssocStore extends PeriodicWork {
 	 */
 	@Override
 	protected void doRun() throws Exception {
-		ThreadAssocStore.instance.cleanup();
+		//ThreadAssocStore.getInstance().cleanup();
+		this.cleanup();
 	}
 }

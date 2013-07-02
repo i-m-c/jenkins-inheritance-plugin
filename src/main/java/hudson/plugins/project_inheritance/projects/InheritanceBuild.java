@@ -96,7 +96,7 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			super.execute(new InheritanceBuildExecution());
 		} finally {
 			//At the end; remove the versioning data stored in the current thread
-			ThreadAssocStore.instance.clear(Thread.currentThread());
+			ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		}
 	}
 	

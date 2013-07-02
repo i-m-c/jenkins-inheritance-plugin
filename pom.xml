@@ -16,7 +16,7 @@
 	<version>1.4.7-SNAPSHOT</version>
 	<packaging>hpi</packaging>
 
-	<!-- Forcing to use a newer maven-jenkins plugin -->
+	<!-- Forcing to use a newer maven-jenkins plugin; needed for hpi:run -->
 	<build> 
 		<plugins> 
 			<plugin> 
@@ -26,7 +26,6 @@
 			</plugin> 
 		</plugins> 
 	</build>
-
 	
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

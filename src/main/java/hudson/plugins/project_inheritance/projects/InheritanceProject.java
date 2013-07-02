@@ -49,7 +49,6 @@ import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Project;
 import hudson.model.StringParameterValue;
-import hudson.model.labels.LabelExpression;
 import hudson.model.labels.LabelAtom;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship.Type;
@@ -139,8 +138,6 @@ import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 import org.w3c.dom.Document;
-
-import antlr.ANTLRException;
 
 import com.sun.mail.util.BASE64EncoderStream;
 import com.thoughtworks.xstream.XStreamException;
@@ -1231,7 +1228,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public void doBuild(StaplerRequest req, StaplerResponse rsp, @QueryParameter TimeDuration delay)
 			throws IOException, ServletException {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.instance.clear(Thread.currentThread());
+		ThreadAssocStore.getInstance().clear(Thread.currentThread());
 				
 		//Checking if we can fetch a fully defined versioning parameter
 		if (req.getMethod().equals("POST")) {
@@ -1308,7 +1305,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public void doBuildSpecificVersion(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.instance.clear(Thread.currentThread());
+		ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//If we did not submit a form; just display the initial data
 		if(!req.getMethod().equals("POST")) {
@@ -1348,7 +1345,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public void doBuildWithParameters(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.instance.clear(Thread.currentThread());
+		ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//TODO: The below function did not have the TimeDuration param previously
 		TimeDuration td = new TimeDuration(0);
@@ -1361,7 +1358,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public QueueTaskFuture<InheritanceBuild> scheduleBuild2(
 			int quietPeriod, Cause c, Collection<? extends Action> actions) {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.instance.clear(Thread.currentThread());
+		ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//Checking if a version-setting action is present,
 		boolean hasVersioningAction = false;
@@ -1885,7 +1882,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * @return
 	 */
 	private Long getUserDesiredVersionFromThread() {
-		Object o = ThreadAssocStore.instance.getValue("versions");
+		Object o = ThreadAssocStore.getInstance().getValue("versions");
 		if (o != null) {
 			if (o instanceof Number) {
 				return ((Number)o).longValue();
@@ -3303,7 +3300,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			req.removeAttribute("versionedObjectBuffer");
 		}
 		//Setting the versioning for the current thread; just to be sure
-		ThreadAssocStore.instance.setValue("versions", map);
+		ThreadAssocStore.getInstance().setValue("versions", map);
 	}
 	
 	
