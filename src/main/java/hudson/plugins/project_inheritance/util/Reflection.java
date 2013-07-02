@@ -31,7 +31,7 @@ public class Reflection {
 	
 	protected static final int MAX_STACK_DEPTH = 30;
 	
-	//TODO: This map can grow quite fast, theoretically up to n²; n = # of classes
+	//TODO: This map can grow quite fast, theoretically up to n^2; n = # of classes
 	public static final HashMap<String, HashMap<String, Boolean>> classAssignabilityMap =
 			new HashMap<String, HashMap<String, Boolean>>();
 
