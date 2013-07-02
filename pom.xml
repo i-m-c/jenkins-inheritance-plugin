@@ -63,8 +63,8 @@
 	<!-- SCM settings: Enable once project has been forked by jenkins-ci -->
 	<scm>
 		<url>https://github.com/i-m-c/jenkins-inheritance-plugin</url>
-		<connection>scm:git:ssh://github.com/i-m-c/inheritance-plugin.git</connection>
-		<developerConnection>scm:git:ssh://git@github.com/i-m-c/inheritance-plugin.git</developerConnection>
+		<connection>scm:git:github.com/i-m-c/inheritance-plugin.git</connection>
+		<developerConnection>scm:git:git@github.com/i-m-c/inheritance-plugin.git</developerConnection>
 	</scm>
 	
 	<!-- Link to wiki; not yet created -->
