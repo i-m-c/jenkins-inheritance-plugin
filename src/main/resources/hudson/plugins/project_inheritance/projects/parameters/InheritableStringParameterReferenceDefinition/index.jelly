@@ -34,5 +34,5 @@ THE SOFTWARE.
 		xmlns:p="/lib/hudson/project"
 >
 	<!-- This file is a carbon-copy of: -->
-	<st:include page="../InheritableStringParameterDefinition/index.jelly" />
+	<st:include page="/hudson/plugins/project_inheritance/projects/parameters/InheritableStringParameterDefinition/index.jelly" />
 </j:jelly>
