@@ -227,28 +227,10 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 			}
 			
 			//Fetching the current project and the new parent
-			InheritanceProject currProj = null;
-			InheritanceProject parentProj = null;
-			for (InheritanceProject ip : InheritanceProject.getProjectsMap().values()) {
-				//Checking if we've found the parent project
-				if (ip.getName().equals(name)) {
-					parentProj = ip;
-					if (currProj != null) {
-						//We found both projects
-						break;
-					}
-				}
-				
-				//Checking if we've found the current project
-				if (ip.getName().equals(projectName)) {
-					currProj = ip;
-					if (parentProj != null) {
-						//We found both projects
-						break;
-					}
-				}
-				
-			}
+			InheritanceProject currProj = 
+					InheritanceProject.getProjectByName(projectName);
+			InheritanceProject parentProj =
+					InheritanceProject.getProjectByName(name);
 			
 			if (currProj == null || parentProj == null) {
 				return FormValidation.error(
