@@ -23,6 +23,7 @@ package hudson.plugins.project_inheritance.util;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 import hudson.model.Hudson;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
@@ -31,9 +32,9 @@ public class Reflection {
 	
 	protected static final int MAX_STACK_DEPTH = 30;
 	
-	//TODO: This map can grow quite fast, theoretically up to n^2; n = # of classes
-	public static final HashMap<String, HashMap<String, Boolean>> classAssignabilityMap =
-			new HashMap<String, HashMap<String, Boolean>>();
+	//TODO: This map can grow quite fast, theoretically up to n²; n = # of classes
+	public static final ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>> classAssignabilityMap =
+			new ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>(10, 0.75f, 1);
 
 	/**
 	* Wrapper for {@link #calledFromClass(Class, int)}, with the maxDepth set
@@ -80,9 +81,9 @@ public class Reflection {
 		
 		for (Class<?> clazz : classes) {
 			String clazzName = clazz.getName();
-			HashMap<String, Boolean> assignMap = classAssignabilityMap.get(clazzName);
+			ConcurrentHashMap<String, Boolean> assignMap = classAssignabilityMap.get(clazzName);
 			if (assignMap == null) {
-				assignMap = new HashMap<String, Boolean>();
+				assignMap = new ConcurrentHashMap<String, Boolean>(100, 0.75f, 2);
 				classAssignabilityMap.put(clazzName, assignMap);
 			}
 			

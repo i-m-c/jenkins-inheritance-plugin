@@ -1037,7 +1037,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		for (Relationship rel : this.getRelationships().values()) {
 			if (rel.type == Type.CHILD || rel.type == Type.MATE) {
 				//Abort and redirect to error page
-				rsp.sendRedirect("/job/" + this.getName() + "/showReferencedBy");
+				rsp.sendRedirect(
+					getJobActionURL(this.getName(), "showReferencedBy")
+				);
 				return;
 			}
 		}
@@ -3316,6 +3318,18 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return this.creationClass;
 	}
 	
+	
+	public static String getJobActionURL(String job, String action) {
+		StaplerRequest req = Stapler.getCurrentRequest();
+		String url = String.format(
+				"%s/%s/%s/%s",
+				(req != null) ? req.getContextPath() : "",
+				Jenkins.getInstance().getUrlChildPrefix(),
+				job,
+				action
+		);
+		return url;
+	}
 	
 	
 	// === RELATIONSHIP ACCESS METHODS ===

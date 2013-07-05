@@ -65,19 +65,8 @@
 		<developerConnection>scm:git:git@github.com:i-m-c/jenkins-inheritance-plugin.git</developerConnection>
 	</scm>
 	
-	<!-- Link to wiki; not yet created -->
+	<!-- Link to wiki -->
 	<url>https://wiki.jenkins-ci.org/display/JENKINS/inheritance-plugin</url>
-	
-	<!-- Deployment to Jenkins Maven repository ; only needed on 1.395 and before ? -->
-	<!--
-	<distributionManagement>
-		<repository>
-			<id>maven.jenkins-ci.org</id>
-			<url>http://maven.jenkins-ci.org:8081/content/repositories/releases/</url>
-		</repository>
-	</distributionManagement>
-	-->
-	
 	
 	<!-- Set up repository locations for Jenkins and its plugins -->
 	<repositories>
