@@ -32,7 +32,7 @@ public class Reflection {
 	
 	protected static final int MAX_STACK_DEPTH = 30;
 	
-	//TODO: This map can grow quite fast, theoretically up to n²; n = # of classes
+	//TODO: This map can grow quite fast, theoretically up to n^2; n = # of classes
 	public static final ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>> classAssignabilityMap =
 			new ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>(10, 0.75f, 1);
 
