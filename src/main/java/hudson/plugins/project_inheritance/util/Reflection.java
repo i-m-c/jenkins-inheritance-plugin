@@ -20,13 +20,12 @@
 
 package hudson.plugins.project_inheritance.util;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
-
 import hudson.model.Hudson;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Reflection {
 	

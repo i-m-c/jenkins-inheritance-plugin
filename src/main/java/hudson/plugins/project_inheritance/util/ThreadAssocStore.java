@@ -20,17 +20,11 @@
 
 package hudson.plugins.project_inheritance.util;
 
-import hudson.Extension;
-import hudson.ExtensionList;
-import hudson.model.PeriodicWork;
-
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Logger;
-
-import jenkins.model.Jenkins;
 
 
 /**
@@ -45,17 +39,16 @@ import jenkins.model.Jenkins;
  * content will be removed after the thread ends. If you need earlier release,
  * just overwrite the values with a null.
  * <p>
- * Do note that this class extends {@link PeriodicWork} as a way to clean-up
- * after itself every few minutes. This is done to prevent the held
- * Threads from never being garbage-collected.
+ * Do note that this class will purge the map from dead threads every
+ * minutes as long as tests are being started. This is done to prevent the held
+ * Threads from not being garbage-collected.
  * 
- * @author mhschroe
+ * @author Martin Schröder
  *
  */
-@Extension
-public class ThreadAssocStore extends PeriodicWork {
+public class ThreadAssocStore {
 	
-	private static transient ThreadAssocStore instance = null;
+	private static transient ThreadAssocStore instance = new ThreadAssocStore();
 	
 	private static final Logger log = Logger.getLogger(
 			ThreadAssocStore.class.toString()
@@ -67,38 +60,31 @@ public class ThreadAssocStore extends PeriodicWork {
 	
 	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 	
+	private transient Long lastCleanupTime;
+	private final static Long cleanupTimeout = 1L * 60 * 1000; // 1 minute
+	
 	/**
 	 * Constructor used by the Extension annotation.
 	 * <p>
-	 * You should not need to spawn a {@link ThreadAssocStore} yourself.
+	 * Marked as private, as you should not need to spawn a
+	 * {@link ThreadAssocStore} yourself.
 	 * Instead, use {@link #getInstance()} to get the singleton.
 	 */
-	public ThreadAssocStore() {
+	private ThreadAssocStore() {
 		//Nothing to do; we can't set the "instance" field here, as Jenkins
 		//might call this constructor multiple times.
 	}
 
 	public final static ThreadAssocStore getInstance() {
-		if (instance != null) {
-			return instance;
+		if (instance == null) {
+			instance = new ThreadAssocStore();
 		}
-		try {
-			Jenkins j = Jenkins.getInstance();
-			if (j == null) { return null; }
-			ExtensionList<ThreadAssocStore> list = j.getExtensionList(
-					ThreadAssocStore.class
-			);
-			if (list.isEmpty()) {
-				return null;
-			}
-			instance = list.get(0);
-			return instance;
-		} catch (Exception ex) {
-			return null;
-		}
+		return instance;
 	}
 	
 	public void setValue(Thread t, String key, Object value) {
+		//Execute cleanup; will only do something every once in a while
+		this.cleanup();
 		// Fetching a write lock
 		lock.writeLock().lock();
 		try {
@@ -139,6 +125,16 @@ public class ThreadAssocStore extends PeriodicWork {
 	public void cleanup() {
 		lock.writeLock().lock();
 		try {
+			//Check if cleaning timeout has been reached
+			if (this.lastCleanupTime == null) {
+				this.lastCleanupTime = System.currentTimeMillis();
+				return;
+			}
+			long delta = System.currentTimeMillis() - this.lastCleanupTime;
+			if (delta < cleanupTimeout) { return; }
+			this.lastCleanupTime = System.currentTimeMillis();
+			
+			//Executing the clean-up
 			Set<Thread> keys = map.keySet();
 			Iterator<Thread> iter = keys.iterator();
 			while (iter.hasNext()) {
@@ -170,27 +166,5 @@ public class ThreadAssocStore extends PeriodicWork {
 		} finally {
 			lock.writeLock().unlock();
 		}
-	}
-
-
-	/**
-	 * Tells Jenkins to run {@link #doRun()} every 5 minutes.
-	 * @return
-	 */
-	@Override
-	public long getRecurrencePeriod() {
-		return 5*60*1000;
-	}
-
-
-	/**
-	 * Simply calls {@link #cleanup()}. Since the number of Threads should
-	 * be low (<<100), this function should resume reasonably quickly.
-	 * @throws Exception
-	 */
-	@Override
-	protected void doRun() throws Exception {
-		//ThreadAssocStore.getInstance().cleanup();
-		this.cleanup();
 	}
 }
