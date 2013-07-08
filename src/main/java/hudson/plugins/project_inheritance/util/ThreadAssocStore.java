@@ -40,7 +40,7 @@ import java.util.logging.Logger;
  * just overwrite the values with a null.
  * <p>
  * Do note that this class will purge the map from dead threads every
- * minutes as long as tests are being started. This is done to prevent the held
+ * minutes as long as threads are being added. This is done to prevent the held
  * Threads from not being garbage-collected.
  * 
  * @author Martin Schröder
@@ -66,11 +66,10 @@ public class ThreadAssocStore {
 	/**
 	 * Constructor used by the Extension annotation.
 	 * <p>
-	 * Marked as private, as you should not need to spawn a
-	 * {@link ThreadAssocStore} yourself.
+	 * You should not need to spawn a {@link ThreadAssocStore} yourself.
 	 * Instead, use {@link #getInstance()} to get the singleton.
 	 */
-	private ThreadAssocStore() {
+	public ThreadAssocStore() {
 		//Nothing to do; we can't set the "instance" field here, as Jenkins
 		//might call this constructor multiple times.
 	}
