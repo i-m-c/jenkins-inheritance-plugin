@@ -1231,7 +1231,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			throws IOException, ServletException {
 		//Purge whatever's stored in the thread from a previous run
 		ThreadAssocStore.getInstance().clear(Thread.currentThread());
-				
+		
+		//The delay parameter might be null in case somebody used a custom URL
+		if (delay == null) {
+			delay = new TimeDuration(0);
+		}
+		
 		//Checking if we can fetch a fully defined versioning parameter
 		if (req.getMethod().equals("POST")) {
 			//Checking if parameters are set -- non-parameterized builds
@@ -3512,8 +3517,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		ParametersDefinitionProperty pdp = this.getProperty(
 				ParametersDefinitionProperty.class, IMode.INHERIT_FORCED
 		);
-		//Checking if it is a fully scoped inheritance-aware one; if yes, we fetch
-		//the full scope of parameters.
+		if (pdp == null) {
+			//No parameters set, so we return an empty list
+			return list;
+		}
+		
+		//Checking if it is a fully scoped inheritance-aware one; if yes, we
+		//fetch the full scope of parameters.
 		List<ScopeEntry> fullScope = null;
 		if (pdp instanceof InheritanceParametersDefinitionProperty) {
 			InheritanceParametersDefinitionProperty ipdp =
