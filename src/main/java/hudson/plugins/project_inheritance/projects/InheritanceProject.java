@@ -3157,8 +3157,18 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					nonTestingLabel = nonTestingLabel.and(la);
 				}
 			}
+			/* The nonTestingLabel is currently the positive check for a node
+			 * being a testing node. Therefore, we need to take the real
+			 * labels defined on the project and append a negation of the
+			 * nonTestingLabel expression.
+			 * 
+			 * Do note that if there is no real label defined, we still need
+			 * to negate & attach it.
+			 */
 			if (lbl != null) {
 				nonTestingLabel = lbl.and(nonTestingLabel.not());
+			} else {
+				nonTestingLabel = nonTestingLabel.not();
 			}
 			return nonTestingLabel;
 		}
