@@ -141,6 +141,12 @@ public class RelatedProjectView extends View {
 	}
 	
 	public DescribableList<AbstractProjectReference, Descriptor<AbstractProjectReference>> getProjectReferences() {
+		//Making sure the references list is never null
+		if (this.references == null) {
+			this.references = new DescribableList<
+					AbstractProjectReference,Descriptor<AbstractProjectReference>
+			>(this);
+		}
 		return this.references;
 	}
 	
@@ -196,7 +202,7 @@ public class RelatedProjectView extends View {
 	public Collection<TopLevelItem> getItems() {
 		List<TopLevelItem> items = new LinkedList<TopLevelItem>();
 		
-		if (references == null || references.isEmpty()) {
+		if (this.getProjectReferences().isEmpty()) {
 			//Enumerating all possible projects
 			for (TopLevelItem item : getOwnerItemGroup().getItems()) {
 				if (item instanceof InheritanceProject) {
@@ -224,7 +230,7 @@ public class RelatedProjectView extends View {
 		//Otherwise, we return the selected projects and their relatives
 		TreeSet<InheritanceProject> projs = new TreeSet<InheritanceProject>();
 		
-		Iterator<AbstractProjectReference> iter = references.iterator(); 
+		Iterator<AbstractProjectReference> iter = this.getProjectReferences().iterator(); 
 		while (iter != null && iter.hasNext()) {
 			AbstractProjectReference apr = iter.next();
 			InheritanceProject ip = apr.getProject();
@@ -275,7 +281,7 @@ public class RelatedProjectView extends View {
 	@Override
 	public void onJobRenamed(Item item, String oldName, String newName) {
 		//Searching whether one of our referenced jobs has changed
-		for (AbstractProjectReference apr : references) {
+		for (AbstractProjectReference apr : this.getProjectReferences()) {
 			if (apr.getName().equals(oldName)) {
 				apr.switchProject(newName);
 			}
