@@ -1,0 +1,36 @@
+<hudson.plugins.project__inheritance.projects.InheritanceProject plugin="project-inheritance@1.4.8">
+  <actions/>
+  <description>Job 1</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.plugins.project__inheritance.projects.parameters.InheritableStringParameterDefinition>
+          <name>parameter1</name>
+          <description></description>
+          <defaultValue>0</defaultValue>
+          <inheritanceMode>OVERWRITABLE</inheritanceMode>
+          <defaultInheritanceMode>OVERWRITABLE</defaultInheritanceMode>
+          <mustHaveDefaultValue>false</mustHaveDefaultValue>
+          <mustBeAssigned>false</mustBeAssigned>
+          <autoAddSpaces>true</autoAddSpaces>
+          <isHidden>false</isHidden>
+        </hudson.plugins.project__inheritance.projects.parameters.InheritableStringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers class="vector"/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders/>
+  <publishers/>
+  <buildWrappers/>
+  <isTransient>false</isTransient>
+  <isAbstract>true</isAbstract>
+  <compatibleProjects/>
+  <parentReferences/>
+</hudson.plugins.project__inheritance.projects.InheritanceProject>
