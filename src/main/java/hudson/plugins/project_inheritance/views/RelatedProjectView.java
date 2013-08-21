@@ -280,8 +280,16 @@ public class RelatedProjectView extends View {
 
 	@Override
 	public void onJobRenamed(Item item, String oldName, String newName) {
+		if (oldName == null) { return; }
+		if (newName == null) {
+			if (item == null) {
+				return;
+			}
+			newName = item.getFullName();
+		}
 		//Searching whether one of our referenced jobs has changed
 		for (AbstractProjectReference apr : this.getProjectReferences()) {
+			if (apr == null) { continue; }
 			if (apr.getName().equals(oldName)) {
 				apr.switchProject(newName);
 			}
