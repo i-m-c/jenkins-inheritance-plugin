@@ -76,7 +76,13 @@ public class Reflection {
 		}
 		
 		//And fetching Jenkins' ClassLoader that is Plugin-aware
-		ClassLoader cl = Hudson.getInstance().getPluginManager().uberClassLoader;
+		ClassLoader cl;
+		try {
+			cl = Hudson.getInstance().getPluginManager().uberClassLoader;
+		} catch (NullPointerException ex) {
+			//This can (or should) only happen if not on the server or during shutdown
+			return false;
+		}
 		
 		for (Class<?> clazz : classes) {
 			String clazzName = clazz.getName();
