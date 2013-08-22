@@ -32,7 +32,9 @@ import hudson.plugins.project_inheritance.projects.references.AbstractProjectRef
 import hudson.plugins.project_inheritance.projects.references.ProjectReference;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.SlaveComputer;
+import hudson.util.VersionNumber;
 
+import org.apache.commons.lang.SystemUtils;
 import org.jvnet.hudson.test.HudsonTestCase;
 
 public class TestInheritanceMain extends HudsonTestCase {
@@ -102,8 +104,15 @@ public class TestInheritanceMain extends HudsonTestCase {
 		}
 	}
 
+	
+	// === TEST PREPARATION ===
+	
 	@Override
 	protected void tearDown() throws Exception {
+		if (!canRunTests()) {
+			super.tearDown();
+			return;
+		}
 		printInfo("tearDown()");
 		purgeSlaves();
 		super.tearDown();
@@ -111,6 +120,10 @@ public class TestInheritanceMain extends HudsonTestCase {
 
 	@Override
 	protected void setUp() throws Exception {
+		if (!canRunTests()) {
+			super.setUp();
+			return;
+		}
 		printInfo("setUp()");
 		setPluginManager(null);
 		super.setUp();
@@ -142,8 +155,27 @@ public class TestInheritanceMain extends HudsonTestCase {
 				.createProject(InheritanceProject.DESCRIPTOR, child3Name);
 	}
 
+	protected boolean canRunTests() {
+		VersionNumber v = Jenkins.getVersion();
+		if (v.isOlderThan(new VersionNumber("1.520"))) {
+			//On Windows, these test cases fail during tearDown() in Jenkins < 1.520
+			if (SystemUtils.IS_OS_WINDOWS) {
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	// === TEST EXECUTION ===
+	
 	public void testGeneralProperties() throws IOException, ServletException {
 		printInfo("testGeneralProperties()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
 		InputStream is1 = new FileInputStream(new File(parentJob));
 		parentProject.updateByXml((Source) new StreamSource(is1));
 		is1.close();
@@ -208,6 +240,12 @@ public class TestInheritanceMain extends HudsonTestCase {
 
 	public void testCreationParentManual() throws IOException {
 		printInfo("testCreationParentManual()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
 		printInfo("Adding manually a parent...");
 		childProject1.addParentReference(new ProjectReference(parentName, 0));
 		printInfo("Testing whether relationship is ok...");
@@ -227,6 +265,12 @@ public class TestInheritanceMain extends HudsonTestCase {
 
 	public void testCreationParent() throws IOException {
 		printInfo("testCreationParent()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
 		printInfo("Loading two projects from file...");
 		InputStream is1 = new FileInputStream(new File(parentJob));
 		parentProject.updateByXml((Source) new StreamSource(is1));
@@ -241,6 +285,12 @@ public class TestInheritanceMain extends HudsonTestCase {
 
 	public void testParameterInheritanceManual() throws IOException {
 		printInfo("testParameterInheritanceManual()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
 		printInfo("Creating a job with parameter1 = 0...");
 		InputStream is1 = new FileInputStream(new File(parentJob));
 		parentProject.updateByXml((Source) new StreamSource(is1));
@@ -289,8 +339,13 @@ public class TestInheritanceMain extends HudsonTestCase {
 	public void testParameterInheritanceEffect() throws IOException,
 			InterruptedException, ExecutionException {
 		printInfo("testParameterInheritanceEffect()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
 		/* Parent job with parameter = 0 */
-
 		InputStream is1 = new FileInputStream(new File(parentJob));
 		parentProject.updateByXml((Source) new StreamSource(is1));
 		is1.close();
@@ -326,7 +381,13 @@ public class TestInheritanceMain extends HudsonTestCase {
 	public void testShutdown() throws IOException, InterruptedException,
 			ExecutionException, RestartNotSupportedException {
 		printInfo("testShutdown()");
-		if (System.getProperty("os.name").toLowerCase().contains("win")) {
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
+		if (SystemUtils.IS_OS_WINDOWS) {
 			printInfo("Exiting because windows does not support jenkins restart call...");
 			return;
 		}
@@ -343,7 +404,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 		InheritanceBuild ib1 = childProject3.scheduleBuild2(0).get();
 		printInfo("Scheduling another build and restarting jenkins in while doing it...");
 		childProject3.scheduleBuild2(0);
-		Jenkins j = Jenkins.getInstance();
+		
 		printInfo("Checking that the last build is the first one (the second one was lost)...");
 		assertEquals("The build was completed and saved, which should not happen", 
 				childProject3.getBuilds().getLastBuild(), ib1);
@@ -361,6 +422,12 @@ public class TestInheritanceMain extends HudsonTestCase {
 	public void testXmlLoad() throws IOException, ServletException {
 		/* Testing all the general xml options available here. */
 		printInfo("testXmlLoad()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
 		assertFalse("The default abstract property for an abstract project " +
 				"should be false, and it is not", parentProject.isAbstract);
 		parentProject.isAbstract = true;
