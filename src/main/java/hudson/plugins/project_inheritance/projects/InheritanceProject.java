@@ -76,6 +76,8 @@ import hudson.plugins.project_inheritance.util.svg.renderers.SVGTreeRenderer;
 import hudson.scm.NullSCM;
 import hudson.scm.SCM;
 import hudson.security.ACL;
+import hudson.security.Permission;
+import hudson.security.PermissionScope;
 import hudson.tasks.BuildStep;
 import hudson.tasks.BuildWrapper;
 import hudson.tasks.Builder;
@@ -305,6 +307,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 */
 	protected static TimedBuffer<InheritanceProject, String> onChangeBuffer = null;
 	
+	public static Permission VERSION_CONFIG = new Permission(
+			PERMISSIONS, "ConfigureVersions",
+			Messages._InheritanceProject_VersionsConfigPermissionDescription(),
+			Jenkins.ADMINISTER,
+			PermissionScope.ITEM
+	);
 	
 	// === PRIVATE/PROTECTED MEMBER FIELDS ===
 	

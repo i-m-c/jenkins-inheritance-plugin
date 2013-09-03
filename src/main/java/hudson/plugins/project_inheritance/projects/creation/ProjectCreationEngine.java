@@ -71,6 +71,8 @@ import net.sf.json.JSONException;
 import net.sf.json.JSONObject;
 
 import org.acegisecurity.Authentication;
+import org.acegisecurity.context.SecurityContext;
+import org.acegisecurity.context.SecurityContextHolder;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
@@ -604,11 +606,6 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 		
 		@SuppressWarnings("unchecked")
 		public void run() {
-			//Applying the ACLs from the auth object given to us
-			if (auth != null) {
-				ACL.impersonate(this.auth);
-			}
-			
 			//Generating the name for the new project
 			LinkedList<String> parNames = new LinkedList<String>();
 			for (InheritanceProject ip : this.parents) {
@@ -621,8 +618,14 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 			Map<String, TopLevelItem> itemMap =
 					Jenkins.getInstance().getItemMap();
 			
+			SecurityContext oldAuthContext = null;
+			
 			lock.lock();
 			try {
+				//Applying the ACLs from the auth object given to us
+				if (auth != null) {
+					oldAuthContext = ACL.impersonate(this.auth);
+				}
 				//Checking if the job to be generated already exists
 				if (itemMap.containsKey(pName)) {
 					reportMap.put(pName, "Job already exists");
@@ -713,6 +716,9 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 				InheritanceProject.DESCRIPTOR.dropProjectToBeCreatedTransient(
 						pName
 				);
+				if (oldAuthContext != null) {
+					SecurityContextHolder.setContext(oldAuthContext);
+				}
 				lock.unlock();
 			}
 		}

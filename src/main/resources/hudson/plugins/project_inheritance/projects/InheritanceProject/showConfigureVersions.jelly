@@ -108,7 +108,7 @@
 					</table>
 				</f:entry>
 				
-				<j:if test="${h.hasPermission(it,it.CONFIGURE)}">
+				<j:if test="${h.hasPermission(it,it.VERSION_CONFIG)}">
 					<f:block>
 						<div style="margin-top:20em;margin-bottom:20em" />
 						<div id="bottom-sticker">
