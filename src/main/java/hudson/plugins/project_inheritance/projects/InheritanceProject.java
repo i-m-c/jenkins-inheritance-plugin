@@ -51,6 +51,8 @@ import hudson.model.Project;
 import hudson.model.StringParameterValue;
 import hudson.model.labels.LabelAtom;
 import hudson.model.queue.QueueTaskFuture;
+import hudson.model.queue.SubTask;
+import hudson.model.queue.SubTaskContributor;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship.Type;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
@@ -2771,6 +2773,22 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return r;
 	}
 	
+	/**
+	 * This needs to be overridden, because {@link AbstractProject} reads the
+	 * properties field directly; which circumvents inheritance.
+	 */
+	@Override
+	public List<SubTask> getSubTasks() {
+		List<SubTask> r = new ArrayList<SubTask>();
+		r.add(this);
+		for (SubTaskContributor euc : SubTaskContributor.all()) {
+			r.addAll(euc.forProject(this));
+		}
+		for (JobProperty<?> p : this.getAllProperties()) {
+			r.addAll(p.getSubTasks());
+		}
+		return r;
+	}
 	
 	public synchronized List<ParameterDefinition> getParameters() {
 		return this.getParameters(IMode.AUTO);
