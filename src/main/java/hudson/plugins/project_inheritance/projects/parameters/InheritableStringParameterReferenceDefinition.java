@@ -59,11 +59,16 @@ public class InheritableStringParameterReferenceDefinition extends
 		if (ipdp == null) {
 			return null;
 		}
+		
+		//Fetch the owner of this reference
+		String selfOwner = ipdp.getOwner().getDisplayName();
+		
 		List<ScopeEntry> scope = ipdp.getAllScopedParameterDefinitions();
 		ListIterator<ScopeEntry> iter = scope.listIterator(scope.size());
 		while (iter.hasPrevious()) {
 			ScopeEntry entry = iter.previous();
-			if (entry.param == null || entry.param == this) {
+			//Refuse to return ourselves or siblings
+			if (entry.param == null || entry.owner == selfOwner ||entry.param == this) {
 				continue;
 			}
 			if (!(entry.param instanceof InheritableStringParameterDefinition)) {
