@@ -1461,7 +1461,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	@RequirePOST
 	public void doConfigVersionsSubmit(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException, FormException {
-		checkPermission(CONFIGURE);
+		checkPermission(VERSION_CONFIG);
 		
 		class Entry {
 			Long id;

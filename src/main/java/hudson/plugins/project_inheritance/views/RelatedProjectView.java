@@ -290,7 +290,9 @@ public class RelatedProjectView extends View {
 		//Searching whether one of our referenced jobs has changed
 		for (AbstractProjectReference apr : this.getProjectReferences()) {
 			if (apr == null) { continue; }
-			if (apr.getName().equals(oldName)) {
+			String aName = apr.getName();
+			if (aName == null) { continue; }
+			if (aName.equals(oldName)) {
 				apr.switchProject(newName);
 			}
 		}
