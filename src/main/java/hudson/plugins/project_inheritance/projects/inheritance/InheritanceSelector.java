@@ -28,6 +28,7 @@ import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.scm.SCM;
 
 import java.io.Serializable;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -175,6 +176,26 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	public abstract T handleSingleton(T object, InheritanceProject caller);
 	
 	
+	/**
+	 * This method scans through the given {@link List} and filters/merges
+	 * the elements based on the instructions that the subclass delivers.
+	 * <p>
+	 * It expects that the entries in the list are sorted according to their
+	 * inheritance-order; with later entries overwriting earlier settings.
+	 * <p>
+	 * Based on the {@link MODE} returned by the superclass, entries might be
+	 * merged. In that case, the newly generated, merged entry is put at the
+	 * location of the last occurrence.
+	 * 
+	 * @see #merge(Object, Object, InheritanceProject)
+	 * 
+	 * @param lst the list to scan for entries
+	 * @param caller the project that called the modification; can be necessary
+	 * 		to correctly process certain operations.
+	 * 
+	 * @return a new Deque that contains the filtered elements in
+	 * inheritance-order.
+	 */
 	public final List<T> applyAgainstList(List<T> lst, InheritanceProject caller) {
 		//Identify the elements this selector is responsible for and determine
 		//their connections
@@ -197,7 +218,7 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 		
 		if (connections.isEmpty()) {
 			//No sense in doing anything further
-			return lst;
+			return new LinkedList<T>(lst);
 		}
 		
 		//Then, we iterate through the original list to merge or select
@@ -223,6 +244,8 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 						break;
 						
 					case USE_LAST:
+						//Wait until we have reached the last entry
+						if (entry != conn.peekLast()) { continue; }
 						out.add(this.handleSingleton(conn.peekLast(), caller));
 						//Mark this elements connections as processed
 						conn.clear();
@@ -234,7 +257,9 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 						break;
 						
 					case MERGE:
-						// Call merge until all entries are processed
+						//Wait until we have reached the last entry
+						if (entry != conn.peekLast()) { continue; }
+						// Merge all entries and put them into the list
 						T merge = conn.pollFirst();
 						while (conn.isEmpty() == false) {
 							merge = this.merge(merge, conn.pollFirst(), caller);
@@ -248,7 +273,6 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 				}
 			}
 		}
-		
 		return out;
 	}
 	

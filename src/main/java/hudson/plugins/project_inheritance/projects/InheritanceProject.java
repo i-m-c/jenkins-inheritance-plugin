@@ -708,7 +708,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//Save data and send the redirect
 		this.save();
-		rsp.sendRedirect("/job/" + getName());
+		
+		rsp.sendRedirect(this.getAbsoluteUrl());
 		
 		//After everything was altered, we must generate a new version
 		this.dumpConfigToNewVersion();
@@ -2733,9 +2734,27 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public <T extends JobProperty> T getProperty(Class<T> clazz, IMode mode) {
-		for (JobProperty p : this.getAllProperties(mode)) {
-			if (clazz.isInstance(p))
-				return clazz.cast(p);
+		/* Note: getAllProperties returns a list of properties in order of
+		 * inheritance. Therefore, properties might be defined twice. In these
+		 * cases, we need to return the last property.
+		 */
+		List<JobProperty<? super InheritanceProject>> props =
+				this.getAllProperties(mode);
+		
+		//Checking if we can reverse-iterate the list for more efficiency
+		if (props instanceof Deque) {
+			Iterator<JobProperty<? super InheritanceProject>> rIter =
+					((Deque) props).descendingIterator();
+			while (rIter.hasNext()) {
+				JobProperty p = rIter.next();
+				if (clazz.isInstance(p))
+					return clazz.cast(p);
+			}
+		} else {
+			for (JobProperty p : props) {
+				if (clazz.isInstance(p))
+					return clazz.cast(p);
+			}
 		}
 		return null;
 	}
@@ -2830,6 +2849,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				if (list == null || list.isEmpty()) {
 					return new NullSCM();
 				}
+				//Return the SCM that was defined last and is not a NullSCM
 				Iterator<SCM> iter = list.descendingIterator();
 				while (iter.hasNext()) {
 					SCM scm = iter.next();
@@ -2837,6 +2857,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 						return scm;
 					}
 				}
+				//All SCMs are NullSCMs; so it does not matter which one to return
 				return list.peekLast();
 			}
 		};
@@ -2859,7 +2880,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public Integer getQuietPeriodObject() {
-		InheritanceGovernor<Integer> gov = 
+		InheritanceGovernor<Integer> gov =
 				new InheritanceGovernor<Integer>(
 						"quietPeriod", SELECTOR.MISC, this) {
 			@Override

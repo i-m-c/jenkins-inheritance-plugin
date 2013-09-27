@@ -264,7 +264,8 @@ public abstract class InheritanceGovernor<T> {
 	 * @param list the list of fields from all the parents, sorted by their
 	 * selected inheritance order.
 	 * @return a single element T. Can be an element from the list or a merge
-	 * of the list or even a newly generated element.
+	 * of the list or even a newly generated element. The default
+	 * implementation will simply return the last entry from the input list.
 	 */
 	protected T reduceFromFullInheritance(Deque<T> list) {
 		if (list == null || list.isEmpty()) { return null; }
@@ -279,7 +280,12 @@ public abstract class InheritanceGovernor<T> {
 	}
 	
 	/**
-	 * Simple helper function to use a merge as the default reduction
+	 * Simple helper function to use a merge as the default reduction.
+	 * 
+	 * Do note that the list is returned in-order of inheritance, with merges
+	 * being put back into the list at the location of the last definition.
+	 * 
+	 * @see #reduceFromFullInheritance(Deque)
 	 * @param list
 	 * @return
 	 */
