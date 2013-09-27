@@ -35,8 +35,8 @@
 		<l:tasks>
 			<l:task icon="images/24x24/up.png" href="${rootURL}/" title="${%Back to Dashboard}" />
 			<l:task icon="images/24x24/setting.png" href="${rootURL}/manage" title="${%Manage Jenkins}" permission="${app.ADMINISTER}" />
-			<l:task icon="images/24x24/clock.png" href="${url}/project_creation/createProjects" title="${%Create Projects}" permission="${app.ADMINISTER}" />
-			<l:task icon="images/24x24/clipboard.png" href="${url}/project_creation/showCreationResults" title="${%Show last creation results}" permission="${app.ADMINISTER}" />
+			<l:task icon="images/24x24/clock.png" href="${rootURL}/project_creation/createProjects" title="${%Create Projects}" permission="${app.ADMINISTER}" />
+			<l:task icon="images/24x24/clipboard.png" href="${rootURL}/project_creation/showCreationResults" title="${%Show last creation results}" permission="${app.ADMINISTER}" />
 			
 		</l:tasks>
 		

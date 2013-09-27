@@ -23,10 +23,12 @@ package hudson.plugins.project_inheritance.projects.creation;
 import static hudson.init.InitMilestone.JOB_LOADED;
 import hudson.BulkChange;
 import hudson.Extension;
+import hudson.Functions;
 import hudson.XmlFile;
 import hudson.init.InitMilestone;
 import hudson.init.Initializer;
 import hudson.model.AbstractDescribableImpl;
+import hudson.model.Describable;
 import hudson.model.ManagementLink;
 import hudson.model.Saveable;
 import hudson.model.TopLevelItem;
@@ -88,13 +90,30 @@ import org.kohsuke.stapler.StaplerResponse;
  * 
  * @author Martin Schroeder
  */
-public class ProjectCreationEngine extends ManagementLink implements Saveable {
+public class ProjectCreationEngine extends ManagementLink implements Saveable, Describable<ProjectCreationEngine> {
 	
 	private static final Logger log = Logger.getLogger(
 			ProjectCreationEngine.class.toString()
 	);
 	
 	// === STATIC MEMBER CLASSES ===
+	
+	public static enum RenameRestriction {
+		ALLOW_ALL, ALLOW_ADMIN, DISALLOW_ALL;
+		
+		public String toString() {
+			switch(this) {
+				case ALLOW_ALL:
+					return "Always allow renaming";
+				case ALLOW_ADMIN:
+					return "Only allow for Admins";
+				case DISALLOW_ALL:
+					return "Disallow completely";
+				default:
+					return "N/A";
+			}
+		}
+	}
 	
 	/**
 	 * This class describes the fundamental properties of a creation class type.
@@ -139,7 +158,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 		public static final class DescriptorImpl extends Descriptor<CreationClass> {
 			@Override
 			public String getDisplayName() {
-				return "Creation Class";
+				return Messages.CreationClass_DisplayName();
 			}
 			
 			@Override
@@ -182,7 +201,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 		public static final class DescriptorImpl extends Descriptor<CreationMating> {
 			@Override
 			public String getDisplayName() {
-				return "Creation Mating";
+				return Messages.CreationMating_DisplayName();
 			}
 			
 			@Override
@@ -202,7 +221,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 					);
 				} else if (firstClass.equals(secondClass)) {
 					return FormValidation.error(
-							"You may not mate a class with itself."
+							"You may not mate a type with itself."
 					);
 				}
 				return FormValidation.ok();
@@ -365,6 +384,8 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 	protected String magicNodeLabelForTesting = null;
 	protected boolean unescapeEqualsCharInParams = false; 
 	
+	protected RenameRestriction renameRestriction = RenameRestriction.ALLOW_ALL;
+	
 	//This value is deprecated; as it is nowadays assumed to be always true
 	@Deprecated
 	protected transient boolean allowMultipleCreation = true;
@@ -499,6 +520,14 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 				this.unescapeEqualsCharInParams = json.getBoolean("unescapeEqualsCharInParams");
 			} catch (JSONException ex) {
 				this.unescapeEqualsCharInParams = false;
+			}
+			
+			try {
+				this.renameRestriction = RenameRestriction.valueOf(
+						json.getString("renameRestriction")
+				);
+			} catch (JSONException ex) {
+				this.renameRestriction = RenameRestriction.ALLOW_ALL;
 			}
 			
 			//Then, we read the hetero-list of creation classes and create them
@@ -824,10 +853,13 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 		//Trigger the project creation
 		this.lastCreationState = this.triggerCreateProjects();
 		
+		Jenkins j = Jenkins.getInstance();
+		String rootURL = j.getRootUrlFromRequest();
+		
 		//Redirect to the status page for job creation
 		try {
 			StaplerResponse rsp = Stapler.getCurrentResponse();
-			rsp.sendRedirect("/project_creation/showCreationResults");
+			rsp.sendRedirect(rootURL + "/project_creation/showCreationResults");
 		} catch (IOException ex) {
 			//Ignore
 		} catch (NullPointerException ex) {
@@ -838,8 +870,10 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 	public void doLeaveCreationResult() {
 		//Redirect back to the central managment page
 		try {
+			Jenkins j = Jenkins.getInstance();
+			String rootURL = j.getRootUrlFromRequest();
 			StaplerResponse rsp = Stapler.getCurrentResponse();
-			rsp.sendRedirect("/manage");
+			rsp.sendRedirect(rootURL + "/manage");
 		} catch (IOException ex) {
 			//Ignore
 		} catch (NullPointerException ex) {
@@ -896,7 +930,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 	// === PROPERTY GETTERS ===
 	
 	public String getDisplayName() {
-		return "Project Creation Engine";
+		return Messages.ProjectCreationEngine_DisplayName();
 	}
 
 	@Override
@@ -911,8 +945,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 	
 	@Override
 	public String getDescription() {
-		return "This configures the Project Creation Engine that" +
-				" creates transient projects from basic project descriptions";
+		return Messages.ProjectCreationEngine_Description();
 	}
 	
 	public String getMagicNodeLabelForTesting() {
@@ -935,11 +968,42 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 		return this.triggerOnStartup;
 	}
 	
-	
 	public boolean getCopyOnRename() {
 		return this.copyOnRename;
 	}
 
+	public RenameRestriction getRenameRestrictionValue() {
+		if (this.renameRestriction == null) {
+			return RenameRestriction.ALLOW_ALL;
+		}
+		return this.renameRestriction;
+	}
+	
+	public String getRenameRestriction() {
+		return this.getRenameRestrictionValue().name();
+	}
+	
+	public boolean currentUserMayRename() {
+		switch (this.getRenameRestrictionValue()) {
+			default:
+			case ALLOW_ALL:
+				return true;
+			
+			case DISALLOW_ALL:
+				return false;
+			
+			case ALLOW_ADMIN:
+				try {
+					return Functions.hasPermission(Jenkins.ADMINISTER);
+				} catch (IOException e) {
+					return false;
+				} catch (ServletException e) {
+					return false;
+				}
+		}
+	}
+	
+	
 	/**
 	 * Always returns true, as disabling this functionality has been deprecated
 	 * 
@@ -1065,4 +1129,36 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable {
 		}
 		return generateNameFor(variance, Arrays.asList(projects));
 	}
+
+
+
+	// === DESCRIPTOR FIELDS AND METHODS ===
+	
+	public Descriptor<ProjectCreationEngine> getDescriptor() {
+		return (ProjectCreationEngineDescriptor) Jenkins.getInstance().getDescriptorOrDie(
+				ProjectCreationEngine.class
+		);
+	}
+	
+	@Extension
+	public static class ProjectCreationEngineDescriptor extends Descriptor<ProjectCreationEngine> {
+
+		public ListBoxModel doFillRenameRestrictionItems() {
+			ListBoxModel m = new ListBoxModel();
+			
+			for (RenameRestriction r : RenameRestriction.values()) {
+				m.add(r.toString(), r.name());
+			}
+			
+			return m;
+		}
+		
+		@Override
+		public String getDisplayName() {
+			//Dummy value; never really called; see class-method above!
+			return Messages.ProjectCreationEngine_DisplayName();
+		}
+		
+	}
+
 }

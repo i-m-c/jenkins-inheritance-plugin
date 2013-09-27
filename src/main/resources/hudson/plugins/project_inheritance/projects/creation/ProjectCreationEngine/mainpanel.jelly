@@ -48,29 +48,36 @@
 			</f:section>
 			
 			<f:section title="${%Creation Options}">
-				<f:entry help="${helpRoot}/${pce}/EnableCreation.html">
-					<f:checkbox
+				<f:entry
 						title="${%Enable Job Creation}"
-						field="enableCreation"
-					/>
+						help="${helpRoot}/${pce}/EnableCreation.html"
+				>
+					<f:checkbox field="enableCreation"/>
 				</f:entry>
-				<f:entry help="${helpRoot}/${pce}/TriggerOnStartup.html">
-					<f:checkbox
-						title="${%Trigger job creation when Jenkins is started}"
-						field="triggerOnStartup"
-					/>
+				<f:entry
+						title="${%Create Jobs when Jenkins is started}"
+						help="${helpRoot}/${pce}/TriggerOnStartup.html"
+				>
+					<f:checkbox field="triggerOnStartup"/>
 				</f:entry>
-				<f:entry help="${helpRoot}/${pce}/TriggerOnChange.html">
-					<f:checkbox
-						title="${%Trigger on new/changed/deleted Jobs}"
-						field="triggerOnChange"
-					/>
+				<f:entry
+						title="${%Create on new/changed/deleted Jobs}"
+						help="${helpRoot}/${pce}/TriggerOnChange.html"
+				>
+					<f:checkbox field="triggerOnChange"/>
 				</f:entry>
-				<f:entry help="${helpRoot}/${pce}/CopyOnRename.html">
-					<f:checkbox
+				<f:entry
 						title="${%Copy job on renamed parents}"
-						field="copyOnRename"
-					/>
+						help="${helpRoot}/${pce}/CopyOnRename.html"
+				>
+					<f:checkbox field="copyOnRename"/>
+				</f:entry>
+				
+				<f:entry
+						title="${%Restrict compound renaming}"
+						help="${helpRoot}/${pce}/RestrictRenaming.html"
+				>
+					<f:select field="renameRestriction"/>
 				</f:entry>
 			</f:section>
 			

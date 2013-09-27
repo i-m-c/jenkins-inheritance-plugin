@@ -150,6 +150,46 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	}
 	
 	/**
+	 * Returns all the registered {@link ParameterDefinition} descriptors that
+	 * construct classes derived from this abstract base class.
+	 */
+	public static DescriptorExtensionList<AbstractProjectReference,ProjectReferenceDescriptor> all(
+			Class<AbstractProjectReference> clazz
+	) {
+		if (clazz == null) { clazz = AbstractProjectReference.class; }
+		Jenkins j = Jenkins.getInstance();
+		
+		DescriptorExtensionList<AbstractProjectReference, ProjectReferenceDescriptor>
+			dList, ret;
+		
+		//The following list might be empty, if clazz is not an ExtensionPoint
+		ret = j.<AbstractProjectReference,ProjectReferenceDescriptor>
+			getDescriptorList(clazz);
+		
+		if (!ret.isEmpty()) {
+			return ret;
+		}
+		
+		//The list was empty; we need to fill it manually
+		//Do note, that this changes the list in-place; so the command above
+		//will actually contain the modified data on the next invocation!
+		dList = j.<AbstractProjectReference,ProjectReferenceDescriptor>
+				getDescriptorList(AbstractProjectReference.class);
+		
+		Descriptor<?> clazzDesc = j.getDescriptor(clazz);
+		if (clazzDesc == null) {
+			return dList;
+		}
+		
+		for (ProjectReferenceDescriptor prd : dList) {
+			if (clazzDesc.getClass().isAssignableFrom(prd.getClass())) {
+				ret.add(prd);
+			}
+		}
+		return ret;
+	}
+	
+	/**
 	 * This method returns the same list as {@link #all()}, with all those
 	 * classes removed that do <b>not</b> match the given regular expression
 	 * on the class name.

@@ -18,8 +18,8 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
@@ -30,55 +30,19 @@ l.layout(title: my.displayName, norefresh: true) {
 	// Stuff that belongs in the frame header
 	l.header() {
 		// JS function to alter the content of the diff-div field
-		script (language: "JAVASCRIPT", type: "TEXT/JAVASCRIPT", """
-			var inlineSVG = function() {
-				// Fetch the two versions from the select boxes
-				var graphDiv = document.getElementById("svgRelGraph")
-				
-				var xhr = new XMLHttpRequest();
-				if (!xhr) {
-					alert("Could not open XMLHttpRequest. Consider not using IE5/6.");
-					return;
-				}
-				var url = "renderSVGRelationGraph";
-				
-				xhr.open('GET', url, true);
-				xhr.onreadystatechange = function () {
-					if (xhr.readyState != 4) { return; }
-					if (graphDiv) {
-						graphDiv.innerHTML = xhr.responseText;
-					}
-				};
-				xhr.send(null);
-			}
-			
-			Event.observe(window, "load", inlineSVG);
-			"""
+		script(type: "text/javascript",
+			src: resURL + "/plugin/project-inheritance/scripts/showSVGRelGraph.js"
 		)
 		
-		style (type: "text/css", """
-			table.fixed {
-				word-wrap: break-word;
-				overflow:hidden;
-				width:50%;
-				min-width:500px;
-				table-layout: fixed;
-			}
-			
-			th.forceWrap { white-space:pre-wrap; word-wrap: break-word; overflow:hidden; }
-			td.forceWrap { white-space:pre-wrap; word-wrap: break-word; overflow:hidden; }
-			
-			th.variable { width:auto; }
-			th.wider { width:20em; }
-			th.wide { width:15em; }
-			th.medium { width:10em; }
-			th.small { width:5em; }
-			"""
+		// Necessary CSS classes for fixed table sizes
+		link(
+			rel: "stylesheet", type: "text/css",
+			href: resURL + "/plugin/project-inheritance/styles/table-monospace.css"
 		)
 	}
 	
 	// Include the standard side-panel for the PCE
-	include(my, "sidepanel.jelly")
+	include(my, "sidepanel")
 	
 	// Then, a very simple main panel with just a simple table
 	l.main_panel() {
@@ -87,35 +51,51 @@ l.layout(title: my.displayName, norefresh: true) {
 			span ("The project " + my.name + " is still referenced by:")
 		}
 		
-		// Rendering the table of elements
-		table (class: "pane sortable bigtable fixed") {
-			tr {
-				th (class: "pane-header variable forceWrap", initialSortDir: "down", _("Project Name"))
-				th (class: "pane-header medium forceWrap", initialSortDir: "down", _("As"))
-				th (class: "pane-header medium forceWrap", initialSortDir: "down", _("Distance"))
-			}
-			for (e in my.getRelatedProjects()) {
-				job = e.get(0)
-				url = InheritanceProject.getJobActionURL(job, "")
-				tr {
-					td (class:"pane forceWrap") {
-						a (href : url, job) {}
+		
+		relationsMap = my.getRelationships()
+		for (type in Relationship.Type.values()) {
+			h2(type.getDescription())
+			
+			table(class: "pane sortable bigtable fixed", style:"width:50%") {
+				thead() {
+					tr() {
+						th(initialSortDir: "down", class: "pane-header auto forceWrap", _("Project Name"))
+						th(initialSortDir: "down", class: "pane-header medium", _("Distance"))
+						th(initialSortDir: "down", class: "pane-header small", _("Leaf?"))
+						th(initialSortDir: "down", class: "pane-header medium", _("Transient?"))
 					}
-					td (class:"pane forceWrap", e.get(1)) {}
-					td (class:"pane forceWrap", e.get(2)) {}
+				}
+				tbody() {
+					for (e in relationsMap.entrySet()) {
+						project = e.getKey()
+						rel = e.getValue()
+						
+						if (rel.type == type) {
+							tr() {
+								td(class: "pane forceWrap") {
+									a(href: rootURL + "/job/" + project.getName(),
+											project.getName()
+									)
+								}
+								td(class: "pane", rel.distance)
+								td(class: "pane", rel.isLeaf)
+								td(class: "pane", project.getIsTransient())
+							}
+						}
+					}
 				}
 			}
 		}
 		
 		// Then, we include the page that loads the table of created jobs
-		url = InheritanceProject.getJobActionURL(my.name, "")
-		form (id: "confirmation", method: "post", action: url) {
+		form (id: "confirmation", method: "post", action: my.getAbsoluteUrl()) {
 			div (style: "margin-top:1em;margin-bottom:1em") {}
 			f.submit (value: _("Okay, I have seen it.")) {}
 		}
 		
 		// The box where the SVG-graph will be put into (see JS above!)
 		br ()
+		h2 (_("SVG Representation"))
 		div (
 			id: "svgRelGraph",
 			style:"border: 1px solid black; width:100%; overflow:auto; margin-top:1em; margin-bottom:1em"

@@ -49,7 +49,7 @@
 				</tr>
 				<j:forEach var="e" items="${it.getLastCreationState()}">
 					<tr>
-						<td class="pane"><a href="/job/${e.key}"><st:out value="${e.key}"/></a></td>
+						<td class="pane"><a href="${rootURL}/job/${e.key}"><st:out value="${e.key}"/></a></td>
 						<td class="pane"><st:out value="${e.value}"/></td>
 					</tr>
 				</j:forEach>

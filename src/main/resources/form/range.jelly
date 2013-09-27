@@ -25,7 +25,13 @@ THE SOFTWARE.
 -->
 
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:f="/lib/form">
+<j:jelly
+		xmlns:j="jelly:core"
+		xmlns:st="jelly:stapler"
+		xmlns:d="jelly:define"
+		xmlns:f="/lib/form"
+		xmlns:l="/lib/layout"
+>
 	<st:documentation>
 		Generates an input field <tt>&lt;input type="range" ... /></tt> to be
 		used inside &lt;f:entry. Do note that this is an HTML-5 feature and
@@ -83,19 +89,19 @@ THE SOFTWARE.
 	INPUT.number (defined in hudson-behavior.js) is a class for integers.
 	On the other hand, HTML5 <input> permits floating-point numbers.
 	-->
+	
+	<!-- TODO: Find a way to include this in the page header. -->
+	<style type="text/css">
+		input.reducedWidth { width: 90%; }
+	</style>	
+	
 	<div>
-		<!--
-		This span contains the current value of the field. It has no id,
-		because a unique ID can't be easily and reliably produced from within
-		this jelly fragment. As such, its value is updated by relative
-		addressing over the fact that it is the only span field inside the
-		parent div.
-		AS SUCH: The order of fields is important, even if they seem
-		superfluous.
-		-->
-		<span>${attrs.value ?: instance[attrs.field] ?: attrs.default}</span>
+		<input
+			id="rangeValue1" type="text" size="2"
+			value="${attrs.value ?: instance[attrs.field] ?: attrs.default}"
+		/>
 		<m:input xmlns:m="jelly:hudson.util.jelly.MorphTagLibrary"
-			class="setting-input ${attrs.checkUrl!=null?'validated':''} ${attrs.clazz}"
+			class="reducedWidth ${attrs.checkUrl!=null?'validated':''} ${attrs.clazz}"
 			name="${attrs.name ?: '_.'+attrs.field}"
 			value="${attrs.value ?: instance[attrs.field] ?: attrs.default}"
 			type="range"
@@ -103,7 +109,7 @@ THE SOFTWARE.
 			max="${attrs.maxValue}"
 			step="${attrs.step}"
 			ATTRIBUTES="${attrs}" EXCEPT="field clazz onchange"
-			onchange="this.parentNode.getElementsBySelector(&quot;span&quot;)[0].innerHTML=this.value"
+			onchange="this.parentNode.getElementsBySelector(&quot;input&quot;)[0].value=this.value"
 		/>
 	</div>
 </j:jelly>

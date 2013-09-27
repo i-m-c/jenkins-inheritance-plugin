@@ -45,7 +45,7 @@ public class SimpleProjectReference extends AbstractProjectReference {
 	
 	
 	@Extension
-	public static class DescriptorImpl extends ProjectReferenceDescriptor {
+	public static class SimpleProjectReferenceDescriptor extends ProjectReferenceDescriptor {
 		@Override
 		public String getDisplayName() {
 			return "Simple Project Reference";

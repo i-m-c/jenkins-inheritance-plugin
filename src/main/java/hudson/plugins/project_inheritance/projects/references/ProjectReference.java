@@ -179,7 +179,7 @@ public class ProjectReference extends SimpleProjectReference {
 
 	
 	@Extension
-	public static class DescriptorImpl extends ProjectReferenceDescriptor {
+	public static class OrderedProjectReferenceDescriptor extends SimpleProjectReferenceDescriptor {
 		private static final String PRIO_ERROR =
 				"Please enter a valid priority. Negative numbers" +
 				" mean execute before, positive numbers (incl. 0) after " +

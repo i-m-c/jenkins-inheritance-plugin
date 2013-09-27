@@ -176,13 +176,41 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public static class Relationship {
 		public enum Type {
 			PARENT, MATE, CHILD;
+			
+			public String toString() {
+				switch (this) {
+					case PARENT:
+						return Messages.InheritanceProject_Relationship_Type_Parent();
+					case MATE:
+						return Messages.InheritanceProject_Relationship_Type_Mate();
+					case CHILD:
+						return Messages.InheritanceProject_Relationship_Type_Child();
+					default:
+						return "N/A";
+				}
+			}
+			
+			public String getDescription() {
+				switch (this) {
+					case PARENT:
+						return Messages.InheritanceProject_Relationship_Type_ParentDesc();
+					case MATE:
+						return Messages.InheritanceProject_Relationship_Type_MateDesc();
+					case CHILD:
+						return Messages.InheritanceProject_Relationship_Type_ChildDesc();
+					default:
+						return "N/A";
+				}
+			}
 		}
 		public final Type type;
 		public final int distance;
+		public final boolean isLeaf;
 		
-		public Relationship(Type type, int distance) {
+		public Relationship(Type type, int distance, boolean isLeaf) {
 			this.type = type;
 			this.distance = distance;
+			this.isLeaf = isLeaf;
 		}
 	}
 	
@@ -612,6 +640,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.parameterizedWorkspace = null;
 		}
 		
+		//Read the class of this project for listing and derivation purposes
+		if (json.has("creationClass")) {
+			this.creationClass = json.getString("creationClass");
+		} else {
+			this.creationClass = null;
+		}
+		
 		//LOCAL NUKE before versioning is saved 
 		clearBuffers(this);
 		
@@ -635,8 +670,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 		
 		JSONObject json = req.getSubmittedForm();
-		this.description = json.getString("description");
-
+		
 		// FULL NUKE before configuration change
 		clearBuffers(null);
 		
@@ -673,13 +707,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			//this.addProperty(), because the old properties should already be
 			//owned by this project
 			this.properties.addAll(oldProps);
-		}
-		
-		//Read the class of this project for listing and derivation purposes
-		if (json.has("creationClass")) {
-			this.creationClass = json.getString("creationClass");
-		} else {
-			this.creationClass = null;
 		}
 		
 		//Read the compatible projects
@@ -727,6 +754,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		if (this.name.equals(newName)) {
 			return;
 		}
+		
+		//Check if the user has the permission to rename transient projects
+		//Do note that currently, that is impossible via the GUI for everyone anyway
+		if (this.getIsTransient() &&
+				!ProjectCreationEngine.instance.currentUserMayRename()) {
+			throw new IOException(
+					"Current user is not allowed to rename transient projects"
+			);
+		}
+		
 		//Recording our old project name
 		String oldName = this.name;
 		
@@ -1049,7 +1086,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			if (rel.type == Type.CHILD || rel.type == Type.MATE) {
 				//Abort and redirect to error page
 				rsp.sendRedirect(
-					getJobActionURL(this.getName(), "showReferencedBy")
+					this.getAbsoluteUrl() + "/showReferencedBy"
 				);
 				return;
 			}
@@ -3381,18 +3418,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	
-	public static String getJobActionURL(String job, String action) {
-		StaplerRequest req = Stapler.getCurrentRequest();
-		String url = String.format(
-				"%s/%s/%s/%s",
-				(req != null) ? req.getContextPath() : "",
-				Jenkins.getInstance().getUrlChildPrefix(),
-				job,
-				action
-		);
-		return url;
-	}
-	
 	
 	// === RELATIONSHIP ACCESS METHODS ===
 	
@@ -3460,10 +3485,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Mates can be filled quite easily
 		for (String mate : node.mates) {
 			InheritanceProject p = InheritanceProject.getProjectByName(mate);
+			ProjectGraphNode mateNode = connGraph.get(mate);
+			boolean isLeaf = (mateNode == null) ? true : mateNode.children.isEmpty();
 			if (p == null) { continue; }
 			//Checking if we've seen this mate already
 			if (!seenProjects.contains(p.getName())) {
-				map.put(p, new Relationship(Relationship.Type.MATE, 0));
+				map.put(p, new Relationship(Relationship.Type.MATE, 0, isLeaf));
 				seenProjects.add(p.getName());
 			}
 		}
@@ -3491,7 +3518,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				if (par == null || seenProjects.contains(parent)) {
 					continue;
 				}
-				map.put(par, new Relationship(Relationship.Type.PARENT, distance));
+				map.put(par, new Relationship(Relationship.Type.PARENT, distance, false));
 				nOpen.push(par);
 			}
 			if (cOpen.isEmpty() && !nOpen.isEmpty()) {
@@ -3520,7 +3547,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				if (cProj == null || seenProjects.contains(child)) {
 					continue;
 				}
-				map.put(cProj, new Relationship(Relationship.Type.CHILD, distance));
+				ProjectGraphNode childNode = connGraph.get(child);
+				boolean isLeaf = (childNode == null) ? true : childNode.children.isEmpty();
+				map.put(cProj, new Relationship(Relationship.Type.CHILD, distance, isLeaf));
 				nOpen.push(cProj);
 			}
 			if (cOpen.isEmpty() && !nOpen.isEmpty()) {
