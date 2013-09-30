@@ -69,7 +69,7 @@ l.layout(title: my.getDisplayName(), noRefresh: "true") {
 				pName = e.getProjectName()
 				tr() {
 					// Parameter name
-					td (class:"pane forceWrap", pName)
+					td (class:"pane forceWrap", e.getParameterName())
 					// Project origin
 					td (class:"pane forceWrap") {
 						a(href: rootURL + "/job/" + pName, pName)
