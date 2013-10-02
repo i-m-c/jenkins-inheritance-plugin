@@ -51,41 +51,9 @@ l.layout(title: my.displayName, norefresh: true) {
 			span ("The project " + my.name + " is still referenced by:")
 		}
 		
-		
-		relationsMap = my.getRelationships()
-		for (type in Relationship.Type.values()) {
-			h2(type.getDescription())
-			
-			table(class: "pane sortable bigtable fixed", style:"width:50%") {
-				thead() {
-					tr() {
-						th(initialSortDir: "down", class: "pane-header auto forceWrap", _("Project Name"))
-						th(initialSortDir: "down", class: "pane-header medium", _("Distance"))
-						th(initialSortDir: "down", class: "pane-header small", _("Leaf?"))
-						th(initialSortDir: "down", class: "pane-header medium", _("Transient?"))
-					}
-				}
-				tbody() {
-					for (e in relationsMap.entrySet()) {
-						project = e.getKey()
-						rel = e.getValue()
-						
-						if (rel.type == type) {
-							tr() {
-								td(class: "pane forceWrap") {
-									a(href: rootURL + "/job/" + project.getName(),
-											project.getName()
-									)
-								}
-								td(class: "pane", rel.distance)
-								td(class: "pane", rel.isLeaf)
-								td(class: "pane", project.getIsTransient())
-							}
-						}
-					}
-				}
-			}
-		}
+		//Add the relationship tables in verbose mode
+		verbose = true
+		include(my, "inheritanceRelationTables")
 		
 		// Then, we include the page that loads the table of created jobs
 		form (id: "confirmation", method: "post", action: my.getAbsoluteUrl()) {

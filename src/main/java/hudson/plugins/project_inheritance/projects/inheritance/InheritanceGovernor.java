@@ -46,6 +46,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
@@ -303,7 +304,6 @@ public abstract class InheritanceGovernor<T> {
 		
 		@SuppressWarnings("rawtypes")
 		ExtensionList<InheritanceSelector> isLst = InheritanceSelector.all();
-		
 		for (InheritanceSelector<?> is : isLst) {
 			if (is.isApplicableFor(listType) == false) {
 				continue;
@@ -312,8 +312,21 @@ public abstract class InheritanceGovernor<T> {
 			InheritanceSelector<R> isr = (InheritanceSelector<R>) is;
 			merge = isr.applyAgainstList(merge, caller);
 		}
-
-		return merge;
+		
+		//At the end, we remove duplicated entries and select the LAST one of each
+		LinkedList<R> out = new LinkedList<R>(merge);
+		Set<Class<?>> seen = new HashSet<Class<?>>();
+		Iterator<R> rIter = out.descendingIterator();
+		while (rIter.hasNext()) {
+			R entry = rIter.next();
+			Class<?> clazz = entry.getClass();
+			if (seen.contains(clazz)) {
+				rIter.remove();
+			} else {
+				seen.add(clazz);
+			}
+		}
+		return out;
 	}
 	
 	protected static <R extends Describable<R>> DescribableList<R, Descriptor<R>> reduceDescribableByMerge(

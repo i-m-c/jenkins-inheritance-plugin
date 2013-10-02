@@ -75,60 +75,7 @@ l.layout(title: my.displayName) {
 		
 		// Add an hbar, followed by a sortable table of direct parents & childs
 		hr()
-		relationsMap = my.getRelationships()
-		for (type in Relationship.Type.values()) {
-			//Ignore "mated" projects
-			if (type == Relationship.Type.MATE) { continue }
-			
-			//Check if the table would be empty
-			typeEmpty = true;
-			for (e in relationsMap.entrySet()) {
-				if (e.getValue().type == type) {
-					typeEmpty = false
-					break
-				}
-			}
-			if (typeEmpty) { continue }
-			
-			h2(type.getDescription())
-			
-			table(class: "pane sortable bigtable fixed", style:"min-width:600px; width:75%") {
-				thead() {
-					tr() {
-						th(initialSortDir: "down", class: "pane-header auto forceWrap", _("Name"))
-						th(initialSortDir: "down", class: "pane-header small", _("Distance"))
-						th(initialSortDir: "down", class: "pane-header medium", _("Compound or<br/>Transient?"))
-						th(initialSortDir: "down", class: "pane-header wide forceWrap", _("Class"))
-					}
-				}
-				tbody() {
-					for (e in relationsMap.entrySet()) {
-						project = e.getKey()
-						rel = e.getValue()
-						
-						if (type == Relationship.Type.PARENT) {
-							//If we look at parents, only show dist = 1
-							if (rel.distance != 1) { continue; }
-						} else if (type == Relationship.Type.CHILD) {
-							//Only show leafs
-							if (!rel.isLeaf) { continue; }
-						}
-						
-						if (rel.type == type) {
-							tr() {
-								td(class: "pane forceWrap") {
-									a(href: rootURL + "/job/" + project.getName(),
-											project.getName()
-									)
-								}
-								td(class: "pane", rel.distance)
-								td(class: "pane", project.getIsTransient())
-								td(class: "pane", project.getCreationClass())
-							}
-						}
-					}
-				}
-			}
-		}
+		ignoreRelations = [Relationship.Type.MATE]
+		include(my, "inheritanceRelationTables")
 	}
 }
