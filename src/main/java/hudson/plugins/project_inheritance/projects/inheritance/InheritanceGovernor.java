@@ -280,17 +280,22 @@ public abstract class InheritanceGovernor<T> {
 		return list.peekLast();
 	}
 	
+	
 	/**
 	 * Simple helper function to use a merge as the default reduction.
-	 * 
+	 * <p>
 	 * Do note that the list is returned in-order of inheritance, with merges
 	 * being put back into the list at the location of the last definition.
+	 * <p>
+	 * It will not de-duplicated the resulting list beyond doing the merges 
+	 * based on the {@link InheritanceSelector} extensions.
 	 * 
 	 * @see #reduceFromFullInheritance(Deque)
+	 * @see #reduceByMerge(Deque, Class, InheritanceProject)
 	 * @param list
 	 * @return
 	 */
-	protected static <R> List<R> reduceByMerge(Deque<List<R>> list, Class<?> listType, InheritanceProject caller) {
+	protected static <R> List<R> reduceByMergeWithDuplicates(Deque<List<R>> list, Class<?> listType, InheritanceProject caller) {
 		List<R> merge = new LinkedList<R>();
 		if (list == null) { return merge; }
 		
@@ -312,8 +317,26 @@ public abstract class InheritanceGovernor<T> {
 			InheritanceSelector<R> isr = (InheritanceSelector<R>) is;
 			merge = isr.applyAgainstList(merge, caller);
 		}
+		return merge;
+	}
+	
+	/**
+	 * Simple helper function to use a merge as the default reduction.
+	 * <p>
+	 * Do note that the list is returned in-order of inheritance, with merges
+	 * being put back into the list at the location of the last definition.
+	 * <p>
+	 * In contrast to {@link #reduceByMergeWithDuplicates(Deque, Class, InheritanceProject)},
+	 * it will remove duplicate entries based on the class-objects.
+	 * 
+	 * @see #reduceFromFullInheritance(Deque)
+	 * @param list
+	 * @return
+	 */
+	protected static <R> List<R> reduceByMerge(Deque<List<R>> list, Class<?> listType, InheritanceProject caller) {
+		List<R> merge = reduceByMergeWithDuplicates(list, listType, caller);
 		
-		//At the end, we remove duplicated entries and select the LAST one of each
+		//Remove duplicated entries and select the LAST one of each
 		LinkedList<R> out = new LinkedList<R>(merge);
 		Set<Class<?>> seen = new HashSet<Class<?>>();
 		Iterator<R> rIter = out.descendingIterator();

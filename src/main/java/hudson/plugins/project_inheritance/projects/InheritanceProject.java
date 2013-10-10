@@ -2275,7 +2275,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			
 			@Override
 			protected List<AbstractProjectReference> reduceFromFullInheritance(Deque<List<AbstractProjectReference>> list) {
-				return InheritanceGovernor.reduceByMerge(
+				return InheritanceGovernor.reduceByMergeWithDuplicates(
 						list, AbstractProjectReference.class, this.caller
 				);
 			}
