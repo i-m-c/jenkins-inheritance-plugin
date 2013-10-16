@@ -68,6 +68,7 @@ import hudson.plugins.project_inheritance.projects.references.ParameterizedProje
 import hudson.plugins.project_inheritance.projects.references.ProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
 import hudson.plugins.project_inheritance.util.Helpers;
+import hudson.plugins.project_inheritance.util.LimitedHashMap;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.plugins.project_inheritance.util.TimedBuffer;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore;
@@ -112,6 +113,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -421,6 +423,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	protected String parameterizedWorkspace;
 	
+	/**
+	 * Workaround for issue in Jenkins 1.509.3 regarding queues
+	 */
+	private static final LimitedHashMap<String, Label> labelCache =
+			new LimitedHashMap<String, Label>(1024);
+	private static final ReentrantReadWriteLock labelCacheLock =
+			new ReentrantReadWriteLock();
 	
 	
 	// === CONSTRUCTORS AND CONSTRUCTION HELPERS ===
@@ -523,31 +532,47 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Ensuring that the buffers are present
 		createBuffers();
 		
-		if (root == null) {
-			//Nuke all
-			onChangeBuffer.clearAll();
-			onSelfChangeBuffer.clearAll();
-			onInheritChangeBuffer.clearAll();
-			return;
-		}
-		
-		//First clearing the cross-project change buffer
-		onChangeBuffer.clearAll();
-		//Then clearing the self-change buffer
-		onSelfChangeBuffer.clear(root);
-		
-		//Then we need to clear the inheritable changes for the root and its children
-		//Do note that the root MUST be cleared first, as otherwise we may
-		//fetch an "unclean" relationship set
-		onInheritChangeBuffer.clear(root);
-		Map<InheritanceProject, Relationship> relMap = root.getRelationships();
-		for (Map.Entry<InheritanceProject, Relationship> e : relMap.entrySet()) {
-			//We ignore siblings
-			if (e.getValue().type == Relationship.Type.MATE) {
-				continue;
+		labelCacheLock.writeLock().lock();
+		try {
+			if (root == null) {
+				//Nuke all
+				onChangeBuffer.clearAll();
+				onSelfChangeBuffer.clearAll();
+				onInheritChangeBuffer.clearAll();
+				labelCache.clear();
+				return;
 			}
-			//Otherwise, we clear that project's inheritance buffer
-			onInheritChangeBuffer.clear(e.getKey());
+			
+			//First clearing the cross-project change buffer
+			onChangeBuffer.clearAll();
+			//Then clearing the self-change buffer
+			onSelfChangeBuffer.clear(root);
+			
+			//Then we need to clear the inheritable changes for the root and its children
+			//Do note that the root MUST be cleared first, as otherwise we may
+			//fetch an "unclean" relationship set
+			onInheritChangeBuffer.clear(root);
+			Map<InheritanceProject, Relationship> relMap = root.getRelationships();
+			for (Map.Entry<InheritanceProject, Relationship> e : relMap.entrySet()) {
+				//We ignore siblings
+				if (e.getValue().type == Relationship.Type.MATE) {
+					continue;
+				}
+				//Otherwise, we clear that project's inheritance buffer
+				onInheritChangeBuffer.clear(e.getKey());
+			}
+			
+			//Removing label cache entries containing the roots' name
+			Iterator<Map.Entry<String, Label>> iter = labelCache.entrySet().iterator();
+			while (iter.hasNext()) {
+				Map.Entry<String, Label> e = iter.next();
+				String key = e.getKey();
+				if (key != null && key.contains(root.getFullName())) {
+					iter.remove();
+				}
+			}
+		} finally {
+			labelCacheLock.writeLock().unlock();
 		}
 	}
 	
@@ -3199,6 +3224,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lbl;
 	}
 	
+	@SuppressWarnings("unused")
 	public Label getAssignedLabel(IMode mode) {
 		InheritanceGovernor<Label> gov =
 				new InheritanceGovernor<Label>(
@@ -3217,50 +3243,88 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					InheritanceProject ip) {
 				return ip.getRawAssignedLabel();
 			}
+			
+			@Override
+			protected Label reduceFromFullInheritance(Deque<Label> list) {
+				//We simply join the labels via the AND operator
+				Label out = null;
+				if (list == null || list.isEmpty()) { return out; }
+				for (Label l : list) {
+					if (l == null) { continue; }
+					out = (out == null) ? l : out.and(l);
+				}
+				return out;
+			}
 		};
-		Label lbl = gov.retrieveFullyDerivedField(this, mode);
 		
-		//Check if we need to apply magic node label
-		String magic = ProjectCreationEngine.instance.getMagicNodeLabelForTesting();
-		if (magic == null || magic.isEmpty() || (lbl != null && lbl.getExpression().contains(magic))) {
-			return lbl;
+		//Generate the key for caching; a combination of the parents
+		//do note that versions do not need to be tracked; as labels are not
+		//versioned
+		StringBuilder key = null;
+		key = new StringBuilder(this.getFullName());
+		key.append("[");
+		for (AbstractProjectReference apr : this.getAllParentReferences(SELECTOR.MISC)) {
+			key.append(apr.getName());
+			key.append(",");
 		}
+		key.append("]");
 		
-		//Check if we need to append the magic node label; this is only needed
-		//and wanted when we schedule a build. This is the same as when
-		//inheritance itself is desired
-		if (mode == IMode.INHERIT_FORCED ||
-				InheritanceGovernor.inheritanceLookupRequired(this)) {
-			//Create a new label with the "magic" value appended to it.
-			Set<LabelAtom> nonTestSet = Label.parse(magic);
-			Label nonTestingLabel = null;
-			for (LabelAtom la : nonTestSet) {
-				if (nonTestingLabel == null) {
-					nonTestingLabel = la;
-				} else {
-					nonTestingLabel = nonTestingLabel.and(la);
+		Label lbl = null;
+		boolean hasCached = false;
+		if (key != null) {
+			labelCacheLock.readLock().lock();
+			try {
+				if (labelCache.containsKey(key.toString())) {
+					lbl = labelCache.get(key.toString());
+					hasCached = true;
+				}
+			} finally {
+				labelCacheLock.readLock().unlock();
+			}
+		}
+		if (!hasCached) {
+			//Otherwise, we compute the label anew
+			lbl = gov.retrieveFullyDerivedField(this, mode);
+			
+			//Caching, it if need be
+			if (key != null) {
+				labelCacheLock.writeLock().lock();
+				try {
+					labelCache.put(key.toString(), lbl);
+				} finally {
+					labelCacheLock.writeLock().unlock();
 				}
 			}
-			/* The nonTestingLabel is currently the positive check for a node
-			 * being a testing node. Therefore, we need to take the real
-			 * labels defined on the project and append a negation of the
-			 * nonTestingLabel expression.
-			 * 
-			 * Do note that if there is no real label defined, we still need
-			 * to negate & attach it.
-			 */
-			if (lbl != null) {
-				nonTestingLabel = lbl.and(nonTestingLabel.not());
-			} else {
-				nonTestingLabel = nonTestingLabel.not();
-			}
-			return nonTestingLabel;
 		}
-		//If no appending of the magic value is necessary
+		
+		//Checking if the node-label-for-testing needs to be added
+		Label magic = ProjectCreationEngine.instance.getMagicNodeLabelForTestingValue();
+		//Check if no magic label is set
+		if (magic == null || magic.isEmpty()) {
+			return lbl;
+		}
+		if (lbl != null) {
+			String labelExpr = lbl.getExpression();
+			String magicExpr = magic.getExpression();
+			if (labelExpr.contains(magicExpr)) {
+				//The label is already referencing the magic; no appending needed
+				return lbl;
+			}
+		}
+		//Otherwise, we need to add the magic label; but only when building
+		if (InheritanceGovernor.inheritanceLookupRequired(this)) {
+			return (lbl == null) ? magic.not() : lbl.and(magic.not());
+		}
+		
+		//No appending of the magic value is necessary
 		return lbl;
 	}
 	
 	public Label getRawAssignedLabel() {
+		if (this.isTransient) {
+			//Transient projects do not have a label, they merely inherit
+			return null;
+		}
 		return super.getAssignedLabel();
 	}
 	

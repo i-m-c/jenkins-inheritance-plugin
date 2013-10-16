@@ -29,12 +29,14 @@ import hudson.init.InitMilestone;
 import hudson.init.Initializer;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Describable;
+import hudson.model.Label;
 import hudson.model.ManagementLink;
 import hudson.model.Saveable;
 import hudson.model.TopLevelItem;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Queue;
+import hudson.model.labels.LabelAtom;
 import hudson.model.listeners.ItemListener;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
@@ -55,6 +57,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -950,6 +953,18 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	
 	public String getMagicNodeLabelForTesting() {
 		return this.magicNodeLabelForTesting;
+	}
+	
+	public Label getMagicNodeLabelForTestingValue() {
+		String str = this.getMagicNodeLabelForTesting();
+		if (str == null) { return null; }
+		Set<LabelAtom> nonTestSet = Label.parse(str);
+		
+		Label out = null;
+		for (LabelAtom la : nonTestSet) {
+			out = (out == null) ? la : out.and(la);
+		}
+		return out;
 	}
 	
 	public boolean getUnescapeEqualsCharInParams() {
