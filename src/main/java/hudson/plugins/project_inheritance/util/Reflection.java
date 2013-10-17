@@ -25,6 +25,7 @@ import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Reflection {
@@ -75,6 +76,8 @@ public class Reflection {
 			return false;
 		}
 		
+		String joinedStackTraceClasses = joinStacktraceClasses(maxDepth, stackTrace);
+		
 		//And fetching Jenkins' ClassLoader that is Plugin-aware
 		ClassLoader cl;
 		try {
@@ -88,8 +91,18 @@ public class Reflection {
 			String clazzName = clazz.getName();
 			ConcurrentHashMap<String, Boolean> assignMap = classAssignabilityMap.get(clazzName);
 			if (assignMap == null) {
-				assignMap = new ConcurrentHashMap<String, Boolean>(100, 0.75f, 2);
-				classAssignabilityMap.put(clazzName, assignMap);
+				classAssignabilityMap.putIfAbsent(clazzName, new ConcurrentHashMap<String, Boolean>(100, 0.75f, 2));
+				assignMap = classAssignabilityMap.get(clazzName);
+			}
+			
+			// see if we already checked that particular stack trace for this class
+			Boolean hasKnownAssignable = assignMap.get(joinedStackTraceClasses);
+			if (hasKnownAssignable != null) {
+			    if (hasKnownAssignable) {
+			        return true;
+			    } else {
+			        continue;
+			    }
 			}
 			
 			//And iterating to a maximum fixed depth
@@ -97,24 +110,26 @@ public class Reflection {
 			for (StackTraceElement ste : stackTrace) {
 				//Checking if we've reached the maximum trace depth
 				if (cnt++ >= maxDepth) { break; }
-				try {
-					//Fetching the Class object from the stacktrace 
-					String steClass = ste.getClassName();
-					//Checking if we've already checked the assignability once
-					Boolean isAssignable = assignMap.get(steClass);
-					if (isAssignable != null) {
-						if (isAssignable == true) {
-							return isAssignable;
-						} else {
-							//Checking next stack element
-							continue;
-						}
+				//Fetching the Class object from the stacktrace 
+				String steClass = ste.getClassName();
+				//Checking if we've already checked the assignability once
+				Boolean isAssignable = assignMap.get(steClass);
+				if (isAssignable != null) {
+					if (isAssignable == true) {
+						return isAssignable;
+					} else {
+						//Checking next stack element
+						continue;
 					}
+				}
+					
+				try {
 					//Otherwise, we try to resolve the class and test for assignability
 					Class<?> steClazz = cl.loadClass(steClass);
 					//And then, we compare the assignability of both classes
 					if (clazz.isAssignableFrom(steClazz)) {
 						assignMap.put(steClass, true);
+						assignMap.put(joinedStackTraceClasses, true);
 						return true;
 					} else {
 						assignMap.put(steClass, false);
@@ -123,8 +138,21 @@ public class Reflection {
 					continue;
 				}
 			}
+			
+			assignMap.put(joinedStackTraceClasses, false);
 		}
 		return false;
+	}
+	
+	private static String joinStacktraceClasses(int maxDepth, StackTraceElement[] stackTrace) {
+	    StringBuilder sb = new StringBuilder(512);
+	    int cnt = 0;
+	    for(StackTraceElement ste : stackTrace) {
+            if (cnt++ >= maxDepth) { break; }
+	        sb.append(ste.getClassName()).append('\n');
+	    }
+	    
+	    return sb.toString();
 	}
 	
 	
@@ -133,11 +161,11 @@ public class Reflection {
      * maxDepth set to {@value #MAX_STACK_DEPTH}.
      * 
      * @param clazz the class to search for. This must be an exact match.
-     * @param methodName the method name inside the class.
+     * @param methodNames the method names inside the class.
      * @return true, if the method was called from the given class.
      */
-	public static boolean calledFromMethod(Class<?> clazz, String methodName) {
-		return calledFromMethod(clazz, methodName, MAX_STACK_DEPTH);
+	public static boolean calledFromMethod(Class<?> clazz, String... methodNames) {
+		return calledFromMethod(clazz, MAX_STACK_DEPTH, methodNames);
 	}
 	
 	/**
@@ -146,12 +174,11 @@ public class Reflection {
 	 * 
 	 * @param maxDepth the maximum stack depth to search in.
 	 * @param clazz the class to search for. This must be an exact match.
-     * @param methodName the method name inside the class.
+     * @param methodNames the method name inside the class.
      * @return true, if the method was called from the given class.
 	 */
-	public static boolean calledFromMethod(Class<?> clazz, String methodName,
-			int maxDepth) {
-		if (clazz == null || methodName == null || methodName.isEmpty()) {
+	public static boolean calledFromMethod(Class<?> clazz, int maxDepth, String... methodNames) {
+		if (clazz == null || methodNames == null || methodNames.length == 0) {
 			return false;
 		}
 		if (maxDepth <= 0) {
@@ -161,22 +188,23 @@ public class Reflection {
 		StackTraceElement[] stackTrace =
 				Thread.currentThread().getStackTrace();
 		
+		Arrays.sort(methodNames);
+		
 		//And iterating to a maximum fixed depth
 		int cnt = 0;
 		for (StackTraceElement ste : stackTrace) {
 			//Checking if we've reached the maximum trace depth
 			if (cnt++ >= maxDepth) { break; }
+			//Checking if the class name matches
+			if (clazz != null && !ste.getClassName().equals(clazz.getCanonicalName())) {
+			    //Mismatched method name
+			    continue;
+			}
 			
 			//Checking if the methodName matches
-			if (methodName != null && !methodName.isEmpty() &&
-					!ste.getMethodName().equals(methodName)) {
-				//Mismatched method name
-				continue;
-			}
-			//Checking if the class name matches
-			if (clazz == null || ste.getClassName().equals(clazz.getCanonicalName())) {
-				//Both method name and class assignation match
-				return true;
+			if (Arrays.binarySearch(methodNames, ste.getMethodName()) >= 0) {
+			    //Both method name and class assignation match
+			    return true;
 			}
 		}
 		return false;
