@@ -22,20 +22,144 @@ package hudson.plugins.project_inheritance.util;
 
 import hudson.model.Hudson;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Reflection {
 	
 	protected static final int MAX_STACK_DEPTH = 30;
 	
-	//TODO: This map can grow quite fast, theoretically up to n^2; n = # of classes
-	public static final ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>> classAssignabilityMap =
-			new ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>(10, 0.75f, 1);
+	protected static class CachedClassResolver {
+		/**
+		 * This map is used to reduce contention on the ClassLoader. It will cache
+		 * the resolution of class names to actual class instances.
+		 */
+		protected final ConcurrentHashMap<String, Class<?>> resolveMap;
+		
+		private final class NullDummy {}
+		
+		public CachedClassResolver() {
+			this.resolveMap = new ConcurrentHashMap<String, Class<?>>(10, 0.75f, 3);
+		}
+		
+		public Class<?> resolve(String className) {
+			if (className == null || className.isEmpty()) {
+				return null;
+			}
+			if (this.resolveMap.containsKey(className)) {
+				Class<?> result = this.resolveMap.get(className);
+				if (result == NullDummy.class) {
+					return null;
+				} else {
+					return result;
+				}
+			}
+			//Fetching the class loader from Jenkins
+			//Do note that it is strongly synchronized
+			ClassLoader cl;
+			try {
+				cl = Hudson.getInstance().getPluginManager().uberClassLoader;
+			} catch (NullPointerException ex) {
+				//This can (or should) only happen if not on the server or during shutdown
+				return null;
+			}
+			
+			Class<?> clazz = null;
+			try {
+				//Try to resolve the class and test for assignability
+				clazz = cl.loadClass(className);
+			} catch (ClassNotFoundException e) {
+				//No such class; clazz can stay == null
+			}
+			//Caching the resolution
+			if (clazz == null) {
+				//Can't put null values, so we add a dummy (unresolvable classes)
+				this.resolveMap.put(className, NullDummy.class);
+			} else {
+				this.resolveMap.putIfAbsent(className, clazz);
+			}
+			return clazz;
+		}
+	}
+	
+	protected static class AssignabilityChecker {
+		/**
+		 * This map stores for a class name, which other class names have been
+		 * found to be assignable to it.
+		 * <p>
+		 * In more detail:
+		 * <ul>
+		 *   <li>For a given class name (outer), you get back a map.</li>
+		 *   <li>Each entry is a tuple of another class name (inner) and a
+		 *   boolean that states whether or not you can assign the inner class
+		 *   to the outer class.</li>
+		 * </ul>
+		 * 
+		 * TODO: This map can grow quite fast, theoretically up to n^2; n = # of classes
+		 */
+		protected final ConcurrentHashMap<Class<?>, ConcurrentHashMap<Class<?>, Boolean>> classAssignabilityMap;
+		
+		
+		public AssignabilityChecker() {
+			this.classAssignabilityMap =
+					new ConcurrentHashMap<Class<?>, ConcurrentHashMap<Class<?>, Boolean>>(10, 0.75f, 1);
+		}
+		
+		/**
+		 * Checks if the 'clazz' class is assignable from the 'other' class.
+		 * <p>
+		 * Identical to clazz.isAssignableFrom(other), but might use caching
+		 * to speed up resolution.
+		 * 
+		 * @param clazz the class to which 'other' must be assignable (left-hand value)
+		 * @param other the class which must be assignable to 'clazz' (right-hand value)
+		 * @return true, if 'other' is a subtype of 'clazz.
+		 */
+		public boolean isAssignableFrom(Class<?> clazz, Class<?> other) {
+			if (clazz == null || other == null) { return false; }
+			
+			//Check if caching this operation is wanted or not
+			if (!ProjectCreationEngine.instance.getEnableReflectionCaching()) {
+				return clazz.isAssignableFrom(other);
+			}
+			
+			//Check if the base class was already checked at least once
+			ConcurrentHashMap<Class<?>, Boolean> checkMap = 
+					this.classAssignabilityMap.get(clazz);
+			if (checkMap == null) {
+				boolean result = clazz.isAssignableFrom(other);
+				checkMap = new ConcurrentHashMap<Class<?>, Boolean>(100, 0.75f, 2);
+				checkMap.put(other, result);
+				classAssignabilityMap.putIfAbsent(clazz, checkMap);
+				return result;
+			} else {
+				Boolean result = checkMap.get(other);
+				if (result == null) {
+					result = clazz.isAssignableFrom(other);
+					//Not putIfAbsent() since something might've added a null
+					checkMap.put(other, result);
+					return result;
+				} else {
+					return result;
+				}
+			}
+		}
+	}
+	
+	
 
+	protected static final CachedClassResolver resolver =
+			new CachedClassResolver();
+	protected  static final AssignabilityChecker assigner =
+			new AssignabilityChecker();
+	
+	
 	/**
 	* Wrapper for {@link #calledFromClass(Class, int)}, with the maxDepth set
 	* to {@value #MAX_STACK_DEPTH}.
@@ -70,112 +194,72 @@ public class Reflection {
 		}
 		//Fetch the call stack
 		StackTraceElement[] stackTrace =
-				//Thread.currentThread().getStackTrace();
 				new Throwable().getStackTrace(); 
 		if (stackTrace == null || stackTrace.length == 0) {
 			return false;
 		}
 		
-		String joinedStackTraceClasses = joinStacktraceClasses(maxDepth, stackTrace);
-		
-		//And fetching Jenkins' ClassLoader that is Plugin-aware
-		ClassLoader cl;
-		try {
-			cl = Hudson.getInstance().getPluginManager().uberClassLoader;
-		} catch (NullPointerException ex) {
-			//This can (or should) only happen if not on the server or during shutdown
+		//Fetching all class names currently present in the stack trace.
+		Set<Class<?>> stackCls = getClasses(maxDepth, stackTrace);
+		if (stackCls == null || stackCls.isEmpty()) {
 			return false;
 		}
 		
-		for (Class<?> clazz : classes) {
-			String clazzName = clazz.getName();
-			ConcurrentHashMap<String, Boolean> assignMap = classAssignabilityMap.get(clazzName);
-			if (assignMap == null) {
-				classAssignabilityMap.putIfAbsent(clazzName, new ConcurrentHashMap<String, Boolean>(100, 0.75f, 2));
-				assignMap = classAssignabilityMap.get(clazzName);
-			}
-			
-			// see if we already checked that particular stack trace for this class
-			Boolean hasKnownAssignable = assignMap.get(joinedStackTraceClasses);
-			if (hasKnownAssignable != null) {
-			    if (hasKnownAssignable) {
-			        return true;
-			    } else {
-			        continue;
-			    }
-			}
-			
-			//And iterating to a maximum fixed depth
-			int cnt = 0;
-			for (StackTraceElement ste : stackTrace) {
-				//Checking if we've reached the maximum trace depth
-				if (cnt++ >= maxDepth) { break; }
-				//Fetching the Class object from the stacktrace 
-				String steClass = ste.getClassName();
-				//Checking if we've already checked the assignability once
-				Boolean isAssignable = assignMap.get(steClass);
-				if (isAssignable != null) {
-					if (isAssignable == true) {
-						return isAssignable;
-					} else {
-						//Checking next stack element
-						continue;
-					}
-				}
-					
-				try {
-					//Otherwise, we try to resolve the class and test for assignability
-					Class<?> steClazz = cl.loadClass(steClass);
-					//And then, we compare the assignability of both classes
-					if (clazz.isAssignableFrom(steClazz)) {
-						assignMap.put(steClass, true);
-						assignMap.put(joinedStackTraceClasses, true);
-						return true;
-					} else {
-						assignMap.put(steClass, false);
-					}
-				} catch (ClassNotFoundException e) {
-					continue;
+		//Then, checking for each input class, whether a stack-class matches 
+		for (Class<?> inClass : classes) {
+			for (Class<?> outClass : stackCls) {
+				if (assigner.isAssignableFrom(inClass, outClass)) {
+					return true;
 				}
 			}
-			
-			assignMap.put(joinedStackTraceClasses, false);
 		}
+		//No such class on the stack (or no class can be resolved)
 		return false;
 	}
 	
-	private static String joinStacktraceClasses(int maxDepth, StackTraceElement[] stackTrace) {
-	    StringBuilder sb = new StringBuilder(512);
-	    int cnt = 0;
-	    for(StackTraceElement ste : stackTrace) {
-            if (cnt++ >= maxDepth) { break; }
-	        sb.append(ste.getClassName()).append('\n');
-	    }
-	    
-	    return sb.toString();
+	/**
+	 * This method takes the given stack and returns the set of all class names
+	 * contained therein.
+	 * 
+	 * @param maxDepth the maximum stack depth to explore
+	 * @param stackTrace the stack trace
+	 * @return a set containing the class names from the stack
+	 */
+	private static Set<Class<?>> getClasses(int maxDepth, StackTraceElement[] stackTrace) {
+		HashSet<Class<?>> classSet = new HashSet<Class<?>>();
+		int cnt = 0;
+		for(StackTraceElement ste : stackTrace) {
+			if (cnt++ >= maxDepth) { break; }
+			Class<?> clazz = resolver.resolve(ste.getClassName());
+			if (clazz != null) {
+				classSet.add(clazz);
+			}
+		}
+		return classSet;
 	}
 	
 	
 	/**
-     * Wrapper for {@link #calledFromMethod(Class, String, int)}, with the
-     * maxDepth set to {@value #MAX_STACK_DEPTH}.
-     * 
-     * @param clazz the class to search for. This must be an exact match.
-     * @param methodNames the method names inside the class.
-     * @return true, if the method was called from the given class.
-     */
+	 * Wrapper for {@link #calledFromMethod(Class, String, int)}, with the
+	 * maxDepth set to {@value #MAX_STACK_DEPTH}.
+	 * 
+	 * @param clazz the class to search for. This must be an exact match.
+	 * @param methodNames the method names inside the class.
+	 * @return true, if the method was called from the given class.
+	 */
 	public static boolean calledFromMethod(Class<?> clazz, String... methodNames) {
 		return calledFromMethod(clazz, MAX_STACK_DEPTH, methodNames);
 	}
 	
 	/**
-	 * Determines whether or not the given class-method is present in the call
-	 * stack. Both class name and method name must be exact fits.
+	 * Determines whether or not at least one of the given methods from the
+	 * given class are present in the call stack.
+	 * <b>Both</b> class name and method name must be <b>exact</b> matches.
 	 * 
 	 * @param maxDepth the maximum stack depth to search in.
 	 * @param clazz the class to search for. This must be an exact match.
-     * @param methodNames the method name inside the class.
-     * @return true, if the method was called from the given class.
+	 * @param methodNames the method names inside the class to search for.
+	 * @return true, if at least one of the methods was called from the given class.
 	 */
 	public static boolean calledFromMethod(Class<?> clazz, int maxDepth, String... methodNames) {
 		if (clazz == null || methodNames == null || methodNames.length == 0) {
@@ -188,23 +272,27 @@ public class Reflection {
 		StackTraceElement[] stackTrace =
 				Thread.currentThread().getStackTrace();
 		
-		Arrays.sort(methodNames);
+		HashSet<String> methods = new HashSet<String>(
+				Arrays.asList(methodNames)
+		);
 		
 		//And iterating to a maximum fixed depth
 		int cnt = 0;
 		for (StackTraceElement ste : stackTrace) {
 			//Checking if we've reached the maximum trace depth
 			if (cnt++ >= maxDepth) { break; }
-			//Checking if the class name matches
-			if (clazz != null && !ste.getClassName().equals(clazz.getCanonicalName())) {
-			    //Mismatched method name
-			    continue;
+			//Checking if the class stack's class matches
+			if (clazz != null) {
+				Class<?> steClazz = resolver.resolve(ste.getClassName());
+				if (clazz != steClazz) {
+					//Mismatched method name
+					continue;
+				}
 			}
-			
-			//Checking if the methodName matches
-			if (Arrays.binarySearch(methodNames, ste.getMethodName()) >= 0) {
-			    //Both method name and class assignation match
-			    return true;
+			//Checking if the methodName matches one of the candidates
+			if (methods.contains(ste.getMethodName())) {
+				//Both method name and class assignment match
+				return true;
 			}
 		}
 		return false;

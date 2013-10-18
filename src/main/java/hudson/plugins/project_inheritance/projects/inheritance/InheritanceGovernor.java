@@ -420,7 +420,10 @@ public abstract class InheritanceGovernor<T> {
 						Build.class, BuildCommand.class,
 						Queue.class, BuildTrigger.class
 				) ||
-				Reflection.calledFromMethod(InheritanceProject.class, "doBuild", "scheduleBuild2", "doBuildWithParameters")) {
+				Reflection.calledFromMethod(
+						InheritanceProject.class,
+						"doBuild", "scheduleBuild2", "doBuildWithParameters"
+				)) {
 			return true;
 		}
 		//Another possibility is that the user requested a build page
