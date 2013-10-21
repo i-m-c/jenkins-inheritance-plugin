@@ -35,33 +35,64 @@ public class Reflection {
 	
 	protected static final int MAX_STACK_DEPTH = 30;
 	
+	/**
+	 * This is a cache for loading classes by their name. It is supposed to
+	 * reduce contention on the class-loader which otherwise might become a
+	 * bottleneck.
+	 * <p>
+	 * You can (and should) give it a timeout after which the resolution will
+	 * be considered "stale" and refreshed. You can omit this in case you
+	 * believe that class resolution will remain stable over the entire
+	 * runtime.
+	 */
 	protected static class CachedClassResolver {
 		/**
-		 * This map is used to reduce contention on the ClassLoader. It will cache
-		 * the resolution of class names to actual class instances.
+		 * A single entry for the cache that can be checked for freshness
 		 */
-		protected final ConcurrentHashMap<String, Class<?>> resolveMap;
+		protected final class CacheEntry {
+			public final Class<?> clazz;
+			private final long cacheTime;
+			
+			public CacheEntry(Class<?> clazz) {
+				this.clazz = clazz;
+				this.cacheTime = System.currentTimeMillis();
+			}
+			
+			public boolean isOlderThan(long age) {
+				return (this.cacheTime + age) < System.currentTimeMillis();
+			}
+		}
 		
-		private final class NullDummy {}
+		protected final ConcurrentHashMap<String, CacheEntry> resolveMap;
+		protected final Long maxAge;
 		
+		/**
+		 * Creates a class resolver that does not clear its entries.
+		 */
 		public CachedClassResolver() {
-			this.resolveMap = new ConcurrentHashMap<String, Class<?>>(10, 0.75f, 3);
+			this(null);
+		}
+		
+		public CachedClassResolver(Long maxAge) {
+			this.resolveMap = new ConcurrentHashMap<String, CacheEntry>();
+			this.maxAge = maxAge;
 		}
 		
 		public Class<?> resolve(String className) {
 			if (className == null || className.isEmpty()) {
 				return null;
 			}
-			if (this.resolveMap.containsKey(className)) {
-				Class<?> result = this.resolveMap.get(className);
-				if (result == NullDummy.class) {
-					return null;
-				} else {
-					return result;
+			
+			//Check if we have a cached result and it's not too old
+			CacheEntry entry = this.resolveMap.get(className);
+			if (entry != null) {
+				if (maxAge == null || ! entry.isOlderThan(maxAge)) {
+					return entry.clazz;
 				}
 			}
+			
 			//Fetching the class loader from Jenkins
-			//Do note that it is strongly synchronized
+			//Do note that it is synchronised and thus a possible bottleneck
 			ClassLoader cl;
 			try {
 				cl = Hudson.getInstance().getPluginManager().uberClassLoader;
@@ -77,13 +108,8 @@ public class Reflection {
 			} catch (ClassNotFoundException e) {
 				//No such class; clazz can stay == null
 			}
-			//Caching the resolution
-			if (clazz == null) {
-				//Can't put null values, so we add a dummy (unresolvable classes)
-				this.resolveMap.put(className, NullDummy.class);
-			} else {
-				this.resolveMap.putIfAbsent(className, clazz);
-			}
+			//Caching the resolution (there might already be an old one present)
+			this.resolveMap.put(className, new CacheEntry(clazz));
 			return clazz;
 		}
 	}
@@ -108,14 +134,17 @@ public class Reflection {
 		
 		public AssignabilityChecker() {
 			this.classAssignabilityMap =
-					new ConcurrentHashMap<Class<?>, ConcurrentHashMap<Class<?>, Boolean>>(10, 0.75f, 1);
+					new ConcurrentHashMap<Class<?>, ConcurrentHashMap<Class<?>, Boolean>>();
 		}
 		
 		/**
 		 * Checks if the 'clazz' class is assignable from the 'other' class.
 		 * <p>
 		 * Identical to clazz.isAssignableFrom(other), but might use caching
-		 * to speed up resolution.
+		 * to speed up resolution. This is useful if Java 5 (or earlier) is
+		 * used, as these use a much slower implementation than Java 6+.
+		 * <p>
+		 * TODO: Disable caching as soon as Java 5 has been deprecated for Jenkins
 		 * 
 		 * @param clazz the class to which 'other' must be assignable (left-hand value)
 		 * @param other the class which must be assignable to 'clazz' (right-hand value)
@@ -134,7 +163,7 @@ public class Reflection {
 					this.classAssignabilityMap.get(clazz);
 			if (checkMap == null) {
 				boolean result = clazz.isAssignableFrom(other);
-				checkMap = new ConcurrentHashMap<Class<?>, Boolean>(100, 0.75f, 2);
+				checkMap = new ConcurrentHashMap<Class<?>, Boolean>();
 				checkMap.put(other, result);
 				classAssignabilityMap.putIfAbsent(clazz, checkMap);
 				return result;
@@ -153,9 +182,11 @@ public class Reflection {
 	}
 	
 	
-
+	/**
+	 * A short-term (30s) cache to speed up resolving classes
+	 */
 	protected static final CachedClassResolver resolver =
-			new CachedClassResolver();
+			new CachedClassResolver(30*1000L);
 	protected  static final AssignabilityChecker assigner =
 			new AssignabilityChecker();
 	
