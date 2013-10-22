@@ -951,6 +951,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		return Messages.ProjectCreationEngine_Description();
 	}
 	
+	
 	public String getMagicNodeLabelForTesting() {
 		return this.magicNodeLabelForTesting;
 	}
@@ -965,6 +966,15 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			out = (out == null) ? la : out.and(la);
 		}
 		return out;
+	}
+	
+	/**
+	 * @return whether or not the results of some expensive reflection calls
+	 * ({@link Class#isAssignableFrom(Class)}) should be cached.
+	 */
+	public boolean getEnableReflectionCaching() {
+		//TODO: Make this configurable
+		return true;
 	}
 	
 	public boolean getUnescapeEqualsCharInParams() {
