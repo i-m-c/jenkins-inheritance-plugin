@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.TreeSet;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -289,18 +290,22 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 			return FormValidation.ok();
 		}
 		
-		public ListBoxModel doFillNameItems() {
-			ArrayList<String> names = new ArrayList<String>();
+		public ListBoxModel doFillNameItems(@QueryParameter String name) {
+			TreeSet<String> projNames = new TreeSet<String>();
 			for (InheritanceProject ip : InheritanceProject.getProjectsMap().values()) {
 				//We ensure that both are compatible
 				if (this.projectIsCompatible(ip)) {
-					names.add(ip.getName());
+					projNames.add(ip.getName());
 				}
 			}
-			Collections.sort(names);
+			//Adding the previous definition; if any is already present
+			if (name != null && !name.isEmpty()) {
+				projNames.add(name);
+			}
+			
 			ListBoxModel model = new ListBoxModel();
-			for (String name : names) {
-				model.add(name, name);
+			for (String pName : projNames) {
+				model.add(pName, pName);
 			}
 			return model;
 		}

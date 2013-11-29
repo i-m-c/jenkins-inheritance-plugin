@@ -311,16 +311,14 @@ public class InheritanceParametersDefinitionProperty extends
 		JSONArray a = JSONArray.fromObject(formData.get("parameter"));
 
 		for (Object o : a) {
-			if (o instanceof JSONObject) {
-				JSONObject jo = (JSONObject) o;
-				String name = jo.getString("name");
-				
-				ParameterDefinition d = getParameterDefinition(name);
-				if(d==null)
-					throw new IllegalArgumentException("No such parameter definition: " + name);
-				ParameterValue parameterValue = d.createValue(req, jo);
-				values.add(parameterValue);
-			}
+			JSONObject jo = (JSONObject) o;
+			String name = jo.getString("name");
+
+			ParameterDefinition d = getParameterDefinition(name);
+			if(d==null)
+				throw new IllegalArgumentException("No such parameter definition: " + name);
+			ParameterValue parameterValue = d.createValue(req, jo);
+			values.add(parameterValue);
 		}
 
 		TimeDuration delay = (req.hasParameter("delay"))

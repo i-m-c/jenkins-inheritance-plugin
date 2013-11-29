@@ -34,10 +34,10 @@ try { isReadOnly = readOnly } catch (e) { isReadOnly = false }
 f.invisibleEntry() {
 	f.readOnlyTextbox(default: my.name, name: "projectName")
 }
+
 f.entry(field: "name", title: _("Name")) {
-	if (isReadOnly) {
-		f.select(default: my.name, disabled:"disabled")
-	} else {
-		f.select(default: my.name)
-	}
+	f.select(
+			default: my.name,
+			disabled: (isReadOnly) ? "disabled" : "enabled"
+	)
 }
