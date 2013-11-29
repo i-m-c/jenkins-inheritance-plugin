@@ -128,7 +128,7 @@ public class SVGClassBox extends SVGUnion {
 			
 			SVGRectangle svgBodyBox = new SVGRectangle(
 					bounds, borders, null,
-					(hasClassText) ? AttachPoints.BTM_MID : AttachPoints.HORIZ
+					(hasClassText) ? AttachPoints.BTM : AttachPoints.HORIZ
 			);
 			this.addElements(svgBodyBox);
 		} else if (minSize != null && minSize.x > 0 && minSize.y > 0) {

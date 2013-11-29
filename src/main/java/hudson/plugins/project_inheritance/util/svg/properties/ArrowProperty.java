@@ -60,8 +60,7 @@ public class ArrowProperty {
 		int xs = (int) Math.signum(diff.x);
 		int ys = (int) Math.signum(diff.y);
 		int s = (xs == ys) ? 1 : -1;
-		double c = (xs >= 0) 
-				? (ys >= 0) ? 0 : Math.PI : (ys >= 0) ? Math.PI : 2*Math.PI;
+		double c = (xs < 0 || xs == 0 && ys > 0) ? 2*Math.PI : Math.PI;
 		double bodyAngle = c + (s * (Math.asin(Math.abs(diff.y) / bodyLen)));
 		
 		//Increase the body angle to get one arrow point
