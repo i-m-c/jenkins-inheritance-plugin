@@ -23,6 +23,8 @@ package hudson.plugins.project_inheritance.util.svg;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -35,10 +37,10 @@ import java.util.Vector;
  *
  */
 public class Graph<T> {
-	private final HashSet<T> nodes = new HashSet<T>();
+	private final HashSet<T> nodes = new LinkedHashSet<T>();
 	
 	private final HashMap<T, HashSet<T>> edges =
-			new HashMap<T, HashSet<T>>();
+			new LinkedHashMap<T, HashSet<T>>();
 	
 	public Graph() {
 		//Nothing else to do
@@ -56,7 +58,7 @@ public class Graph<T> {
 			//Adding the directed edge from node to n
 			HashSet<T> eSet = edges.get(node);
 			if (eSet == null) {
-				eSet = new HashSet<T>();
+				eSet = new LinkedHashSet<T>();
 			}
 			eSet.add(n);
 			edges.put(node, eSet);
@@ -74,7 +76,7 @@ public class Graph<T> {
 		
 		HashSet<T> eSet = edges.get(start);
 		if (eSet == null) {
-			eSet = new HashSet<T>();
+			eSet = new LinkedHashSet<T>();
 		}
 		eSet.add(end);
 		edges.put(start, eSet);
@@ -95,10 +97,10 @@ public class Graph<T> {
 	
 	public Set<T> getEdgesFor(T node) {
 		if (node == null) {
-			return new HashSet<T>();
+			return new LinkedHashSet<T>();
 		}
 		if (!nodes.contains(node)) {
-			return new HashSet<T>();
+			return new LinkedHashSet<T>();
 		}
 		HashSet<T> eSet = edges.get(node);
 		if (eSet == null) {
@@ -177,7 +179,7 @@ public class Graph<T> {
 	 * contain any node from <code>ignored</code>.
 	 */
 	public Set<T> getMinimalOutboundEdgeNodes(Set<T> ignored) {
-		HashSet<T> out = new HashSet<T>();
+		HashSet<T> out = new LinkedHashSet<T>();
 		
 		int minEdges = Integer.MAX_VALUE;
 		for (T node : this.nodes) {
@@ -218,7 +220,7 @@ public class Graph<T> {
 		Vector<Set<T>> buckets =
 				new Vector<Set<T>>();
 		
-		buckets.add(new HashSet<T>());
+		buckets.add(new LinkedHashSet<T>());
 		for (T node : nodes) {
 			if (ignored == null || !ignored.contains(node)) {
 				bucketLookup.put(node, 0);
@@ -242,7 +244,7 @@ public class Graph<T> {
 				Integer bucket = bucketLookup.get(edge);
 				buckets.get(bucket).remove(edge);
 				if (bucket+1 >= buckets.size()) {
-					buckets.add(new HashSet<T>());
+					buckets.add(new LinkedHashSet<T>());
 				}
 				buckets.get(bucket+1).add(edge);
 				bucketLookup.put(edge, bucket+1);
@@ -262,7 +264,7 @@ public class Graph<T> {
 		LinkedList<T> open = new LinkedList<T>(
 				this.getMinimalInboundEdgeNodes(null)
 		);
-		HashSet<T> visited = new HashSet<T>();
+		HashSet<T> visited = new LinkedHashSet<T>();
 		
 		while (!open.isEmpty()) {
 			T node = open.pop();

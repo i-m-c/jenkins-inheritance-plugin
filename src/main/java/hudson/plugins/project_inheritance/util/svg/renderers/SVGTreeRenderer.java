@@ -263,6 +263,7 @@ public class SVGTreeRenderer extends SVGGraphRenderer {
 		out.addAll(spanDraw.getNodes());
 		
 		//Add ALL edges from the original graph as arrows; not just from the STree
+		//They are prepended to be BEHIND the boxes
 		for (SVGNode node : this.graph.getNodes()) {
 			SVGPrimitive dNode = nodeLookup.get(node);
 			
@@ -282,7 +283,7 @@ public class SVGTreeRenderer extends SVGGraphRenderer {
 						)
 				);
 				
-				out.add(arrow);
+				out.addFirst(arrow);
 			}
 		}
 		

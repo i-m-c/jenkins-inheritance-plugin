@@ -67,6 +67,9 @@ public class SVGClassBox extends SVGUnion {
 		boolean hasClassText = (className != null && !(className.getText().isEmpty()));
 		boolean hasBodyText = (bodyText != null && !(bodyText.getText().isEmpty()));
 		
+		SVGRectangle svgClassBox = null;
+		SVGRectangle svgBodyBox = null;
+		
 		//Add the class name text, if present
 		if (hasClassText) {
 			Point2D.Double txtPos = new Point2D.Double(
@@ -81,7 +84,7 @@ public class SVGClassBox extends SVGUnion {
 			bounds.x -= txtMarginX;
 			bounds.width += 2 * txtMarginX;
 			
-			SVGRectangle svgClassBox = new SVGRectangle(
+			svgClassBox = new SVGRectangle(
 					bounds, borders, null,
 					(hasBodyText) ? AttachPoints.TOP : AttachPoints.HORIZ
 			);
@@ -113,7 +116,15 @@ public class SVGClassBox extends SVGUnion {
 			);
 			this.addElements(svgBodyText);
 			
+			//Computing the maximum bounds of class-body and this body
 			Rectangle2D.Double bounds = svgBodyText.getBounds();
+			//Increase by 5% to fix overlapping text
+			bounds.width *= 1.05;
+			//Check if we need to grow to cover the class box text
+			if (svgClassBox != null) {
+				bounds.width = Math.max(bounds.width, svgClassBox.getBounds().width);
+			}
+			
 			if (minSize != null) {
 				if (minSize.x > 0 && bounds.getWidth() < minSize.x) {
 					bounds.width = minSize.x;
@@ -126,16 +137,18 @@ public class SVGClassBox extends SVGUnion {
 			bounds.x -= txtMarginX;
 			bounds.width += 2 * txtMarginX;
 			
-			SVGRectangle svgBodyBox = new SVGRectangle(
-					bounds, borders, null,
-					(hasClassText) ? AttachPoints.BTM : AttachPoints.HORIZ
+			svgBodyBox = new SVGRectangle(
+					bounds, borders, null, AttachPoints.HORIZ
 			);
 			this.addElements(svgBodyBox);
 		} else if (minSize != null && minSize.x > 0 && minSize.y > 0) {
 			Rectangle2D.Double bounds = new Rectangle2D.Double(
 					newPos.x, newPos.y, minSize.x, minSize.y
 			);
-			SVGRectangle svgBodyBox = new SVGRectangle(
+			if (svgClassBox != null) {
+				bounds.width = Math.max(bounds.width, svgClassBox.getBounds().width);
+			}
+			svgBodyBox = new SVGRectangle(
 					bounds, borders, null
 			);
 			this.addElements(svgBodyBox);
