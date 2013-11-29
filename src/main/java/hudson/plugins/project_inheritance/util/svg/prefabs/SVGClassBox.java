@@ -62,18 +62,27 @@ public class SVGClassBox extends SVGUnion {
 		
 		double yOffset = 0;
 		
+		int txtMarginX = 2;
+		
 		boolean hasClassText = (className != null && !(className.getText().isEmpty()));
 		boolean hasBodyText = (bodyText != null && !(bodyText.getText().isEmpty()));
 		
 		//Add the class name text, if present
 		if (hasClassText) {
+			Point2D.Double txtPos = new Point2D.Double(
+					pos.x + txtMarginX,
+					pos.y
+			);
 			SVGText svgClassText = new SVGText(
-					pos, className,
+					txtPos, className,
 					(maxSize != null && maxSize.x > 0) ? maxSize.x : 0
 			);
+			Rectangle2D.Double bounds = svgClassText.getBounds();
+			bounds.x -= txtMarginX;
+			bounds.width += 2 * txtMarginX;
 			
 			SVGRectangle svgClassBox = new SVGRectangle(
-					svgClassText.getBounds(), borders, null,
+					bounds, borders, null,
 					(hasBodyText) ? AttachPoints.TOP : AttachPoints.HORIZ
 			);
 			if (classURL != null) {
@@ -91,8 +100,10 @@ public class SVGClassBox extends SVGUnion {
 			yOffset = svgClassBox.getBounds().getHeight();
 		}
 		
-		Point2D.Double newPos =
-				new Point2D.Double(pos.x, pos.y + yOffset);
+		Point2D.Double newPos = new Point2D.Double(
+				pos.x + txtMarginX,
+				pos.y + yOffset
+		);
 		
 		//Add the body; if present
 		if (hasBodyText) {
@@ -112,9 +123,12 @@ public class SVGClassBox extends SVGUnion {
 				}
 			}
 			
+			bounds.x -= txtMarginX;
+			bounds.width += 2 * txtMarginX;
+			
 			SVGRectangle svgBodyBox = new SVGRectangle(
-					svgBodyText.getBounds(), borders, null,
-					(hasClassText) ? AttachPoints.BTM : AttachPoints.HORIZ
+					bounds, borders, null,
+					(hasClassText) ? AttachPoints.BTM_MID : AttachPoints.HORIZ
 			);
 			this.addElements(svgBodyBox);
 		} else if (minSize != null && minSize.x > 0 && minSize.y > 0) {

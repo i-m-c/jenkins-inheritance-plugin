@@ -83,7 +83,7 @@ public class SVGText implements SVGPrimitive {
 	public Element render(Document doc) {
 		Element txtElem = doc.createElement("text");
 		txtElem.setAttribute("font-family", props.fontName);
-		txtElem.setAttribute("font-size", String.format("%dpx", props.fontSzPx));
+		txtElem.setAttribute("font-size", String.format("%dpx", props.getSizeAsPts()));
 		
 		//The y-position needs to be fudged; as text boxes are anchored at the
 		//bottom of the first line; instead of the top left
@@ -111,15 +111,14 @@ public class SVGText implements SVGPrimitive {
 		
 		Collection<String> lines = this.getBrokenLines();
 		
-		//Add tspan's for each line
+		int lineHeight = this.getHeightOfLine();
 		boolean isFirst = true;
-		int lineOffsetY = this.getHeightOfLine() + props.horizLineDist;
 		for (String line : lines) {
 			Element e = doc.createElement("tspan");
 			e.appendChild(doc.createTextNode(line));
 			e.setAttribute("x", Double.toString(pos.x));
 			if (!isFirst) {
-				e.setAttribute("dy", Double.toString(lineOffsetY));
+				e.setAttribute("dy", Double.toString(lineHeight));
 			} else {
 				isFirst = false;
 			}
@@ -186,7 +185,7 @@ public class SVGText implements SVGPrimitive {
 		if (this.fm == null) {
 			Font font = new Font(
 					props.fontName, props.getAwtFontStyle(),
-					props.getSizeAsPx()
+					props.getSizeAsPts()
 			);
 			g.setFont(font);
 			this.fm = g.getFontMetrics();
