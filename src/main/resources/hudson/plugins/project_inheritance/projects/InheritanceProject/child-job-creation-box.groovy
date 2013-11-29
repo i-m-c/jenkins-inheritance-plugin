@@ -28,6 +28,15 @@ f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
+/* Create the class that allows us to communicate with sub-scripts.
+ * Do note that classes are put into a global scope; whereas variables are not
+ * 
+ * This is for example used to set whether the user is allowed to alter
+ * pre-existing fields or not.
+ */
+class Constants {
+	static READ_ONLY = false;
+}
 
 f.section(title: _("ConfigureCompounds")) {
 	
@@ -40,12 +49,10 @@ f.section(title: _("ConfigureCompounds")) {
 		" additional parameters, if any."
 	)
 	
-	//Check if the user needs/has the permission to alter pre-existing fields
+	//Set the read-only scope (if need be)
+	Constants.READ_ONLY= !(ProjectCreationEngine.instance.currentUserMayRename())
 	
-	pce = ProjectCreationEngine.instance
-	readOnly = (pce.currentUserMayRename()) ? false : true;
-	
-	// List of projects to mate with
+	//List of projects to mate with
 	f.entry() {
 		f.block() {
 			f.hetero_list(
@@ -59,5 +66,7 @@ f.section(title: _("ConfigureCompounds")) {
 			)
 		}
 	}
-	readOnly = false
+	//Unset the read-only state, to not pollute others and let newly added fields
+	//be read-writeable
+	Constants.READ_ONLY = false
 }

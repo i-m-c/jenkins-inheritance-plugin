@@ -20,10 +20,12 @@
 
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship;
+import java.text.SimpleDateFormat;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 t = namespace(lib.JenkinsTagLib);
+ct = namespace(lib.CustomTagLib);
 
 try { if (ignoreRelations) {} } catch (e) { ignoreRelations = [] }
 
@@ -51,36 +53,50 @@ for (type in Relationship.Type.values()) {
 	h2(type.getDescription())
 	
 	if (verbose) {
-		tblStyle = "min-width:600px; width:75%"
+		tblStyle = "min-width:800px; width:90%"
 	} else {
-		tblStyle = "min-width:600px; width:50%"
+		tblStyle = "min-width:600px; width:60%"
 	}
 	
 	table(class: "pane sortable bigtable fixed", style: tblStyle) {
 		if (verbose) {
 			thead() {
 				tr() {
-					th(initialSortDir: "down", class: "pane-header auto forceWrap", _("Name"))
-					th(initialSortDir: "down", class: "pane-header small", _("Distance"))
-					th(initialSortDir: "down", class: "pane-header medium", _("Compound?"))
-					th(initialSortDir: "down", class: "pane-header wide forceWrap", _("Class"))
+					th(class: "pane-header variable forceWrap", _("Name"))
+					th(class: "pane-header small", _("Distance"))
+					th(class: "pane-header medium", _("Compound?"))
+					th(class: "pane-header wider forceWrap", _("Class"))
+					if (type == Relationship.Type.CHILD) {
+						th(class: "pane-header wider forceWrap", _("Last Build Date"))
+					}
 				}
 			}
 			tbody() {
-				for (e in relationsMap.entrySet()) {
-					project = e.getKey()
-					rel = e.getValue()
-					
-					if (rel.type == type) {
+				for (project in my.getRelationshipsOfType(type)) {
+					if (relationsMap.get(project).type == type) {
 						tr() {
 							td(class: "pane forceWrap") {
 								a(href: rootURL + "/job/" + project.getName(),
 										project.getName()
 								)
 							}
-							td(class: "pane", rel.distance)
-							td(class: "pane", rel.isLeaf)
-							td(class: "pane", project.getIsTransient())
+							td(class: "pane", relationsMap.get(project).distance)
+							td(class: "pane", relationsMap.get(project).isLeaf)
+							td(class: "pane", project.getCreationClass())
+							if (type == Relationship.Type.CHILD) {
+								last = project.getLastBuild()
+								if (last) {
+									td(class: "pane") {
+										ct.buildtime(
+												link: rootURL + "/job/" + project.getFullDisplayName() + "/" + last.number,
+												buildtime: last.getTime(),
+												buildStatusUrl: project.getBuildStatusUrl(),
+												buildDisplayId: last.number)
+									}
+								} else {
+									td(class: "pane", "N/A")
+								}
+							}
 						}
 					}
 				}
@@ -88,24 +104,25 @@ for (type in Relationship.Type.values()) {
 		} else {
 			thead() {
 				tr() {
-					th(initialSortDir: "down", class: "pane-header auto forceWrap", _("Name"))
-					th(initialSortDir: "down", class: "pane-header wider forceWrap", _("Class"))
+					th(class: "pane-header variable forceWrap", _("Name"))
+					th(class: "pane-header wider forceWrap", _("Class"))
+					if (type == Relationship.Type.CHILD) {
+						th(class: "pane-header wider forceWrap", _("Last Build Date"))
+					}
 				}
 			}
 			tbody() {
-				for (e in relationsMap.entrySet()) {
-					project = e.getKey()
-					rel = e.getValue()
+				for (project in my.getRelationshipsOfType(type)) {
 					
 					if (type == Relationship.Type.PARENT) {
 						//If we look at parents, only show dist = 1
-						if (rel.distance != 1) { continue; }
+						if (relationsMap.get(project).distance != 1) { continue; }
 					} else if (type == Relationship.Type.CHILD) {
-						//Only show leafs
-						if (!rel.isLeaf) { continue; }
+						//Only show leaves
+						if (!relationsMap.get(project).isLeaf) { continue; }
 					}
 					
-					if (rel.type == type) {
+					if (relationsMap.get(project).type == type) {
 						tr() {
 							td(class: "pane forceWrap") {
 								a(href: rootURL + "/job/" + project.getName(),
@@ -113,6 +130,20 @@ for (type in Relationship.Type.values()) {
 								)
 							}
 							td(class: "pane", project.getCreationClass())
+							if (type == Relationship.Type.CHILD) {
+								last = project.getLastBuild()
+								if (last) {
+									td(class: "pane") {
+										ct.buildtime(
+												link: rootURL + "/job/" + project.getFullDisplayName() + "/" + last.number,
+												buildtime: last.getTime(),
+												buildStatusUrl: project.getBuildStatusUrl(),
+												buildDisplayId: last.number)
+									}
+								} else {
+									td(class: "pane", "N/A")
+								}
+							}
 						}
 					}
 				}

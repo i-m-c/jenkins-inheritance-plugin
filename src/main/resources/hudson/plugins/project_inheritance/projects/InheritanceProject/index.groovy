@@ -24,7 +24,7 @@ import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationsh
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 t = namespace(lib.JenkinsTagLib);
-
+ct = namespace(lib.CustomTagLib);
 
 helpRoot = "/plugin/project-inheritance/help"
 

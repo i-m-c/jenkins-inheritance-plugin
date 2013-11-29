@@ -20,6 +20,13 @@
 
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 
+//Check if the parent scope has set the read-only flag
+try {
+	isReadOnly = Constants.READ_ONLY
+} catch (e) {
+	isReadOnly = false
+}
+
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
@@ -27,17 +34,14 @@ ct = namespace(lib.CustomTagLib);
 
 helpRoot = "/plugin/project-inheritance/help/ProjectReference"
 
-//Check if our parent wants some fields to be read-only
-//Note: Only works when the page is loaded for the first time
-try { isReadOnly = readOnly } catch (e) { isReadOnly = false }
-
 f.invisibleEntry() {
 	f.readOnlyTextbox(default: my.name, name: "projectName")
 }
 
 f.entry(field: "name", title: _("Name")) {
-	f.select(
-			default: my.name,
-			disabled: (isReadOnly) ? "disabled" : "enabled"
-	)
+	if (isReadOnly) {
+		f.select(default: my.name, disabled: "disabled")
+	} else {
+		f.select(default: my.name)
+	}
 }

@@ -49,7 +49,6 @@ import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Project;
 import hudson.model.StringParameterValue;
-import hudson.model.labels.LabelAtom;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.model.queue.SubTask;
 import hudson.model.queue.SubTaskContributor;
@@ -90,6 +89,8 @@ import hudson.triggers.Trigger;
 import hudson.util.DescribableList;
 import hudson.util.FormApply;
 import hudson.util.ListBoxModel;
+import hudson.widgets.Widget;
+import hudson.widgets.HistoryWidget;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -103,6 +104,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -111,6 +114,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.Vector;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -430,6 +434,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			new LimitedHashMap<String, Label>(1024);
 	private static final ReentrantReadWriteLock labelCacheLock =
 			new ReentrantReadWriteLock();
+	
 	
 	
 	// === CONSTRUCTORS AND CONSTRUCTION HELPERS ===
@@ -3525,6 +3530,67 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		onChangeBuffer.set(null, "getConnectionGraph", map);
 		return map;
 	}
+
+	public Collection<InheritanceProject> getRelationshipsOfType(Relationship.Type type) {
+		Collection<InheritanceProject> relationshipsOfType = new LinkedList<InheritanceProject>();
+		Map<InheritanceProject, Relationship> relationships = getRelationships();
+		
+		/*
+		 * we are interested in getting the children ordered by last build time
+		 * if last build time exists
+		 */
+		if (type == Relationship.Type.CHILD) {
+			relationshipsOfType = getChildrenByBuildDate(relationships);
+		} else if (type == Relationship.Type.PARENT) {
+			LinkedList<InheritanceProject> parents = new LinkedList<InheritanceProject>();
+			for (java.util.Map.Entry<InheritanceProject, Relationship> project : relationships.entrySet()) {
+				if (Relationship.Type.PARENT == project.getValue().type) {
+					parents.add(project.getKey());
+				}
+			}
+			relationshipsOfType = parents;
+		}
+		
+		return relationshipsOfType;
+	}
+	
+	private class RunTimeComparator implements Comparator<InheritanceProject> {
+		public int compare(InheritanceProject a, InheritanceProject b) {
+			InheritanceBuild aBuild = a.getLastBuild();
+			InheritanceBuild bBuild = b.getLastBuild();
+			if (aBuild == null) {
+				int retVal = (bBuild == null) ? a.getFullName().compareTo(b.getFullName()) : 1;
+				return retVal;
+			} else if (bBuild == null) {
+				int retVal = (aBuild == null) ? a.getFullName().compareTo(b.getFullName()) : -1;
+				return retVal;
+			}
+			return bBuild.getTime().compareTo(aBuild.getTime());
+		}
+	}
+	
+	/**
+	 * we are interested in getting the children ordered by last build time
+	 * if last build time exists
+	 */
+	public Collection<InheritanceProject> getChildrenByBuildDate(Map<InheritanceProject, Relationship> relationships) {
+		//Using a TreeSet to do the sorting for last-build-time for us
+		TreeSet<InheritanceProject> tree = new TreeSet<InheritanceProject>(
+				new RunTimeComparator()
+		);
+		Map<InheritanceProject, Relationship> relations = this.getRelationships();
+		if (relations.isEmpty()) { return tree; }
+		//Filtering for buildable children
+		for (Map.Entry<InheritanceProject, Relationship> pair : relations.entrySet()) {
+			InheritanceProject child = pair.getKey();
+			Relationship.Type type = pair.getValue().type;
+			//Excluding non-childs
+			if (type != Relationship.Type.CHILD) { continue; }
+			//The child is buildable, so add it to the tree
+			tree.add(child);
+		}
+		return tree;
+	}
 	
 	public Map<InheritanceProject, Relationship> getRelationships() {
 		Object obj = onInheritChangeBuffer.get(this, "getRelationships");
@@ -4197,6 +4263,32 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		public synchronized void dropProjectToBeCreatedTransient(String name) {
 			this.projectsToBeCreatedTransient.remove(name);
+		}
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * 
+	 * The above is overridden in a way, that the Build-History widget is
+	 * removed if the build is abstract and can't be run anyway.
+	 * 
+	 * This is ignored, in case there is a last build, though, to not
+	 * hide any information.
+	 */
+	@Override
+	public List<Widget> getWidgets() {
+		List<Widget> widgets = super.getWidgets();
+		if (!this.isBuildable() && this.getLastBuild() == null) {
+			//Remove the history widgets
+			List<Widget> strippedOffWidgets = new ArrayList<Widget>();
+			for (Widget widget : widgets) {
+				if (!(widget instanceof HistoryWidget<?, ?>)) {
+					strippedOffWidgets.add(widget);
+				}
+			}
+			return strippedOffWidgets;
+		} else {
+			return widgets;
 		}
 	}
 	

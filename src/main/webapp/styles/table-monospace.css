@@ -9,7 +9,7 @@ table.fixed {
 th.forceWrap { white-space:pre-wrap; word-wrap: break-word; overflow:hidden; }
 td.forceWrap { white-space:pre-wrap; word-wrap: break-word; overflow:hidden; }
 
-th.variable { width:auto; }
+th.variable { width:auto; min-width:3em; }
 th.gigantic { width:80em; }
 th.large { width:40em; }
 th.wider { width:20em; }

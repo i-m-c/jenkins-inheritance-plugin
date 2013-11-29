@@ -24,14 +24,18 @@ f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
-
 helpRoot = "/plugin/project-inheritance/help/ProjectReference"
+
+//Check if the parent scope has set the read-only flag
+try {
+	isReadOnly = Constants.READ_ONLY
+} catch (e) {
+	isReadOnly = false
+}
+
 
 include(AbstractProjectReference, "config")
 
-//Check if our parent wants some fields to be read-only
-//Note: Only works when the page is loaded for the first time
-try { isReadOnly = readOnly } catch (e) { isReadOnly = false }
 
 f.entry(field: "variance", title: _("Variance")) {
 	if (isReadOnly) {
