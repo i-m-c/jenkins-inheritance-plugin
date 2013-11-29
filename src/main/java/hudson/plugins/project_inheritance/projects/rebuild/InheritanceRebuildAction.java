@@ -265,11 +265,11 @@ public class InheritanceRebuildAction implements Action {
 		//Determine the project this request is associated with
 		InheritanceProject ip = this.getProject(req);
 		if (ip == null) {
-			rsp.sendRedirect("/");
+			rsp.sendRedirect(req.getContextPath());
 			return;
 		} else if (this.isApplicableFor(ip) == false) {
 			//Redirecting back to the job's page
-			rsp.sendRedirect("/job/" + ip.getName());
+			rsp.sendRedirect(req.getContextPath() + "/job/" + ip.getName());
 			return;
 		}
 		//Check if we were passed sensible data
@@ -294,7 +294,7 @@ public class InheritanceRebuildAction implements Action {
 		);
 		
 		//Sending the user to the project's root page
-		rsp.sendRedirect("/job/" + ip.getName());
+		rsp.sendRedirect(req.getContextPath() + "/job/" + ip.getName());
 	}
 
 	
@@ -323,7 +323,7 @@ public class InheritanceRebuildAction implements Action {
 		} catch (JSONException ex) {
 			projects = null;
 		}
-		
+
 		Long[] versions = null;
 		try {
 			Object obj = jForm.get("version");
@@ -347,7 +347,7 @@ public class InheritanceRebuildAction implements Action {
 				versions.length != projects.length) {
 			return null;
 		}
-		
+
 		//Decoding the version map from the submission
 		Map<String, Long> verMap = new HashMap<String, Long>();
 		
