@@ -42,14 +42,14 @@
 						<tbody><tr>
 							<!-- Project Name -->
 							<td class="pane">
-								<a href="${url}/job/${e.getKey()}">
+								<a href="${rootURL}/job/${e.getKey()}">
 									<st:out value="${e.getKey()}"/>
 								</a>
 							</td>
 							
 							<!-- Version number -->
 							<td class="pane">
-								<a href="${url}/job/${e.getKey()}/configure?version=${e.getValue()}">
+								<a href="${rootURL}/job/${e.getKey()}/configure?version=${e.getValue()}">
 									<st:out value="${e.getValue()}"/>
 								</a>
 							</td>
