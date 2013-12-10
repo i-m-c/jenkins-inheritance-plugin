@@ -54,7 +54,7 @@ import com.google.common.collect.HashBiMap;
  * correct spacing between the elements in the layer, so that each parent
  * is centered above all its children in the layers below.
  * 
- * @author Martin Schröder
+ * @author Martin Schroeder
  *
  */
 public class SVGTreeRenderer extends SVGGraphRenderer {

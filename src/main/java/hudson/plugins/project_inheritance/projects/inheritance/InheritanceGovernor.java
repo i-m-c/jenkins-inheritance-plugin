@@ -56,7 +56,7 @@ import org.kohsuke.stapler.StaplerRequest;
  * inheritance and versioning of the various types of fields of Jenkins
  * projects.
  * 
- * @author Martin Schröder
+ * @author Martin Schroeder
  *
  * @param <T> the target type of the field this helper is written for.
  */

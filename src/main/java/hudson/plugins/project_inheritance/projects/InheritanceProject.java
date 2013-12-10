@@ -160,7 +160,7 @@ import difflib.Patch;
  * 
  * TODO: Create suitable JavaDoc description for this class
  * 
- * @author Martin Schröder
+ * @author Martin Schroeder
  *
  */
 @SuppressWarnings({"unchecked", "rawtypes"})

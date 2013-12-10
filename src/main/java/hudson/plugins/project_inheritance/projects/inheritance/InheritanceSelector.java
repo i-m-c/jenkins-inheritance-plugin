@@ -28,7 +28,6 @@ import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.scm.SCM;
 
 import java.io.Serializable;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -50,7 +49,7 @@ import java.util.List;
  * {@link #getModeFor(Class)}.
  * <p>
  *  
- * @author Martin Schröder
+ * @author Martin Schroeder
  */
 public abstract class InheritanceSelector<T> implements Serializable, ExtensionPoint {
 	private static final long serialVersionUID = 6297336734737162857L;
@@ -96,7 +95,7 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	 * Do note that it is for obvious reasons not possible to apply two
 	 * {@link InheritanceSelector}s that handle the same 
 	 * 
-	 * @author Martin Schröder
+	 * @author Martin Schroeder
 	 */
 	public enum MODE {
 		USE_FIRST, MULTIPLE, USE_LAST, MERGE, NOT_RESPONSIBLE;

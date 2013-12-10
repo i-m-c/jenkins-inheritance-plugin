@@ -40,7 +40,7 @@ import org.kohsuke.stapler.StaplerRequest;
  * with the added option of specifying addition parameters to be passed to
  * the referenced Project.
  * 
- * @author Martin Schröder
+ * @author Martin Schroeder
  */
 public class ParameterizedProjectReference extends SimpleProjectReference {
 

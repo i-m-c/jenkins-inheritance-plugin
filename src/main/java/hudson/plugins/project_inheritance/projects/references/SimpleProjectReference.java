@@ -34,7 +34,7 @@ import org.kohsuke.stapler.StaplerRequest;
  * Its only use is to prevent having to use {@link AbstractProjectReference}
  * in an untyped "raw" manner.
  * 
- * @author Martin Schröder
+ * @author Martin Schroeder
  */
 public class SimpleProjectReference extends AbstractProjectReference {
 

@@ -31,7 +31,7 @@ import org.w3c.dom.Element;
  * This interface is the root of all drawable SVG primitives. It includes
  * functions to render, rescaling and translate them.
  * 
- * @author Martin Schröder
+ * @author Martin Schroeder
  */
 public interface SVGPrimitive {
 	

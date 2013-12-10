@@ -43,7 +43,7 @@ import java.util.logging.Logger;
  * minutes as long as threads are being added. This is done to prevent the held
  * Threads from not being garbage-collected.
  * 
- * @author Martin Schröder
+ * @author Martin Schroeder
  *
  */
 public class ThreadAssocStore {

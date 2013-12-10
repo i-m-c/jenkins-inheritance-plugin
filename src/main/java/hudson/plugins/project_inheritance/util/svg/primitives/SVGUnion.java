@@ -37,7 +37,7 @@ import org.w3c.dom.Element;
 /**
  * This class corresponds to a union of SVGPrimitives.
  *  
- * @author Martin Schröder
+ * @author Martin Schroeder
  *
  */
 public class SVGUnion implements SVGPrimitive {
