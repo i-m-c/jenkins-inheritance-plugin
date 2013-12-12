@@ -55,6 +55,7 @@ import hudson.model.queue.SubTaskContributor;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship.Type;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.TriggerInheritance;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationClass;
 import hudson.plugins.project_inheritance.projects.inheritance.InheritanceGovernor;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
@@ -86,6 +87,7 @@ import hudson.tasks.Builder;
 import hudson.tasks.Publisher;
 import hudson.tasks.LogRotator;
 import hudson.triggers.Trigger;
+import hudson.triggers.TriggerDescriptor;
 import hudson.util.DescribableList;
 import hudson.util.FormApply;
 import hudson.util.ListBoxModel;
@@ -105,7 +107,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -2267,7 +2268,40 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lst;
 	}
 	
-	
+	/**
+	 * This method re-parents a given trigger, to ensure that it belongs to the
+	 * current project.
+	 * <p>
+	 * It does so by looping it through XStream to get a copy and then calling
+	 * {@link Trigger#start(Item, boolean)} on it; just like if the project was
+	 * just read from disk.
+	 * <p>
+	 * As such, this method should be highly robust, but is of course very much
+	 * slower than if it had a reliable direct copying method available.
+	 * 
+	 * @param trigger
+	 * @return
+	 */
+	private <T extends Trigger> T getReparentedTrigger(T trigger) {
+		//Copy the trigger by looping it through XSTREAM and then calling start()
+		//based on the CURRENT project
+		//TODO: Find out somehow if "trigger" already belongs to the current project
+		try {
+			String xml = Jenkins.XSTREAM2.toXML(trigger);
+			if (xml == null) { return trigger; }
+			Object copy = Jenkins.XSTREAM2.fromXML(xml);
+			if (copy == null || !(copy instanceof Trigger)) {
+				return trigger;
+			}
+			//The copying loop was successful! Calling start() on the trigger
+			trigger = (T) copy;
+			trigger.start(this, false);
+			return trigger;
+		} catch (XStreamException ex) {
+			//The loop-copy failed; returning the originally retrieved field
+			return trigger;
+		}
+	}
 	
 	
 	// === NON-INHERITANCE CONTROLLED PROPERTY SETTING METHODS ===
@@ -2600,6 +2634,111 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	public synchronized DescribableList<Publisher, Descriptor<Publisher>> getRawPublishersList() {
 		return super.getPublishersList();
+	}
+	
+	
+	/**
+	 * Returns all triggers defined on this project; or if detected to be
+	 * necessary, also all parents.
+	 * <p>
+	 * @return a map of triggers, might be empty, but never null
+	 */
+	public synchronized Map<TriggerDescriptor,Trigger> getTriggers() {
+		return this.getTriggers(IMode.AUTO);
+	}
+	
+	public synchronized Map<TriggerDescriptor,Trigger> getTriggers(IMode mode) {
+		if (ProjectCreationEngine.instance.getTriggersAreInherited() != TriggerInheritance.INHERIT) {
+			return this.getRawTriggers();
+		}
+		
+		InheritanceGovernor<Collection<Trigger>> gov =
+				new InheritanceGovernor<Collection<Trigger>>(
+						"triggers", SELECTOR.MISC, this) {
+			@Override
+			protected Collection<Trigger> castToDestinationType(Object o) {
+				try {
+					return (Collection<Trigger>) o;
+				} catch (ClassCastException e) {
+					return null;
+				}
+			}
+			
+			@Override
+			public Collection<Trigger> getRawField(InheritanceProject ip) {
+				Map<TriggerDescriptor, Trigger> raw = ip.getRawTriggers();
+				return raw.values();
+			}
+			
+			@Override
+			protected Collection<Trigger> reduceFromFullInheritance(Deque<Collection<Trigger>> list) {
+				Collection<Trigger> out = new LinkedList<Trigger>();
+				for (Collection<Trigger> sub : list) {
+					out.addAll(sub);
+				}
+				return out;
+			}
+		};
+		
+		Collection<Trigger> triggers = gov.retrieveFullyDerivedField(this, mode);
+		Map<TriggerDescriptor,Trigger> out = new HashMap<TriggerDescriptor,Trigger>();
+		for (Trigger t : triggers) {
+			Trigger copied = this.getReparentedTrigger(t);
+			out.put(copied.getDescriptor(), copied);
+		}
+		return out;
+	}
+	
+	public synchronized Map<TriggerDescriptor,Trigger> getRawTriggers() {
+		return super.getTriggers();
+	}
+	
+	/**
+	 * Gets the specific trigger, or null if the property is not configured for this job.
+	 */
+	public <T extends Trigger> T getTrigger(Class<T> clazz) {
+		return this.getTrigger(clazz, IMode.AUTO);
+	}
+	
+	public <T extends Trigger> T getTrigger(Class<T> clazz, IMode mode) {
+		if (ProjectCreationEngine.instance.getTriggersAreInherited() != TriggerInheritance.INHERIT) {
+			return this.getRawTrigger(clazz);
+		}
+		
+		final Class<T> fClazz = clazz;
+		InheritanceGovernor<T> gov =
+				new InheritanceGovernor<T>(
+						"triggers", SELECTOR.MISC, this) {
+			@Override
+			protected T castToDestinationType(Object o) {
+				try {
+					return (T) o;
+				} catch (ClassCastException e) {
+					return null;
+				}
+			}
+			
+			@Override
+			public T getRawField(InheritanceProject ip) {
+				return ip.getRawTrigger(fClazz);
+			}
+			
+			/*
+			@Override
+			protected T reduceFromFullInheritance(Deque<T> list) {
+				//Just select the last trigger; it will be of the correct class
+				return list.getLast();
+			}
+			*/
+		};
+		
+		//Return a trigger that is guaranteed to be owned by the current project
+		T trigger = gov.retrieveFullyDerivedField(this, mode);
+		return getReparentedTrigger(trigger);
+	}
+	
+	public <T extends Trigger> T getRawTrigger(Class<T> clazz) {
+		return super.getTrigger(clazz);
 	}
 	
 	

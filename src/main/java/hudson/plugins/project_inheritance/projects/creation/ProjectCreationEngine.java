@@ -350,8 +350,25 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		}
 	}
 	
+	@Deprecated
+	public static enum TriggerInheritance {
+		INHERIT, NO_INHERIT_WARN, NO_INHERIT_NO_WARN;
+		
+		public String toString() {
+			switch (this) {
+				case INHERIT:
+					return "Inherit triggers";
+				case NO_INHERIT_WARN:
+					return "Do not inherit triggers, but print notification";
+				case NO_INHERIT_NO_WARN:
+					return "Do not inherit triggers, do not print notification";
+				default:
+					return "N/A";
+			}
+		}
+	}
 
-
+	
 	// === STATIC MEMBER FIELDS ===
 	
 	/**
@@ -388,6 +405,15 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	protected boolean unescapeEqualsCharInParams = false; 
 	
 	protected RenameRestriction renameRestriction = RenameRestriction.ALLOW_ALL;
+	
+	/**
+	 * This field is only present for one version; as such it is immediately
+	 * marked as deprecated. It basically tells the system whether or not to
+	 * use inheritance for triggers, or not.
+	 * @deprecated only used for one version, to ease transition to trigger inheritance
+	 */
+	protected TriggerInheritance triggerInheritance = TriggerInheritance.NO_INHERIT_WARN;
+	
 	
 	//This value is deprecated; as it is nowadays assumed to be always true
 	@Deprecated
@@ -531,6 +557,14 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				);
 			} catch (JSONException ex) {
 				this.renameRestriction = RenameRestriction.ALLOW_ALL;
+			}
+			
+			try {
+				this.triggerInheritance = TriggerInheritance.valueOf(
+						json.getString("triggerInheritance")
+				);
+			} catch (JSONException ex) {
+				this.triggerInheritance = TriggerInheritance.NO_INHERIT_WARN;
 			}
 			
 			//Then, we read the hetero-list of creation classes and create them
@@ -1039,6 +1073,24 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		return true;
 	}
 	
+	/**
+	 * @see #triggerInheritance
+	 * @deprecated
+	 */
+	public TriggerInheritance getTriggersAreInherited() {
+		if (this.triggerInheritance == null) {
+			return TriggerInheritance.NO_INHERIT_WARN;
+		}
+		return this.triggerInheritance;
+	}
+	
+	/**
+	 * @see #triggerInheritance
+	 * @deprecated
+	 */
+	public String getTriggerInheritance() {
+		return this.getTriggersAreInherited().name();
+	}
 	
 	public List<CreationClass> getCreationClasses() {
 		return this.creationClasses;
@@ -1175,6 +1227,15 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				m.add(r.toString(), r.name());
 			}
 			
+			return m;
+		}
+
+		@Deprecated
+		public ListBoxModel doFillTriggerInheritanceItems() {
+			ListBoxModel m = new ListBoxModel();
+			for (TriggerInheritance r : TriggerInheritance.values()) {
+				m.add(r.toString(), r.name());
+			}
 			return m;
 		}
 		

@@ -36,6 +36,7 @@ import hudson.plugins.project_inheritance.projects.references.ProjectReference.P
 import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.scm.SCM;
 import hudson.tasks.BuildTrigger;
+import hudson.triggers.Trigger;
 import hudson.util.DescribableList;
 
 import java.io.IOException;
@@ -423,6 +424,10 @@ public abstract class InheritanceGovernor<T> {
 				Reflection.calledFromMethod(
 						InheritanceProject.class,
 						"doBuild", "scheduleBuild2", "doBuildWithParameters"
+				) ||
+				Reflection.calledFromMethod(
+						Trigger.class,
+						"checkTriggers"
 				)) {
 			return true;
 		}

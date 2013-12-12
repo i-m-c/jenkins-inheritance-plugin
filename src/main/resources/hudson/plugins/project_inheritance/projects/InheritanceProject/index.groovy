@@ -20,6 +20,8 @@
 
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.TriggerInheritance;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
@@ -53,6 +55,21 @@ l.layout(title: my.displayName) {
 				a(style: "color:red", href: "http://en.wikipedia.org/wiki/Diamond_problem", "diamond")
 				span("or repeated dependency!")
 			}
+		}
+		
+		pce = ProjectCreationEngine.instance;
+		switch (pce.getTriggersAreInherited()) {
+			case TriggerInheritance.NO_INHERIT_WARN:
+				h3(style: "color:darkred") {
+					span(
+						"This project does not inherit triggers. Inheriting"
+						+ " them was added in v1.5.0, but currently defaults to"
+						+ " 'off'."
+					)
+					br()
+					span("To enable inheritance (or disable this warning), please go to ")
+					a(href: rootURL + "/project_creation", "the inheritance configuration page.")
+				}
 		}
 		
 		//Checking current parameters for consistency

@@ -45,6 +45,13 @@
 						field="unescapeEqualsCharInParams"
 					/>
 				</f:entry>
+				
+				<f:entry
+						title="${%Allow inheriting triggers}"
+						description="This determines whether triggers are inherited or not. It is a new feature in v1.5.0 and as such defaults to the old implementation. This option will be removed in the next version. Depending on the triggers; a restart might be needed for this to show an effect."
+				>
+					<f:select field="triggerInheritance"/>
+				</f:entry>
 			</f:section>
 			
 			<f:section title="${%Creation Options}">
