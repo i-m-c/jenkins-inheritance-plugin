@@ -39,9 +39,10 @@
 					<f:textbox field="magicNodeLabelForTesting"/>
 				</f:entry>
 				
-				<f:entry help="${helpRoot}/${pce}/EnableUnescapeEqualsInParam.html">
+				<f:entry
+						title="Un-escape '%xy' in parameters"
+						help="${helpRoot}/${pce}/EnableUnescapeEqualsInParam.html">
 					<f:checkbox
-						title="${%Enable unescaping of equals-char in parameters}"
 						field="unescapeEqualsCharInParams"
 					/>
 				</f:entry>
@@ -92,7 +93,7 @@
 				This section defines and shows which classes are available
 				for creation matching
 			-->
-			<f:section title="${%Creation Classes}">
+			<f:section title="${%Project Classes}">
 				<f:entry help="${helpRoot}/${pce}/CreationClasses.html" />
 				<f:block>
 					<f:hetero-list

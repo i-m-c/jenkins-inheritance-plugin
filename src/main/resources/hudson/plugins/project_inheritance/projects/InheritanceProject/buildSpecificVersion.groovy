@@ -89,11 +89,11 @@ l.layout(title: "Build ${my.displayName}", norefresh: "true") {
 								
 								//Project Name
 								td(class: "pane") {
-									a(href: rootURL + "/job/" + e.project, e.project)
+									a(href: rootURL + "/job/" + e.project.getFullName(), e.project.getFullName())
 									f.textbox(
 											style: "visibility:hidden",
 											name: "project",
-											value: e.project
+											value: e.project.getName()
 									)
 								}
 								

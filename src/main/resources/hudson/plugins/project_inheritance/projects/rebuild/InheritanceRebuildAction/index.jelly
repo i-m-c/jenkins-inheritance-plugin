@@ -88,11 +88,11 @@ THE SOFTWARE.
 							<tr>
 								<!-- Project Name -->
 								<td class="pane">
-									<a href="${url}/job/${e.project}">
-										<st:out value="${e.project}"/>
+									<a href="${url}/job/${e.project.getFullName()}">
+										<st:out value="${e.project.getFullName()}"/>
 									</a>
 									<f:textbox
-										name="project" value="${e.project}"
+										name="project" value="${e.project.getFullName()}"
 										style="visibility:hidden"
 									/>
 								</td>

@@ -63,10 +63,12 @@ import hudson.plugins.project_inheritance.projects.parameters.InheritableStringP
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.rebuild.InheritanceRebuildAction;
+import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
+import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
 import hudson.plugins.project_inheritance.util.Helpers;
 import hudson.plugins.project_inheritance.util.LimitedHashMap;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
@@ -111,6 +113,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -2120,13 +2123,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	
 	public class InheritedVersionInfo {
-		public final String project;
+		public final InheritanceProject project;
 		public final Long version;
 		public final List<Long> versions;
 		public final String description;
 		
 		public InheritedVersionInfo(
-				String project, Long version, List<Long> versions,
+				InheritanceProject project, Long version, List<Long> versions,
 				String description) {
 			this.project = project;
 			this.version = version;
@@ -2156,7 +2159,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			Version verObj = this.versionStore.getVersion(verID);
 			
 			out.add(new InheritedVersionInfo(
-					this.getName(), verID, verLst,
+					this, verID, verLst,
 					(verObj != null) ? verObj.getDescription() : null
 			));
 		}
@@ -2192,15 +2195,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				}
 			}
 			
-			//Fetch the version object associated with the given ID 
-			Version verObj = ip.versionStore.getVersion(verID);
-			
-			out.add(new InheritedVersionInfo(
-					ip.getName(),
-					(verID != null) ? verID : verLst.getLast(),
-					verLst,
-					(verObj != null) ? verObj.getDescription() : ""
-			));
+			if (verID != null) {
+				//Fetch the version object associated with the given ID 
+				Version verObj = ip.versionStore.getVersion(verID);
+				if (verObj == null) { continue; }
+				
+				out.add(new InheritedVersionInfo(
+						ip, verID, verLst, verObj.getDescription()
+				));
+			}
 		}
 		return out;
 	}
@@ -2520,6 +2523,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return ta;
 	}
 	
+	public DescribableList<Builder, Descriptor<Builder>> getBuildersListForVersion(Long versionId) {
+		return (DescribableList<Builder, Descriptor<Builder>>)this.versionStore.getObject(versionId, "buildersList");
+	}
 	
 	@Override
 	public DescribableList<Builder, Descriptor<Builder>> getBuildersList() {
@@ -3293,7 +3299,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * {@inheritDoc}
 	 * 
 	 * @deprecated as of 1.503
-     *      Use {@link #getBuildDiscarder()}.
+	 *	  Use {@link #getBuildDiscarder()}.
 	 */
 	@Override
 	public LogRotator getLogRotator() {
@@ -3306,9 +3312,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	/**
 	 * @deprecated as of 1.503
-     *      Use {@link #getBuildDiscarder()}.
-     *  
-     * @see #getLogRotator()
+	 *	  Use {@link #getBuildDiscarder()}.
+	 *  
+	 * @see #getLogRotator()
 	 */
 	public LogRotator getLogRotator(IMode mode) {
 		BuildDiscarder d = this.getBuildDiscarder(mode);
@@ -3612,6 +3618,17 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		ThreadAssocStore.getInstance().setValue("versions", map);
 	}
 	
+	public static void unsetVersioningMap() {
+		StaplerRequest req = Stapler.getCurrentRequest();
+		if (req != null) {
+			//Saving the versioning to the request
+			req.removeAttribute("versions");
+			//Removing the versioning buffer
+			req.removeAttribute("versionedObjectBuffer");
+		}
+		//Setting the versioning for the current thread; just to be sure
+		ThreadAssocStore.getInstance().setValue("versions", null);
+	}
 	
 	
 	// === GUI ACCESS METHODS ===
@@ -3848,13 +3865,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			vec.add(entry.getKey().getName());
 			switch (rel.type) {
 				case PARENT:
-					vec.add("Parent Project");
+					vec.add(Messages.InheritanceProject_Relationship_Type_ParentDesc());
 					break;
 				case CHILD:
-					vec.add("Child Project");
+					vec.add(Messages.InheritanceProject_Relationship_Type_ChildDesc());
 					break;
 				case MATE:
-					vec.add("Compatible Project marked for mating");
+					vec.add(Messages.InheritanceProject_Relationship_Type_MateDesc());
 					break;
 			}
 			vec.add(Integer.toString(rel.distance));
@@ -4280,11 +4297,101 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return new AbstractMap.SimpleEntry<Boolean, String>(true, "");
 	}
 	
+	public String getPronoun() {
+		if (this.getIsTransient()) {
+			return Messages.InheritanceProject_TransientPronounLabel();
+		} else if (this.getCreationClass() != null) {
+			return this.getCreationClass();
+		} else {
+			return super.getPronoun();
+		}
+	}
+
+
+	/**
+	 * {@inheritDoc}
+	 * 
+	 * The above is overridden in a way, that the Build-History widget is
+	 * removed if the build is abstract and can't be run anyway.
+	 * 
+	 * This is ignored, in case there is a last build, though, to not
+	 * hide any information.
+	 */
+	@Override
+	public List<Widget> getWidgets() {
+		List<Widget> widgets = super.getWidgets();
+		if (!this.isBuildable() && this.getLastBuild() == null) {
+			//Remove the history widgets
+			List<Widget> strippedOffWidgets = new ArrayList<Widget>();
+			for (Widget widget : widgets) {
+				if (!(widget instanceof HistoryWidget<?, ?>)) {
+					strippedOffWidgets.add(widget);
+				}
+			}
+			return strippedOffWidgets;
+		} else {
+			return widgets;
+		}
+	}
+	
+	public static List<JobPropertyDescriptor> getJobPropertyDescriptors(Class<? extends Job> clazz) {
+		List<JobPropertyDescriptor> propertyDescriptors =
+				JobPropertyDescriptor.getPropertyDescriptors(clazz);
+		List<JobPropertyDescriptor> filteredPropertyDescriptors =
+				new LinkedList<JobPropertyDescriptor>();
+		for (JobPropertyDescriptor jobPropertyDescriptor : propertyDescriptors) {
+			if (jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.class) ||
+					jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.DescriptorImpl.class)) {
+				filteredPropertyDescriptors.add(jobPropertyDescriptor);
+			}
+		}
+		return filteredPropertyDescriptors;
+	}
 	
 	
+	
+	// === HELPER METHODS FOR READONLY VIEW ===
+
+	public Map<AbstractProjectReference, List<Builder>> getBuildersFor(
+			Map<String, Long> verMap, Class<?> clazz) {
+		//Set the current thread's versioning map
+		if (verMap != null && !verMap.isEmpty()) {
+			setVersioningMap(verMap);
+		}
+		//Loop over all parents and create a joined map of all builders
+		Map<AbstractProjectReference, List<Builder>> out =
+				new LinkedHashMap<AbstractProjectReference, List<Builder>>();
+		
+		List<AbstractProjectReference> refs =
+				new LinkedList<AbstractProjectReference>(
+						this.getParentReferences(SELECTOR.BUILDER)
+				);
+		
+		//Add a reference to ourselves
+		refs.add(new SimpleProjectReference(this.getFullName()));
+		
+		for (AbstractProjectReference apr : refs) {
+			InheritanceProject ip = apr.getProject();
+			if (ip == null) { continue; }
+			List<Builder> bLst = ip.getRawBuildersList().toList();
+			if (clazz != null) {
+				List<Builder> bSubLst = new LinkedList<Builder>();
+				for (Builder b : bLst) {
+					if (b != null && clazz.isAssignableFrom(b.getClass())) {
+						bSubLst.add(b);
+					}
+				}
+				out.put(apr, bSubLst);
+			} else {
+				out.put(apr, bLst);
+			}
+		}
+		
+		return out;
+	}
+
 	// === PROJECT DESCRIPTOR IMPLEMENTATION ===
 	
-		
 	/**
 	 * Returns the {@link Descriptor} for the parent object.<br/>
 	 * <br/>
@@ -4340,8 +4447,17 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				names.add(cl.name);
 			}
 			//And also add an empty one, to select NO mating
-			names.add("");
+			names.add("<None Specified>", "");
 			return names;
+		}
+		
+		/**
+		 * Wrapper around {@link DescriptorImpl#doFillCreationClassItems()} to
+		 * account for slightly different field names used by
+		 * {@link InheritanceViewAction}'s groovy scripts.
+		 */
+		public ListBoxModel doFillProjectClassItems() {
+			return this.doFillCreationClassItems();
 		}
 	
 		public ListBoxModel doFillUserDesiredVersionItems() {
@@ -4404,43 +4520,4 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.projectsToBeCreatedTransient.remove(name);
 		}
 	}
-	
-	/**
-	 * {@inheritDoc}
-	 * 
-	 * The above is overridden in a way, that the Build-History widget is
-	 * removed if the build is abstract and can't be run anyway.
-	 * 
-	 * This is ignored, in case there is a last build, though, to not
-	 * hide any information.
-	 */
-	@Override
-	public List<Widget> getWidgets() {
-		List<Widget> widgets = super.getWidgets();
-		if (!this.isBuildable() && this.getLastBuild() == null) {
-			//Remove the history widgets
-			List<Widget> strippedOffWidgets = new ArrayList<Widget>();
-			for (Widget widget : widgets) {
-				if (!(widget instanceof HistoryWidget<?, ?>)) {
-					strippedOffWidgets.add(widget);
-				}
-			}
-			return strippedOffWidgets;
-		} else {
-			return widgets;
-		}
-	}
-	
-	public static List<JobPropertyDescriptor> getJobPropertyDescriptors(Class<? extends Job> clazz) {
-		List<JobPropertyDescriptor> propertyDescriptors = JobPropertyDescriptor.getPropertyDescriptors(clazz);
-		List<JobPropertyDescriptor> filteredPropertyDescriptors = new ArrayList<JobPropertyDescriptor>();
-		for (JobPropertyDescriptor jobPropertyDescriptor : propertyDescriptors) {
-			if (jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.class) ||
-					jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.DescriptorImpl.class)) {
-				filteredPropertyDescriptors.add(jobPropertyDescriptor);
-			}
-		}
-		return filteredPropertyDescriptors;
-	}
-
 }

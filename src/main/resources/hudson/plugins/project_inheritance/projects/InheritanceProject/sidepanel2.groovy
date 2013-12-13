@@ -74,4 +74,12 @@ l.tasks() {
 			title: _("Show advanced options"),
 			href: url + "/showAdvancedOptions"
 	)
+	
+	if (my.isBuildable()) {
+		l.task(
+				icon: "images/24x24/notepad.png",
+				title: _("View full build flow"),
+				href: url + "/view"
+		)
+	}
 }

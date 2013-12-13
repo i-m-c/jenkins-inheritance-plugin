@@ -5,7 +5,7 @@ Event.observe(window,"load",function(){
 
 	// Hide all buttons that do not expand or advance read-only options
 	document.forms.config.select(".first-child button").each(function(s) {
-		t = s.innerHTML
+		t = s.innerHTML;
 		if (t.match(/Expand|Advanced/) || t.match(/\.\.\./) ) {
 			//Found a button that needs to be preserved
 		} else {
@@ -15,7 +15,8 @@ Event.observe(window,"load",function(){
 	});
 
 	// Make all input fields readonly/disabled
-	document.forms.config.select("input, textarea").each (function(s) {
-		s.setAttribute("readonly", "readonly"); s.setAttribute("disabled", "disabled")
+	document.forms.config.select("input, textarea, select").each (function(s) {
+		s.setAttribute("readonly", "readonly");
+		s.setAttribute("disabled", "disabled");
 	});
 });

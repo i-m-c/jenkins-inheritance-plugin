@@ -93,7 +93,11 @@ public class ThreadAssocStore {
 				subMap = new HashMap<String, Object>();
 				map.put(t, subMap);
 			}
-			subMap.put(key, value);
+			if (value == null) {
+				subMap.remove(key);
+			} else {
+				subMap.put(key, value);
+			}
 		} finally {
 			// Releasing the write lock
 			lock.writeLock().unlock();
@@ -103,7 +107,6 @@ public class ThreadAssocStore {
 	public void setValue(String key, Object value) {
 		this.setValue(Thread.currentThread(), key, value);
 	}
-	
 	
 	public Object getValue(Thread t, String key) {
 		lock.readLock().lock();

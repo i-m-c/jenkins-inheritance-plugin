@@ -173,4 +173,3 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	}
 }
 
-
