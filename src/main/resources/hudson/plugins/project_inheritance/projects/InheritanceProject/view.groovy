@@ -49,12 +49,6 @@ l.layout(title: my.displayName) {
 
 	include(my, "sidepanel")
 	
-	//Assigning the constants class members
-	Constants.build = null
-	Constants.project = my
-	Constants.showDownload = false
-	Constants.descriptor = my.getDescriptor()
-	
 	//Main panel with lots of plugin-contributed data
 	l.main_panel() {
 		include(InheritanceViewAction, "view")

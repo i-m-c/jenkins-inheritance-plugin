@@ -38,12 +38,22 @@ ct = namespace(lib.CustomTagLib);
 //NOTICE: AVOID USING 'my' HERE! This file is used by
 //InheritanceViewAction as well as InheritanceProject
 
-//Fetching the constants passed in from the outside
-build = Constants.build
-project = Constants.project
-showDownload = Constants.showDownload
-descriptor = Constants.descriptor
-
+//Fetching variables from different sources; depending on what 'my' is
+if (my instanceof InheritanceViewAction) {
+	//We're on a build page
+	build = my.getBuild();
+	project = build.getParent();
+	showDownload = true;
+	descriptor = my.getDescriptor();
+} else if (my instanceof InheritanceProject) {
+	//We're on a project's view page
+	build = null;
+	project = my;
+	showDownload = false;
+	descriptor = InheritanceViewAction.getDescriptorStatic();
+} else {
+	return;
+}
 
 def showBuildParametersTable() {
 	buildParametersHashMap = InheritanceViewAction.getResolvedBuildParameters(
