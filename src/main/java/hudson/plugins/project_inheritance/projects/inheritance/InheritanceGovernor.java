@@ -48,9 +48,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
+
 
 /**
  * This class offers a few helper functions to facilitate correct
@@ -62,6 +64,8 @@ import org.kohsuke.stapler.StaplerRequest;
  * @param <T> the target type of the field this helper is written for.
  */
 public abstract class InheritanceGovernor<T> {
+	public static final Pattern runUriRegExp = Pattern.compile(".*/job/[^/]+/[0-9]+/.*");
+	
 	public final String fieldName;
 	public final SELECTOR orderMode;
 	public final InheritanceProject caller;
@@ -435,7 +439,12 @@ public abstract class InheritanceGovernor<T> {
 		StaplerRequest req = Stapler.getCurrentRequest();
 		if (req != null) {
 			String uri = req.getRequestURI();
+			//Check if we request the build page
 			if (uri.endsWith("/build")) {
+				return true;
+			}
+			//Check if we were requested by page for a run
+			if (runUriRegExp.matcher(uri).matches()) {
 				return true;
 			}
 		}

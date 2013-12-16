@@ -11,7 +11,7 @@
 	<name>inheritance-plugin</name>
 	<groupId>hudson.plugins</groupId>
 	<artifactId>project-inheritance</artifactId>
-	<version>1.4.13-SNAPSHOT</version>
+	<version>1.5.0-SNAPSHOT</version>
 	<packaging>hpi</packaging>
 
 	<!-- Forcing to use a newer maven-jenkins plugin; needed for hpi:run -->

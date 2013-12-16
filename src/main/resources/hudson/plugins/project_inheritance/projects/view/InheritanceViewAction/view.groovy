@@ -35,7 +35,7 @@ l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
 
-//NOTICE: DO NOT USE 'my' HERE! This file is used by
+//NOTICE: AVOID USING 'my' HERE! This file is used by
 //InheritanceViewAction as well as InheritanceProject
 
 //Fetching the constants passed in from the outside
@@ -129,7 +129,12 @@ f.form(name: "readonlyConfiguration",
 	
 	for (ref in buildMap.keySet()) {
 		pronoun = ref.getProject().pronoun;
-		f.section(title: "Build Steps for: " + ref.getName() + " (" + pronoun + ")") {
+		if (pronoun != null && !(pronoun.isEmpty())) {
+			header = ("Build Steps for: " + ref.getName() + " (" + pronoun + ")");
+		} else {
+			header = "Build Steps for: " + ref.getName();
+		}
+		f.section(title: header) {
 			//Create a unique block ID that contains the project's class
 			//This is used by the above select box's "onChange" method
 			//to hide/show these fields
