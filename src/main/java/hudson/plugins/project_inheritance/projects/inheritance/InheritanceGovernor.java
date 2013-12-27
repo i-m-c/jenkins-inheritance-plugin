@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
+ * Copyright (c) 2014 Contributor.  All rights reserved.
  * 
  * This file is part of the Inheritance plug-in for Jenkins.
  * 
@@ -26,9 +26,12 @@ import hudson.model.Build;
 import hudson.model.Describable;
 import hudson.model.Queue;
 import hudson.model.Saveable;
+import hudson.model.AbstractBuild.AbstractRunner;
+import hudson.model.AbstractProject;
 import hudson.model.Descriptor;
 import hudson.model.Hudson;
 import hudson.model.Project;
+import hudson.model.listeners.RunListener;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
@@ -420,7 +423,7 @@ public abstract class InheritanceGovernor<T> {
 		 * 3.) The project is called in the context of a build
 		 * 4.) The queue queries properties of the project 
 		 */
-		
+
 		//Check forced inheritance or transience
 		if (forcedInherit || root.getIsTransient()) {
 			return true;
@@ -437,14 +440,27 @@ public abstract class InheritanceGovernor<T> {
 		
 		//Check via expensive stack reflection
 		if (Reflection.calledFromClass(
-				Build.class, BuildCommand.class,
-				Queue.class, BuildTrigger.class,
-				Trigger.class, BuildStep.class
-			) ||
-			Reflection.calledFromMethod(
-					InheritanceProject.class,
-					"doBuild", "scheduleBuild2", "doBuildWithParameters"
-			)
+						Build.class, BuildCommand.class,
+						Queue.class, BuildTrigger.class,
+						Trigger.class, BuildStep.class		
+				) ||
+				Reflection.calledFromMethod(
+						InheritanceProject.class,
+						"doBuild", "scheduleBuild2", "doBuildWithParameters", "buildDependencyGraph"
+				) ||
+				//for scmtriggr / polling
+				Reflection.calledFromMethod(
+						AbstractProject.class,
+						"poll"
+				) ||
+				Reflection.calledFromMethod(
+						RunListener.class,
+						"onCompleted"
+				) ||
+				Reflection.calledFromMethod(
+						AbstractRunner.class,
+						"post2"
+				)
 		) {
 			return true;
 		}
