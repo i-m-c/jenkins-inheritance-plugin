@@ -150,24 +150,32 @@ f.form(name: "readonlyConfiguration",
 			//to hide/show these fields
 			blockID = "buildStepsBlock-" + ref.getProject().getCreationClass() + "-" + ref.getName()
 			
-			//Add a hide/show button
-			f.block() {
-				input(type: "button", class: "yui-button",
-						onClick : "toggleVisibility('" + blockID + "')",
-						value: _("Show/Hide")
-				)
-			}
+			items = buildMap.get(ref);
 			
-			//And the toggleable block
-			ct.id_block(id: blockID) {
-				//This list displays/configures the configured parent references
-				//It is customized not to have add/delete buttons
-				ct.hetero_list(
-						items: buildMap.get(ref),
-						name: "projects",
-						hasHeader: "false",
-						descriptors: ciDescriptors
-				)
+			if (items.isEmpty()) {
+				f.block() {
+					div(_("No Build steps"))
+				}
+			} else {
+				//Add a hide/show button
+				f.block() {
+					input(type: "button", class: "yui-button",
+							onClick : "toggleVisibility('" + blockID + "')",
+							value: _("Show/Hide")
+					)
+				}
+				
+				//And the toggleable block
+				ct.id_block(id: blockID) {
+					//This list displays/configures the configured parent references
+					//It is customized not to have add/delete buttons
+					ct.hetero_list(
+							items: items,
+							name: "projects",
+							hasHeader: "false",
+							descriptors: ciDescriptors
+					)
+				}
 			}
 		}
 	}

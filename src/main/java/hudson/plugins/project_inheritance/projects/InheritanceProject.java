@@ -4364,7 +4364,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		List<AbstractProjectReference> refs =
 				new LinkedList<AbstractProjectReference>(
-						this.getParentReferences(SELECTOR.BUILDER)
+						this.getAllParentReferences(SELECTOR.BUILDER)
 				);
 		
 		//Add a reference to ourselves
