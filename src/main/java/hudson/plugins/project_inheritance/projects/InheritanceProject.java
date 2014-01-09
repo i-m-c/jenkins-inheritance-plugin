@@ -3374,7 +3374,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lbl;
 	}
 	
-	@SuppressWarnings("unused")
 	public Label getAssignedLabel(IMode mode) {
 		InheritanceGovernor<Label> gov =
 				new InheritanceGovernor<Label>(
@@ -3407,43 +3406,30 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		//Generate the key for caching; a combination of the parents
-		//do note that versions do not need to be tracked; as labels are not
-		//versioned
-		StringBuilder key = null;
-		key = new StringBuilder(this.getFullName());
-		key.append("[");
-		for (AbstractProjectReference apr : this.getAllParentReferences(SELECTOR.MISC)) {
-			key.append(apr.getName());
-			key.append(",");
-		}
-		key.append("]");
-		
+		//Generate the key for caching
+		String key = this.generateKeyForCaching(mode);
+		//Check whether we have a label cached for that key
 		Label lbl = null;
 		boolean hasCached = false;
-		if (key != null) {
-			labelCacheLock.readLock().lock();
-			try {
-				if (labelCache.containsKey(key.toString())) {
-					lbl = labelCache.get(key.toString());
-					hasCached = true;
-				}
-			} finally {
-				labelCacheLock.readLock().unlock();
+		labelCacheLock.readLock().lock();
+		try {
+			if (labelCache.containsKey(key)) {
+				lbl = labelCache.get(key);
+				hasCached = true;
 			}
+		} finally {
+			labelCacheLock.readLock().unlock();
 		}
 		if (!hasCached) {
 			//Otherwise, we compute the label anew
 			lbl = gov.retrieveFullyDerivedField(this, mode);
 			
 			//Caching, it if need be
-			if (key != null) {
-				labelCacheLock.writeLock().lock();
-				try {
-					labelCache.put(key.toString(), lbl);
-				} finally {
-					labelCacheLock.writeLock().unlock();
-				}
+			labelCacheLock.writeLock().lock();
+			try {
+				labelCache.put(key.toString(), lbl);
+			} finally {
+				labelCacheLock.writeLock().unlock();
 			}
 		}
 		
@@ -3490,6 +3476,40 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lbl.getExpression();
 	}
 	
+	/**
+	 * This method generates a key out of the project's name, all its parents
+	 * and whether or not inheritance is needed or was directly requested.
+	 * <p>
+	 * Do note that it will <b>not</b> include any versioning information!
+	 * 
+	 * @param mode the forced-mode of inheritance
+	 * @return a unique key given the inputs and current instance. Never null or empty.
+	 */
+	private String generateKeyForCaching(IMode mode) {
+		StringBuilder key = new StringBuilder(this.getFullName());
+		key.append("[");
+		List<AbstractProjectReference> refLst = this.getAllParentReferences(SELECTOR.MISC);
+		if (refLst != null && !refLst.isEmpty()) {
+			Iterator<AbstractProjectReference> iter = refLst.iterator();
+			while (iter.hasNext()) {
+				AbstractProjectReference ref = iter.next();
+				if (ref != null) {
+					key.append(ref.getName());
+				}
+				if (iter.hasNext()) {
+					key.append(",");
+				}
+			}
+		}
+		key.append("]");
+		//And append whether or not inheritance is needed
+		if (mode == IMode.INHERIT_FORCED || InheritanceGovernor.inheritanceLookupRequired(this)) {
+			key.append("[INHERIT]");
+		} else {
+			key.append("[RAW]");
+		}
+		return key.toString();
+	}
 	
 	/**
 	 * {@inheritDoc}
