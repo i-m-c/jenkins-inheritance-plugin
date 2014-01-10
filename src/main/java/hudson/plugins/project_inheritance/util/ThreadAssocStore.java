@@ -159,6 +159,10 @@ public class ThreadAssocStore {
 		}
 	}
 	
+	public void clear(String key) {
+		this.clear(Thread.currentThread(), key);
+	}
+	
 	public void clear(Thread t, String key) {
 		lock.writeLock().lock();
 		try {

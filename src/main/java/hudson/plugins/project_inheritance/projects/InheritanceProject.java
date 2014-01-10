@@ -23,6 +23,7 @@ package hudson.plugins.project_inheritance.projects;
 import static javax.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 import static javax.servlet.http.HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
 import hudson.BulkChange;
+import hudson.CopyOnWrite;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.Action;
@@ -120,6 +121,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Logger;
@@ -372,7 +374,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * actually have a configuration of their own.
 	 */
 	protected transient VersionedObjectStore versionStore = null;
-	
 	
 	
 	// === FIELDS SET BY JELLY FORM TAGS ===
@@ -2455,9 +2456,31 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//TODO: Buffer the creation of transient actions somehow
 		
-		//The above call will only return the non-transient actions. The actual
-		//transient actions have to the spliced in now
-		List<Action> transients = this.createVersionAwareTransientActions();
+		/* The above call will only return the non-transient actions. The actual
+		 * transient actions have to the spliced in now
+		 * 
+		 * This can lead to a stack overflow (see the annotation in the comments
+		 * for createTransientActions()), so we use the thread-store to register
+		 * that the current thread is trying to create transient actions.
+		 */
+		List<Action> transients;
+		ThreadAssocStore tas = ThreadAssocStore.getInstance();
+		String key = String.format(
+				"project-%s-creates-transients", this.getFullName()
+		);
+		Object o = tas.getValue(key);
+		if (o == null) {
+			try {
+				//We're not fetching transients; so we fetch them
+				tas.setValue(key, this);
+				transients = this.createVersionAwareTransientActions();
+			} finally {
+				tas.clear(key);
+			}
+		} else {
+			//We are already fetching transients and have entered a recursion
+			transients = Collections.emptyList();
+		}
 		
 		List<Action> merge = new LinkedList<Action>();
 		merge.addAll(nonTransients);
@@ -2483,6 +2506,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * Otherwise, you get the nasty problems that temporary actions contaminate
 	 * the versioning archive and generally cause troubles during build.
+	 * <p>
+	 * The downside with generating this on-the-fly is, that some plugins
+	 * themselves call {@link #getActions()} (maybe indirectly), which recurses
+	 * back into calling {@link #createVersionAwareTransientActions()};
+	 * <p>
+	 * This will cause a stack overflow. The only way to fix this is to
+	 * return an empty list if a recursion is detected.
+	 * 
+	 * @see #getActions()
+	 * @see #getActions(IMode)
 	 */
 	@Override
 	protected List<Action> createTransientActions() {
