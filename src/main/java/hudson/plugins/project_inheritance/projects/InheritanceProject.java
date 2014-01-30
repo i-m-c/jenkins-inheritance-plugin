@@ -432,14 +432,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	protected String parameterizedWorkspace;
 	
-	/**
-	 * Workaround for issue in Jenkins 1.509.3 regarding queues
-	 */
-	private static final LimitedHashMap<String, Label> labelCache =
-			new LimitedHashMap<String, Label>(1024);
-	private static final ReentrantReadWriteLock labelCacheLock =
-			new ReentrantReadWriteLock();
-	
 	
 	
 	// === CONSTRUCTORS AND CONSTRUCTION HELPERS ===
@@ -542,47 +534,31 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Ensuring that the buffers are present
 		createBuffers();
 		
-		labelCacheLock.writeLock().lock();
-		try {
-			if (root == null) {
-				//Nuke all
-				onChangeBuffer.clearAll();
-				onSelfChangeBuffer.clearAll();
-				onInheritChangeBuffer.clearAll();
-				labelCache.clear();
-				return;
-			}
-			
-			//First clearing the cross-project change buffer
+		if (root == null) {
+			//Nuke all
 			onChangeBuffer.clearAll();
-			//Then clearing the self-change buffer
-			onSelfChangeBuffer.clear(root);
-			
-			//Then we need to clear the inheritable changes for the root and its children
-			//Do note that the root MUST be cleared first, as otherwise we may
-			//fetch an "unclean" relationship set
-			onInheritChangeBuffer.clear(root);
-			Map<InheritanceProject, Relationship> relMap = root.getRelationships();
-			for (Map.Entry<InheritanceProject, Relationship> e : relMap.entrySet()) {
-				//We ignore siblings
-				if (e.getValue().type == Relationship.Type.MATE) {
-					continue;
-				}
-				//Otherwise, we clear that project's inheritance buffer
-				onInheritChangeBuffer.clear(e.getKey());
+			onSelfChangeBuffer.clearAll();
+			onInheritChangeBuffer.clearAll();
+			return;
+		}
+		
+		//First clearing the cross-project change buffer
+		onChangeBuffer.clearAll();
+		//Then clearing the self-change buffer
+		onSelfChangeBuffer.clear(root);
+		
+		//Then we need to clear the inheritable changes for the root and its children
+		//Do note that the root MUST be cleared first, as otherwise we may
+		//fetch an "unclean" relationship set
+		onInheritChangeBuffer.clear(root);
+		Map<InheritanceProject, Relationship> relMap = root.getRelationships();
+		for (Map.Entry<InheritanceProject, Relationship> e : relMap.entrySet()) {
+			//We ignore siblings
+			if (e.getValue().type == Relationship.Type.MATE) {
+				continue;
 			}
-			
-			//Removing label cache entries containing the roots' name
-			Iterator<Map.Entry<String, Label>> iter = labelCache.entrySet().iterator();
-			while (iter.hasNext()) {
-				Map.Entry<String, Label> e = iter.next();
-				String key = e.getKey();
-				if (key != null && key.contains(root.getFullName())) {
-					iter.remove();
-				}
-			}
-		} finally {
-			labelCacheLock.writeLock().unlock();
+			//Otherwise, we clear that project's inheritance buffer
+			onInheritChangeBuffer.clear(e.getKey());
 		}
 	}
 	
@@ -3399,8 +3375,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * {@inheritDoc}
 	 */
 	public Label getAssignedLabel() {
-		//First, we fetch the actual label that was defined
-		Label lbl = this.getAssignedLabel(IMode.AUTO);
+		//Labels are not versioned, so we can immediately decide whether or
+		//not we need to inherit
+		IMode mode = (InheritanceGovernor.inheritanceLookupRequired(this))
+				? IMode.INHERIT_FORCED
+				: IMode.LOCAL_ONLY;
+		Label lbl = this.getAssignedLabel(mode);
 		if (lbl == null) {
 			return super.getAssignedLabel();
 		}
@@ -3439,32 +3419,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		//Generate the key for caching
-		String key = this.generateKeyForCaching(mode);
-		//Check whether we have a label cached for that key
-		Label lbl = null;
-		boolean hasCached = false;
-		labelCacheLock.readLock().lock();
-		try {
-			if (labelCache.containsKey(key)) {
-				lbl = labelCache.get(key);
-				hasCached = true;
-			}
-		} finally {
-			labelCacheLock.readLock().unlock();
-		}
-		if (!hasCached) {
-			//Otherwise, we compute the label anew
-			lbl = gov.retrieveFullyDerivedField(this, mode);
-			
-			//Caching, it if need be
-			labelCacheLock.writeLock().lock();
-			try {
-				labelCache.put(key.toString(), lbl);
-			} finally {
-				labelCacheLock.writeLock().unlock();
-			}
-		}
+		//Generate the label on this node
+		Label lbl = gov.retrieveFullyDerivedField(this, mode);
 		
 		//Checking if the node-label-for-testing needs to be added
 		Label magic = ProjectCreationEngine.instance.getMagicNodeLabelForTestingValue();
@@ -3509,40 +3465,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lbl.getExpression();
 	}
 	
-	/**
-	 * This method generates a key out of the project's name, all its parents
-	 * and whether or not inheritance is needed or was directly requested.
-	 * <p>
-	 * Do note that it will <b>not</b> include any versioning information!
-	 * 
-	 * @param mode the forced-mode of inheritance
-	 * @return a unique key given the inputs and current instance. Never null or empty.
-	 */
-	private String generateKeyForCaching(IMode mode) {
-		StringBuilder key = new StringBuilder(this.getFullName());
-		key.append("[");
-		List<AbstractProjectReference> refLst = this.getAllParentReferences(SELECTOR.MISC);
-		if (refLst != null && !refLst.isEmpty()) {
-			Iterator<AbstractProjectReference> iter = refLst.iterator();
-			while (iter.hasNext()) {
-				AbstractProjectReference ref = iter.next();
-				if (ref != null) {
-					key.append(ref.getName());
-				}
-				if (iter.hasNext()) {
-					key.append(",");
-				}
-			}
-		}
-		key.append("]");
-		//And append whether or not inheritance is needed
-		if (mode == IMode.INHERIT_FORCED || InheritanceGovernor.inheritanceLookupRequired(this)) {
-			key.append("[INHERIT]");
-		} else {
-			key.append("[RAW]");
-		}
-		return key.toString();
-	}
+	
 	
 	/**
 	 * {@inheritDoc}
