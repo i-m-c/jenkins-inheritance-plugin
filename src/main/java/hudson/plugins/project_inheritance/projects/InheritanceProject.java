@@ -49,6 +49,7 @@ import hudson.model.ParameterDefinition;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Project;
+import hudson.model.Queue;
 import hudson.model.StringParameterValue;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.model.queue.SubTask;
@@ -72,6 +73,7 @@ import hudson.plugins.project_inheritance.projects.references.ProjectReference.P
 import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
 import hudson.plugins.project_inheritance.util.Helpers;
 import hudson.plugins.project_inheritance.util.LimitedHashMap;
+import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.plugins.project_inheritance.util.TimedBuffer;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore;
@@ -3368,21 +3370,47 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return super.getBuildDiscarder();
 	}
 	
-
 	
 	
 	/**
 	 * {@inheritDoc}
+	 * <p>
+	 * As usual, this method might return the full set of labels returned via
+	 * inheritance, or just the locally defined labels; depending on the
+	 * method that calls it.
+	 * <br>
+	 * Additionally, this method usually generates a label from scratch
+	 * whenever it is called. There is only one exception to this rule, 
+	 * namely when {@link Queue#maintain()} calls this function.
+	 * <br>
+	 * In that case, it instead returns a value that was cached value with
+	 * full inheritance. This is potentially imprecise; as it ignores any
+	 * possible versioning and always chooses "stable" versions.
+	 * <p>
+	 * The reason why this downside is accepted is because {@link Queue#maintain()}
+	 * calls this method quite often, depending on how much tasks are
+	 * pending in the Queue. This can potentially slow down maintenance
+	 * so that it takes tens of seconds.
 	 */
 	public Label getAssignedLabel() {
-		//Labels are not versioned, so we can immediately decide whether or
-		//not we need to inherit
-		IMode mode = (InheritanceGovernor.inheritanceLookupRequired(this))
-				? IMode.INHERIT_FORCED
-				: IMode.LOCAL_ONLY;
-		Label lbl = this.getAssignedLabel(mode);
+		//Check if build is called from Queue.maintain()
+		boolean isMaint = Reflection.calledFromMethod(
+				Queue.class, "maintain"
+		);
+		if (isMaint) {
+			//Check if there's a cached value
+			Object cached = onChangeBuffer.get(this, "maintenanceAssignedLabel");
+			if (cached != null && cached instanceof Label) {
+				return (Label) cached;
+			}
+		}
+		
+		Label lbl = this.getAssignedLabel(IMode.AUTO);
 		if (lbl == null) {
-			return super.getAssignedLabel();
+			lbl = super.getAssignedLabel();
+		}
+		if (lbl != null && isMaint) {
+			onChangeBuffer.set(this, "maintenanceAssignedLabel", lbl);
 		}
 		return lbl;
 	}
