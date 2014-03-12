@@ -23,11 +23,15 @@ package hudson.plugins.project_inheritance.projects;
 import hudson.FilePath;
 import hudson.model.Build;
 import hudson.model.BuildListener;
+import hudson.model.ParameterValue;
 import hudson.model.Result;
 import hudson.model.TopLevelItem;
 import hudson.model.Job;
 import hudson.model.Node;
+import hudson.model.ParametersAction;
+import hudson.model.Run;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterValue;
 import hudson.plugins.project_inheritance.util.PathMapping;
 import hudson.plugins.project_inheritance.util.Resolver;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
@@ -36,6 +40,7 @@ import hudson.slaves.WorkspaceList.Lease;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 
@@ -107,6 +112,43 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			 * run() method above! Otherwise, you will only get stable/latest
 			 * versions
 			 */
+			Run<?,?> run = this.getBuild();
+			if (!(run instanceof InheritanceBuild)) {
+				listener.fatalError(
+						"InheritanceBuildExecution was not started by an"
+						+ " InheritanceBuiild. Versioning and Inheritance"
+						+ " can't be trusted."
+				);
+				throw new RunnerAbortedException();
+			}
+			InheritanceBuild build = (InheritanceBuild) run;
+			
+			/* Check if all the parameters were set right; and somebody did not
+			 * forget to set a parameter correctly.
+			 */
+			List<ParametersAction> actions =
+					build.getActions(ParametersAction.class);
+			
+			for (ParametersAction pa : actions) {
+				for (ParameterValue pv : pa.getParameters()) {
+					if (!(pv instanceof InheritableStringParameterValue)) {
+						continue;
+					}
+					InheritableStringParameterValue ispv =
+							(InheritableStringParameterValue) pv;
+					//Check if a value should've been set, but was not
+					if (!ispv.getMustHaveValueSet()) { continue; }
+					if (ispv.value == null || ispv.value.isEmpty()) {
+						//We detected an invalid value
+						listener.fatalError(String.format(
+								"Parameter '%s' has no value, but was required to be set. Aborting!",
+								ispv.getName()
+						));
+						throw new RunnerAbortedException();
+					}
+				}
+			}
+			
 			//Call the regular build response
 			return super.doRun(listener);
 		}

@@ -3007,9 +3007,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	public Map<JobPropertyDescriptor, JobProperty<? super InheritanceProject>> getProperties(IMode mode) {
 		List<JobProperty<? super InheritanceProject>> lst = this.getAllProperties(mode);
-		
 		if (lst == null || lst.isEmpty()) {
-			return super.getProperties();
+			return Collections.emptyMap();
 		}
 		
 		HashMap<JobPropertyDescriptor, JobProperty<? super InheritanceProject>> map =
@@ -4128,16 +4127,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lst;
 	}
 	
-	public List<ParameterDerivationDetails> getParameterDerivationList() {
-		List<ParameterDerivationDetails> list =
-				new LinkedList<ParameterDerivationDetails>();
+	private List<ScopeEntry> getFullParameterScope() {
 		//Fetching the correct definition property
 		ParametersDefinitionProperty pdp = this.getProperty(
 				ParametersDefinitionProperty.class, IMode.INHERIT_FORCED
 		);
 		if (pdp == null) {
 			//No parameters set, so we return an empty list
-			return list;
+			return Collections.emptyList();
 		}
 		
 		//Checking if it is a fully scoped inheritance-aware one; if yes, we
@@ -4155,6 +4152,19 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				fullScope.add(new ScopeEntry(ownerName, pd));
 			}
 		}
+		
+		if (fullScope != null) {
+			return fullScope;
+		} else {
+			return Collections.emptyList();
+		}
+	}
+	
+	public List<ParameterDerivationDetails> getParameterDerivationList() {
+		List<ParameterDerivationDetails> list =
+				new LinkedList<ParameterDerivationDetails>();
+		//Grab the full scope of all parameters
+		List<ScopeEntry> fullScope = this.getFullParameterScope();
 		
 		int cnt = 0;
 		for (ScopeEntry scope : fullScope) {
@@ -4415,9 +4425,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		HashMap<String, SanityRestrictions> resMap =
 				new HashMap<String, SanityRestrictions>();
 		
-		//Iterating through the parameters, learning and verifying their
-		//restrictions on-the-fly
-		for (ParameterDefinition pd : this.getParameters(IMode.INHERIT_FORCED)) {
+		//Fetch all parameters in the scope
+		List<ScopeEntry> fullScope = this.getFullParameterScope();
+		
+		//Iterating through the parameters, and verifying their restrictions on-the-fly
+		for (ScopeEntry scope : fullScope) {
+			ParameterDefinition pd = scope.param;
+			if (pd == null) { continue; }
 			SanityRestrictions s = resMap.get(pd.getName());
 			if (s == null) {
 				//We've seen this PD for the first time
@@ -4446,8 +4460,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 			
 			//If the PD is seen again, we verify if the restrictions fit
-			
-			if (pd.getClass().equals(s.hasToBeOfThisClass) == false) {
+			if (!s.hasToBeOfThisClass.isAssignableFrom(pd.getClass())) {
 				return new AbstractMap.SimpleEntry<Boolean, String>(
 						false, "Parameter '" + pd.getName() +
 						"' redefined with different class name."
