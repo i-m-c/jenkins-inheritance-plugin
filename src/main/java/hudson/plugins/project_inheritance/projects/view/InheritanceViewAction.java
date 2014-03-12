@@ -112,7 +112,6 @@ public class InheritanceViewAction implements Action, Describable<InheritanceVie
 	private boolean isApplicableFor(InheritanceProject ip) {
 		return (
 				ip != null &&
-				ip.hasPermission(AbstractProject.BUILD) &&
 				ip.isBuildable() &&
 				!(ip.isDisabled())
 		);

@@ -26,9 +26,9 @@ l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
 if (my.getIsTransient()) {
-	h1("Transient Job Configuration - " + my.getDisplayName())
+	h1("Read-only Configuration of " + my.pronoun + " " + my.displayName)
 	
-	refURL = rootURL + "/job/" + my.getDisplayName() + "/showReferencedBy"
+	refURL = rootURL + "/job/" + my.displayName + "/showReferencedBy"
 	h3(style: "color:red") {
 		span("Please note that this view is a read only view of the job" +
 		" configuration. You cannot edit fields in this view. In order" +
@@ -41,8 +41,9 @@ if (my.getIsTransient()) {
 			type:"text/javascript",
 			src: resURL + "/plugin/project-inheritance/scripts/markAllReadOnly.js"
 	)
-} else{
-	h1("Job Configuration - " + my.getDisplayName())
+}
+else{
+	h1("Configuration of " + my.pronoun + " " + my.displayName)
 	include(my, "notifications-on-versions")
 }
 

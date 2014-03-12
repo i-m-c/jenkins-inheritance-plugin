@@ -38,6 +38,12 @@ ct = namespace(lib.CustomTagLib);
 //NOTICE: AVOID USING 'my' HERE! This file is used by
 //InheritanceViewAction as well as InheritanceProject
 
+//Load the javascript files
+script(
+		type:"text/javascript",
+		src: resURL + "/plugin/project-inheritance/scripts/InheritanceViewAction/toggleVisibility.js"
+)
+
 //Fetching variables from different sources; depending on what 'my' is
 if (my instanceof InheritanceViewAction) {
 	//We're on a build page
@@ -82,11 +88,106 @@ def showBuildParametersTable() {
 	}
 }
 
+def showBuildStepsList() {
+	//Fetch a map of all builders for the current build
+	buildMap = project.getBuildersFor(
+			(build != null) ? build.getProjectVersions() : null,
+			CommandInterpreter.class
+	)
+	
+	//Fetch the command interpreter descriptors
+	ciDescriptors = Jenkins
+			.getInstance()
+			.<BuildStep, BuildStepDescriptor<Builder>>
+			getDescriptorList(CommandInterpreter.class);
+	
+	//Add a show/hide buttons for empty sections
+	f.block() {
+		sections = [
+				sectionPrefix + "empty",
+				blockPrefix + "empty",
+		]
+		jsCmd = ""
+		for (s in sections) {
+			jsCmd += "toggleAll(\"tr\", \"" + s + "\");"
+		}
+		table() {
+			tr() {
+				td() {
+					input(type: "button", class: "yui-button",
+							onClick : jsCmd,
+							value: _("Show/Hide empty projects")
+					)
+				}
+			}
+		}
+	}
+	
+	for (ref in buildMap.keySet()) {
+		//Fetch identifies of that project
+		pName = ref.getName()
+		pNoun = ref.getProject().pronoun
+		pClass = ref.getProject().getCreationClass()
+		//Fetch the build steps for this project reference
+		items = buildMap.get(ref);
+		iState = ((items.isEmpty()) ? "empty" : "full")
+		
+		//Generate a unique ID for this section and sub-block
+		sectionUID = sectionPrefix + iState + "-" + pName + "-" + pClass
+		blockUID = blockPrefix + iState + "-" + pName + "-" + pClass
+		
+		//Default style is to be hidden for empty projects
+		defStyle = (items.isEmpty()) ? "display:none" : "display:display"
+		
+		//Create the header for the section
+		if (pNoun != null && !(pNoun.isEmpty())) {
+			header = ("Build Steps for: " + pName + " (" + pNoun + ")");
+		} else {
+			header = "Build Steps for: " + pName;
+		}
+		//Add the section block
+		ct.id_block(id: sectionUID, row_style: defStyle) {
+			div(class: "section-header", id: sectionUID, header)
+		}
+		
+		//Add the build-steps block
+		if (items.isEmpty()) {
+			ct.id_block(id: blockUID, row_style: defStyle) {
+				div(_("No Build steps"))
+			}
+		} else {
+			//Add a hide/show button
+			f.block() {
+				input(type: "button", class: "yui-button",
+						onClick : "toggleElem('" + blockUID + "')",
+						value: _("Show/Hide")
+				)
+			}
+			//The toggleable block itself
+			ct.id_block(id: blockUID, row_style: defStyle) {
+				//This list displays/configures the configured parent references
+				//It is customized not to have add/delete buttons
+				ct.hetero_list(
+						items: items,
+						name: "projects",
+						hasHeader: "false",
+						descriptors: ciDescriptors
+				)
+			}
+		}
+	}
+}
+
+
 if (build != null) {
 	h1("Read-only view for build: " + project.displayName + " #" + build.getNumber())
 } else {
 	h1("Read-only view for project: " + project.displayName)
 }
+
+//The prefix for all sections and sub-blocks
+sectionPrefix = "builds-section-"
+blockPrefix = "builds-section-block-"
 
 f.form(name: "readonlyConfiguration",
 		action: "download",
@@ -96,10 +197,10 @@ f.form(name: "readonlyConfiguration",
 	//Show the Build Step selection dialog
 	f.section(title: _("Build Step Visibility Selection")) {
 		f.block() {
-			f.entry(field: "projectClass", title: _("Only show builders from:")) {
+			f.entry(field: "projectClass", title: _("Expand only builders from:")) {
 				f.select(
 						default: "",
-						onchange: "changeAllBuilderVisibility(this.value)"
+						onchange: "changeAllBuilderVisibility('tr', '" + blockPrefix + "full" + "', this.value)"
 				)
 				f.description() {
 					span("You can configure the available classes ")
@@ -125,59 +226,8 @@ f.form(name: "readonlyConfiguration",
 		div(style: "margin-top:2em;")
 	}
 	
-	//Fetch a map of all builders for the current build
-	buildMap = project.getBuildersFor(
-			(build != null) ? build.getProjectVersions() : null,
-			CommandInterpreter.class
-	)
-	
-	//Fetch the command interpreter descriptors
-	ciDescriptors = Jenkins
-			.getInstance()
-			.<BuildStep, BuildStepDescriptor<Builder>>
-			getDescriptorList(CommandInterpreter.class);
-	
-	for (ref in buildMap.keySet()) {
-		pronoun = ref.getProject().pronoun;
-		if (pronoun != null && !(pronoun.isEmpty())) {
-			header = ("Build Steps for: " + ref.getName() + " (" + pronoun + ")");
-		} else {
-			header = "Build Steps for: " + ref.getName();
-		}
-		f.section(title: header) {
-			//Create a unique block ID that contains the project's class
-			//This is used by the above select box's "onChange" method
-			//to hide/show these fields
-			blockID = "buildStepsBlock-" + ref.getProject().getCreationClass() + "-" + ref.getName()
-			
-			items = buildMap.get(ref);
-			
-			if (items.isEmpty()) {
-				f.block() {
-					div(_("No Build steps"))
-				}
-			} else {
-				//Add a hide/show button
-				f.block() {
-					input(type: "button", class: "yui-button",
-							onClick : "toggleVisibility('" + blockID + "')",
-							value: _("Show/Hide")
-					)
-				}
-				
-				//And the toggleable block
-				ct.id_block(id: blockID) {
-					//This list displays/configures the configured parent references
-					//It is customized not to have add/delete buttons
-					ct.hetero_list(
-							items: items,
-							name: "projects",
-							hasHeader: "false",
-							descriptors: ciDescriptors
-					)
-				}
-			}
-		}
+	f.section(title: _("All build steps")) {
+		showBuildStepsList()
 	}
 	
 	if (showDownload) {

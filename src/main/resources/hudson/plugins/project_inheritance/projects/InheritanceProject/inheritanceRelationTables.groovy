@@ -55,7 +55,7 @@ for (type in Relationship.Type.values()) {
 	if (verbose) {
 		tblStyle = "min-width:800px; width:90%"
 	} else {
-		tblStyle = "min-width:600px; width:60%"
+		tblStyle = "min-width:600px; width:85%"
 	}
 	
 	table(class: "pane sortable bigtable fixed", style: tblStyle) {
@@ -80,9 +80,9 @@ for (type in Relationship.Type.values()) {
 										project.getName()
 								)
 							}
-							td(class: "pane", relationsMap.get(project).distance)
-							td(class: "pane", relationsMap.get(project).isLeaf)
-							td(class: "pane", project.getCreationClass())
+							td(class: "pane forceWrap", relationsMap.get(project).distance)
+							td(class: "pane forceWrap", relationsMap.get(project).isLeaf)
+							td(class: "pane forceWrap", project.getCreationClass())
 							if (type == Relationship.Type.CHILD) {
 								last = project.getLastBuild()
 								if (last) {
@@ -105,10 +105,13 @@ for (type in Relationship.Type.values()) {
 			thead() {
 				tr() {
 					th(class: "pane-header variable forceWrap", _("Name"))
-					th(class: "pane-header wider forceWrap", _("Class"))
-					if (type == Relationship.Type.CHILD) {
+					
+					if (type != Relationship.Type.CHILD) {
+						th(class: "pane-header wider forceWrap", _("Class"))
+					} else {
 						th(class: "pane-header wider forceWrap", _("Last Build Date"))
 					}
+					
 				}
 			}
 			tbody() {
@@ -129,8 +132,9 @@ for (type in Relationship.Type.values()) {
 										project.getName()
 								)
 							}
-							td(class: "pane", project.getCreationClass())
-							if (type == Relationship.Type.CHILD) {
+							if (type != Relationship.Type.CHILD) {
+								td(class: "pane forceWrap", project.getCreationClass())
+							} else {
 								last = project.getLastBuild()
 								if (last) {
 									td(class: "pane") {

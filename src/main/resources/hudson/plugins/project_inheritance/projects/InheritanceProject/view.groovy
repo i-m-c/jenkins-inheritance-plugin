@@ -41,10 +41,6 @@ l.layout(title: my.displayName) {
 				rel: "stylesheet", type: "text/css",
 				href: resURL + "/plugin/project-inheritance/styles/table-monospace.css"
 		)
-		script(
-				type:"text/javascript",
-				src: resURL + "/plugin/project-inheritance/scripts/InheritanceViewAction/toggleVisibility.js"
-		)
 	}
 
 	include(my, "sidepanel")
