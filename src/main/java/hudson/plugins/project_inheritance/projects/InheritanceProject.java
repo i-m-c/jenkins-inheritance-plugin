@@ -746,8 +746,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//LOCAL NUKE before versioning is saved 
 		clearBuffers(this);
 		
-		//After everything was altered, we must generate a new version
-		this.dumpConfigToNewVersion();
+		//After everything was altered, we generate a new version
+		if (json.has("versionMessageString")) {
+			this.dumpConfigToNewVersion(json.getString("versionMessageString"));
+		} else {
+			this.dumpConfigToNewVersion();
+		}
 		
 		//LOCAL NUKE after versioning is saved 
 		clearBuffers(this);
@@ -834,8 +838,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		rsp.sendRedirect(this.getAbsoluteUrl());
 		
-		//After everything was altered, we must generate a new version
-		this.dumpConfigToNewVersion();
+		//After everything was altered, we generate a new version
+		if (json.has("versionMessageString")) {
+			this.dumpConfigToNewVersion(json.getString("versionMessageString"));
+		} else {
+			this.dumpConfigToNewVersion();
+		}
 		
 		//LOCAL NUKE after versioning is saved 
 		clearBuffers(this);
@@ -1876,6 +1884,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return vos;
 	}
 	
+	
+	/**
+	 * Wrapper around {@link #dumpConfigToNewVersion(String)} with an empty message
+	 */
+	protected synchronized void dumpConfigToNewVersion() {
+		this.dumpConfigToNewVersion(null);
+	}
+	
 	/**
 	 * This method takes the current configuration and dumps all relevant
 	 * fields into the versioning-store.
@@ -1885,7 +1901,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * well as compatibility markings. These <b>all</b> need to be saved 
 	 * indefinitely.
 	 */
-	protected synchronized void dumpConfigToNewVersion() {
+	protected synchronized void dumpConfigToNewVersion(String message) {
 		//Sanity checks
 		if (this.isTransient) { return; }
 		if (this.versionStore == null) {
@@ -1908,6 +1924,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		String username = Jenkins.getAuthentication().getName();
 		if (username != null && !username.isEmpty()) {
 			v.setUsername(username);
+		}
+		
+		//Attach the message (if any)
+		if (message != null) {
+			v.setDescription(message);
 		}
 		
 		//Storing the list of parents

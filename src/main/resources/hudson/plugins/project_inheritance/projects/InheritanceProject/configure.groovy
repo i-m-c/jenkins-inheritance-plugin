@@ -25,5 +25,5 @@ f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
-include(my, "/form/configure")
+include(my, "configure-version-aware")
 

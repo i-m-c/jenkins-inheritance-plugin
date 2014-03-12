@@ -25,6 +25,9 @@ f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
+st = namespace("jelly:stapler")
+
+adjunctPrefix = "hudson.plugins.project_inheritance.projects.InheritanceProject.adjunct"
 
 /* This page creates a config-page with only those project details that are
  * necessary to configure transient child jobs.
@@ -39,33 +42,31 @@ l.layout(
 	
 	f.breadcrumb_config_outline()
 	
+	//Load additional Javascript
+	st.adjunct(includes: adjunctPrefix + ".confirmChangesPopup")
+	//Prompt the user to enter a version message
+	if (my.areAllVersionsUnstable()) {
+		//buttonMsg = _("Warning! Your changes will get effective immediately if you press OK.\nPlease type in short description of what you changed:")
+		buttonMsg = _("Warning! Your changes will get effective immediately if you press OK.\\nPlease type in short description of what you changed:")
+	} else {
+		buttonMsg = _("Please type in short description of what you changed:")
+	}
+	saveButtonFunction = "return confirmChangesAndEnterVersion(this, '" + buttonMsg + "')"
+	
+	
 	l.main_panel() {
 		div(class: "behavior-loading", _("LOADING"))
 		
 		include(my, "transient-job-fields")
 		
-		f.form(name: "config", action: "submitChildJobCreation", method: "post") {
+		ct.form(name: "config", action: "submitChildJobCreation", method: "post", onsubmit: saveButtonFunction) {
 			descriptor = my.descriptor
 			instance = my
 			
-			/*
-			if (my.isNameEditable()) {
-				f.entry(title: _(my.pronoun)) {
-					f.readOnlyTextbox(
-							name: "name", value: my.name, readonly: "readonly"
-					)
-				}
+			//Add an invisible versioning message box; this is filled with a value during form submission
+			f.invisibleEntry() {
+				f.textbox(name: "versionMessageString")
 			}
-			
-			f.invisibleEntry(title: _("Description"), help: app.markupFormatter.helpUrl) {
-				f.textarea(
-						codemirror_config: app.markupFormatter.codeMirrorConfig,
-						name: "description", value: my.description,
-						previewEndpoint: "/markupFormatter/previewDescription",
-						codemirror_mode: app.markupFormatter.codeMirrorMode
-				)
-			}
-			*/
 			
 			// Add the version-selection box
 			ct.colored_block(backCol: "Khaki", borderCol: "navy") {
