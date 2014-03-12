@@ -24,25 +24,21 @@ import java.util.LinkedList;
 
 versionsNotification = my.notifyOnCurrentVersionStatus()
 
-//warnings should be red
-if (versionsNotification.isHighlightWarning()) {
-		versionNotificationMessageStyleContent = "font-family:arial;color:red;font-size:16px;margin-left:10px;display:inline"	
-} else { //infos should be green
-	versionNotificationMessageStyleContent = "font-family:arial;color:green;font-size:16px;margin-left:10px;display:inline"
-}
-p(versionsNotification.getNotificationMessage(), style:versionNotificationMessageStyleContent)
-if (versionsNotification.getVersions().size() > 0) {
-	select(
-			id:"notificationVersionSelector",
-			style: "width:220px;overflow:hidden;margin-left:20px;display:inline",
-			name: "recommendedVersion",
-			onchange: "window.location = alterUrlToVersion(document.URL, this.options[this.selectedIndex].value)"
-		) {
-			option(value: "Select a recommended version", "Select a recommended version")
-			for (v in versionsNotification.getVersions()) {
-				option(value: v.id, v.id)
+h3(style: "color:darkgreen") {
+	span(versionsNotification.getNotificationMessage())
+	if (versionsNotification.getVersions().size() > 0) {
+		select(
+				id:"notificationVersionSelector",
+				style: "color:darkgreen",
+				name: "recommendedVersion",
+				onchange: "window.location = alterUrlToVersion(document.URL, this.options[this.selectedIndex].value)"
+			) {
+				option(value: "Select a recommended version", "Select a recommended version")
+				for (v in versionsNotification.getVersions()) {
+					option(value: v.id, v.id)
+				}
 			}
-		}
+	}
 }
 
 //JS function to alter the current URL with new versions

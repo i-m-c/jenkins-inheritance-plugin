@@ -49,10 +49,10 @@ l.layout(title: my.displayName) {
 		h1(my.pronoun + " " + my.displayName)
 		warnMessage = my.warnUserOnUnstableVersions();
 		if (null != warnMessage) {
-			p(warnMessage, style: "font-family:arial;color:red;font-size:16px;margin-left:10px;display:inline")
-			p() {
+			h3(style: "color:darkgreen") {
+				span(warnMessage)
+				br()
 				a(href:rootURL + "/job/" + my.displayName + "/showConfigureVersions",
-					style: "font-family:arial;color:red;font-size:16px;margin-left:10px;display:inline",
 					_("click here to change it"))
 			}
 		}
