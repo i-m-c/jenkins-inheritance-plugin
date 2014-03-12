@@ -4377,7 +4377,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		for (AbstractProjectReference apr : refs) {
 			InheritanceProject ip = apr.getProject();
 			if (ip == null) { continue; }
-			List<Builder> bLst = ip.getRawBuildersList().toList();
+			List<Builder> bLst = ip.getBuildersList(IMode.LOCAL_ONLY).toList();
 			if (clazz != null) {
 				List<Builder> bSubLst = new LinkedList<Builder>();
 				for (Builder b : bLst) {

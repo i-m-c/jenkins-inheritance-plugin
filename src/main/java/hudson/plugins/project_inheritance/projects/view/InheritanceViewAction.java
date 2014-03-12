@@ -154,6 +154,10 @@ public class InheritanceViewAction implements Action, Describable<InheritanceVie
 	// === REST API CALLS ===
 	
 	public ReadOnlyConfigurationArchive doDownload() {
+		Map<String, Long> versions = (build != null) ? build.getProjectVersions() : null;
+			if (versions != null) {
+			InheritanceProject.setVersioningMap(versions);
+		}
 		List<Builder> builders =
 				this.getProject().getBuildersList(IMode.INHERIT_FORCED).toList();
 		try {
