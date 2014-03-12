@@ -88,7 +88,7 @@ THE SOFTWARE.
 							<tr>
 								<!-- Project Name -->
 								<td class="pane">
-									<a href="${url}/job/${e.project.getFullName()}">
+									<a href="${rootURL}/job/${e.project.getFullName()}">
 										<st:out value="${e.project.getFullName()}"/>
 									</a>
 									<f:textbox

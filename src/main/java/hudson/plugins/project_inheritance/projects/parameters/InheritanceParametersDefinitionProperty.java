@@ -32,9 +32,12 @@ import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
+import hudson.plugins.project_inheritance.util.LimitedHashMap;
 import hudson.plugins.project_inheritance.util.Reflection;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -137,6 +140,8 @@ public class InheritanceParametersDefinitionProperty extends
 	
 	public static final String VERSION_PARAM_NAME = "JENKINS_JOB_VERSIONS";
 	
+	public static final Map<String, Map<String, Long>> decodedVersionMaps =
+			new LimitedHashMap<String, Map<String,Long>>(100);
 	
 	public static class ScopeEntry {
 		public final String owner;
@@ -433,12 +438,36 @@ public class InheritanceParametersDefinitionProperty extends
 	}
 	
 	public static Map<String, Long> decodeVersioningMap(String in) {
-		//Cleaning up
-		Map<String, Long> out = new HashMap<String, Long>();
+		//Sanity check
 		if (in == null || in.isEmpty()) {
 			return null;
 		}
-		String inMod = in.trim();
+		
+		//Check if we already have decoded that string recently
+		Map<String, Long> out = decodedVersionMaps.get(in);
+		if (out != null) {
+			//Making sure that the hashed entry is put to the front in LRU fashion
+			decodedVersionMaps.put(in, out);
+			return out;
+		} else {
+			out = new HashMap<String, Long>();
+		}
+		
+		//The input might've been URL encoded; decode these until the string is stable
+		String escaped = in;
+		String unescaped = in;
+		do {
+			unescaped = escaped;
+			try {
+				escaped = URLDecoder.decode(unescaped, "utf8");
+			} catch (UnsupportedEncodingException ex) {
+				escaped = unescaped;
+				break;
+			}
+		} while (!unescaped.equals(escaped));
+		
+		
+		String inMod = escaped.trim();
 		inMod = leftTrimP.matcher(inMod).replaceFirst("");
 		inMod = rightTrimP.matcher(inMod).replaceFirst("");
 		
@@ -460,6 +489,10 @@ public class InheritanceParametersDefinitionProperty extends
 				}
 			}
 		}
+		
+		//Buffering that entry
+		decodedVersionMaps.put(in, out);
+		
 		return out;
 	}
 	
