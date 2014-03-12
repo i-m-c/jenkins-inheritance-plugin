@@ -19,6 +19,7 @@
  */
 
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
@@ -94,7 +95,9 @@ l.layout(
 					div(id: "bottom-sticker") {
 						div(class: "bottom-sticker-inner") {
 							f.submit(value: _("Save"))
-							f.apply()
+							if (ProjectCreationEngine.instance.getEnableApplyButton()) {
+								f.apply()
+							}
 						}
 					}
 				}

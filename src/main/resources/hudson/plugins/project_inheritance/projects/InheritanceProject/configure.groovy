@@ -25,33 +25,5 @@ f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
-if (my.getIsTransient()) {
-	h1("Transient Job Configuration - " + my.getDisplayName())
-	
-	refURL = rootURL + "/job/" + my.getDisplayName() + "/showReferencedBy"
-	h3(style: "color:red") {
-		span("Please note that this view is a read only view of the job" +
-		" configuration. You cannot edit fields in this view. In order" +
-		" to change the displayed values, open the list of "
-		)
-		a(href: refURL, "references")
-	}
-	
-	script(
-			type:"text/javascript",
-			src: resURL + "/plugin/project-inheritance/scripts/markAllReadOnly.js"
-	)
-} else{
-	h1("Job Configuration - " + my.getDisplayName())
-	include(my, "notifications-on-versions")
-}
+include(my, "/form/configure")
 
-// Printing a humongous warning if the project has a cyclic dependency
-if (my.hasCyclicDependency()) {
-	h2(style: "color:red") {
-		span("This project has a")
-		a(style: "color:red", href: "http://en.wikipedia.org/wiki/Cycle_detection", "cyclic")
-		a(style: "color:red", href: "http://en.wikipedia.org/wiki/Diamond_problem", "diamond")
-		span("or repeated dependency!")
-	}
-}

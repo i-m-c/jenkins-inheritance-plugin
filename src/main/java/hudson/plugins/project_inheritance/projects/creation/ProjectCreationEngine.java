@@ -31,6 +31,7 @@ import hudson.model.AbstractDescribableImpl;
 import hudson.model.Describable;
 import hudson.model.Label;
 import hudson.model.ManagementLink;
+import hudson.model.Queue;
 import hudson.model.Saveable;
 import hudson.model.TopLevelItem;
 import hudson.model.Descriptor;
@@ -401,6 +402,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	protected boolean triggerOnChange = true;
 	protected boolean triggerOnStartup = true;
 	protected boolean copyOnRename = true;
+	protected boolean enableApplyButton = true;
 	protected String magicNodeLabelForTesting = null;
 	protected boolean unescapeEqualsCharInParams = false; 
 	
@@ -537,6 +539,12 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				this.copyOnRename = json.getBoolean("copyOnRename");
 			} catch (JSONException ex) {
 				this.copyOnRename = false;
+			}
+
+			try {
+				this.enableApplyButton = json.getBoolean("enableApplyButton");
+			} catch (JSONException ex) {
+				this.enableApplyButton = true;
 			}
 			
 			try {
@@ -1029,6 +1037,10 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	
 	public boolean getCopyOnRename() {
 		return this.copyOnRename;
+	}
+
+	public boolean getEnableApplyButton() {
+		return this.enableApplyButton;
 	}
 
 	public RenameRestriction getRenameRestrictionValue() {

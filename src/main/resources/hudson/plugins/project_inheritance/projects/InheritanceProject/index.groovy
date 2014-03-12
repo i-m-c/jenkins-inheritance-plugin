@@ -22,6 +22,7 @@ import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.TriggerInheritance;
+import hudson.plugins.project_inheritance.projects.InheritanceProject.VersionsNotification;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
@@ -46,6 +47,15 @@ l.layout(title: my.displayName) {
 	//Main panel with lots of plugin-contributed data
 	l.main_panel() {
 		h1(my.pronoun + " " + my.displayName)
+		warnMessage = my.warnUserOnUnstableVersions();
+		if (null != warnMessage) {
+			p(warnMessage, style: "font-family:arial;color:red;font-size:16px;margin-left:10px;display:inline")
+			p() {
+				a(href:rootURL + "/job/" + my.displayName + "/showConfigureVersions",
+					style: "font-family:arial;color:red;font-size:16px;margin-left:10px;display:inline",
+					_("click here to change it"))
+			}
+		}
 		
 		// Printing a humongous warning if the project has a cyclic dependency
 		if (my.hasCyclicDependency()) {

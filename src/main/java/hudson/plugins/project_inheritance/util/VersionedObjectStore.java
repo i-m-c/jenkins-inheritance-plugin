@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
@@ -398,6 +399,30 @@ public class VersionedObjectStore implements Serializable {
 		return this.store.lastKey();
 	}
 	
+	/**
+	 * gets all the more recent version ids since the sinceVersionId
+	 * @param sinceVersionId
+	 * @return
+	 */
+	public LinkedList<Version> getAllVersionsSince(Long sinceVersionId) {
+		LinkedList<Version> allVersionsSince = new LinkedList<Version>();
+		//TODO: Buffer the latest versions in some way
+		if (this.store == null || this.store.isEmpty()) {
+			return null;
+		}
+		//Trying to find the latest version marked as stable
+		NavigableSet<Version> descSet = this.store.descendingKeySet();
+		for (Version v : descSet) {
+			if (v.id <= sinceVersionId) {
+				break;
+			} else {
+				allVersionsSince.add(v);
+			}
+		}
+		//If none is found, just return the latest one
+		return allVersionsSince;
+	}
+
 	public Version getNearestTo(Long timestamp) {
 		Version best = null;
 		for (Version v : this.store.keySet()) {

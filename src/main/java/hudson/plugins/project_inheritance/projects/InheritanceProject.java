@@ -320,6 +320,89 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		LOCAL_ONLY, INHERIT_FORCED, AUTO;
 	}
 	
+	/**
+	 * A simple enum for the possible notifications a user can get on an inheritance
+	 * project configuration page.
+	 */
+	public static class VersionsNotification {
+		boolean isNewest;
+		boolean isStable;
+		boolean stablesBefore;
+		boolean stablesAfter;
+		private boolean highlightWarning = false;
+		private String notificationMessage;
+		public final List<Version> versions;
+
+		public VersionsNotification(boolean isNewest,
+									boolean isStable,
+									boolean stablesBefore,
+									boolean stablesAfter,
+									List<Version> versions) {
+			this.isNewest = isNewest;
+			this.isStable = isStable;
+			this.stablesBefore = stablesBefore;
+			this.stablesAfter = stablesAfter;
+			this.versions = versions;
+			if (false == isNewest &&
+					true == isStable &&
+						true == stablesBefore &&
+							true == stablesAfter) {
+				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_OLDER_STABLE_VERSION();
+				highlightWarning = true;
+			} else if (false == isNewest &&
+						false == isStable &&
+							true == stablesBefore &&
+								true == stablesAfter) {
+				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_UNSTABLE_VERSION_BUT_STABLE_AVAILABLE();
+				highlightWarning = true;
+			} else if (false == isNewest &&
+						false == isStable &&
+							false == stablesBefore &&
+								false == stablesAfter) {
+				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_UNSTABLE_VERSION_BUT_MORE_UNSTABLE_AVAILABLE();
+				highlightWarning = true;
+			} else if (false == isNewest &&
+						true== isStable &&
+							true == stablesBefore &&
+								false == stablesAfter) {
+				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_LATEST_STABLE_VERSION();
+			} else if (true == isNewest &&
+						false == isStable &&
+							false == stablesBefore &&
+								false == stablesAfter) {
+				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_IMPLICIT_STABLE_VERSION();
+			} else if (true == isNewest &&
+						true == isStable &&
+							false == stablesBefore &&
+								false == stablesAfter) {
+				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_LATEST_STABLE_AND_LAST_VERSION();
+			}
+		}
+
+		public boolean isNewest() {
+			return isNewest;
+		}
+
+		public boolean isStable() {
+			return isStable;
+		}
+
+		public boolean isStablesAfter() {
+			return stablesAfter;
+		}
+		
+		public String getNotificationMessage() {
+			return notificationMessage;
+		}
+		
+		public List<Version> getVersions() {
+			return versions;
+		}
+
+		public boolean isHighlightWarning() {
+			return highlightWarning;
+		}
+	}
 	
 	// === PRIVATE/PROTECTED STATIC FIELDS ===
 	
@@ -846,7 +929,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 	}
 	
-	
 	/**
 	 * This method is called after a save to restructure the dependency graph.
 	 * The triggering method is
@@ -1169,7 +1251,127 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return b.toString();
 	}
 	
-	
+	public String warnUserOnUnstableVersions() {
+		String warnMessage = null;
+		if (this.isAbstract) {
+			Deque<Version> stableVersions = getStableVersions();
+			Long latestVersion = getLatestVersion();
+			if (stableVersions.size() > 0) {
+				if (!this.versionStore.getVersion(latestVersion).getStability()) {
+					warnMessage = Messages.InheritanceProject_OlderVersionMarkedAsStable();
+				}
+			} else {
+				warnMessage = Messages.InheritanceProject_NoVersionMarkedAsStable();
+			}
+		}
+		return warnMessage;
+	}
+
+	/**
+	 * @return True or False, depending if all versions of the project are unstable,
+	 * meaning no version has been marked as stable
+	 */
+	public boolean areAllVersionsUnstable() {
+		VersionsNotification notifyOnCurrentVersionStatus = notifyOnCurrentVersionStatus();
+		if ((notifyOnCurrentVersionStatus.isNewest &&
+				!notifyOnCurrentVersionStatus.isStable &&
+				!notifyOnCurrentVersionStatus.stablesBefore &&
+				!notifyOnCurrentVersionStatus.stablesAfter) ||
+			!notifyOnCurrentVersionStatus.isNewest &&
+				!notifyOnCurrentVersionStatus.isStable &&
+				!notifyOnCurrentVersionStatus.stablesBefore &&
+				!notifyOnCurrentVersionStatus.stablesAfter) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * This method notifies the user on what type of version is he currently
+	 * editing:
+	 * 1. user is editing an unstable version (Warning)
+	 * 2. user is editing the last stable version which is not the last version (Warning)
+	 * 3. user is editing the last stable version which is the last version (Info)
+	 * 4. user is editing some stable version which is not the latest stable version (Warning)
+	 * @return
+	 */
+	public VersionsNotification notifyOnCurrentVersionStatus() {
+		VersionsNotification versionsNotification = null;
+		LinkedList<Version> versions = new LinkedList<Version>();
+		
+		Long latestVersionId = getLatestVersion();
+		Long latestStableVersionId = getStableVersion();
+		Long userSelectedVersionId = getUserDesiredVersion();
+		Version stableVersion = versionStore.getVersion(latestStableVersionId);
+
+		/*	user 
+		 *		didn't select the latest stable version
+		 *	and
+		 *		latest version is marked as stable
+		 */
+		if (userSelectedVersionId != latestStableVersionId && stableVersion.getStability()) {
+			Version userDesiredVersion = versionStore.getVersion(userSelectedVersionId);
+			versions.add(versionStore.getVersion(latestStableVersionId));
+			//at this point of check user selected an older stable version
+			if (userDesiredVersion.getStability()) {
+				versionsNotification = new VersionsNotification(
+						//VersionsNotification.Type.EDITING_OLDER_STABLE_VERSION,
+						false, true, true, true,
+						versions);
+			} else { //at this point of check user selected an older unstable version
+				versionsNotification = new VersionsNotification(
+						//VersionsNotification.Type.EDITING_UNSTABLE_VERSION_BUT_STABLE_AVAILABLE,
+						false, false, true, true,
+						versions);
+			}
+		} else if (userSelectedVersionId != latestStableVersionId && !stableVersion.getStability()) {
+			/*	there are no stable versions
+			 *		and 
+			 *			this is the case where the user choose an old version
+			 *			from all the unstable versions
+			 */
+			versions = this.versionStore.getAllVersionsSince(userSelectedVersionId);
+			versionsNotification = new VersionsNotification(
+					//VersionsNotification.Type.EDITING_UNSTABLE_VERSION_BUT_MORE_UNSTABLE_AVAILABLE,
+					false, false, false, false,
+					versions);
+		} else {
+			/*
+			 * at this point
+			 * user selected latest stable version
+			 * 		but
+			 * 			not the latest version
+			 */
+			if (latestVersionId != latestStableVersionId) {
+				versions = this.versionStore.getAllVersionsSince(userSelectedVersionId);
+				versionsNotification = new VersionsNotification(
+						//VersionsNotification.Type.EDITING_LATEST_STABLE_VERSION,
+						false, true, true, false,
+						versions);
+			} else {
+				//this.versionStore.getLatestStable() in case no version is stable
+				//returns as default the latest version, even if not marked as stable
+				//by user, so we treat this special case letting the user know
+				//there is no marked as stable version, but the last one is considered
+				//as stable
+				if (this.versionStore != null) {
+					Version v = this.versionStore.getLatestStable();
+					if (null == v || !v.getStability()) {
+						versionsNotification = new VersionsNotification(
+								//VersionsNotification.Type.EDITING_IMPLICIT_STABLE_VERSION,
+								true, false, false, false,
+								versions);
+					} else {
+						versionsNotification = new VersionsNotification(
+								//VersionsNotification.Type.EDITING_LATEST_STABLE_AND_LAST_VERSION,
+								true, true, false, false,
+								versions);
+					}
+				}
+			}
+		}
+		return versionsNotification;
+	}
 	
 	// === DIFF COMPUTATION METHODS ===
 	
@@ -2080,6 +2282,25 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lst;
 	}
 	
+	public Deque<Version> getStableVersions() {
+		Object obj = onSelfChangeBuffer.get(this, "getStableVersions()");
+		if (obj != null && obj instanceof Deque) {
+			return (Deque) obj;
+		}
+
+		LinkedList<Version> lst = new LinkedList<Version>();
+		if (this.versionStore == null) {
+			return lst;
+		}
+		for (Version version : this.versionStore.getAllVersions()) {
+			if (version.getStability()) {
+				lst.add(version);
+			}
+		}
+		onSelfChangeBuffer.set(this, "getStableVersions()", lst);
+		return lst;
+	}
+
 	public VersionedObjectStore getVersionedObjectStore() {
 		return this.versionStore;
 	}
