@@ -25,7 +25,6 @@ import hudson.Util;
 import hudson.model.Action;
 import hudson.model.Describable;
 import hudson.model.ParameterValue;
-import hudson.model.AbstractProject;
 import hudson.model.Descriptor;
 import hudson.model.ParameterDefinition;
 import hudson.model.StringParameterValue;
