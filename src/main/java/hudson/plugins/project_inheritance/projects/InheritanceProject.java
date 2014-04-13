@@ -3612,41 +3612,43 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * {@inheritDoc}
 	 * <p>
-	 * As usual, this method might return the full set of labels returned via
-	 * inheritance, or just the locally defined labels; depending on the
-	 * method that calls it.
-	 * <br>
-	 * Additionally, this method usually generates a label from scratch
-	 * whenever it is called. There is only one exception to this rule, 
-	 * namely when {@link Queue#maintain()} calls this function.
-	 * <br>
-	 * In that case, it instead returns a value that was cached value with
-	 * full inheritance. This is potentially imprecise; as it ignores any
-	 * possible versioning and always chooses "stable" versions.
+	 * Contrary to all the other properties methods, this will ALWAYS return
+	 * the fully inherited version and will cache the result.
+	 * <br/>
+	 * This is done, because the only time when no inheritance is needed, is
+	 * when the project is configured, and this will call
+	 * {@link #getAssignedLabel(IMode)} instead with the {@link IMode#LOCAL_ONLY}
+	 * set.
 	 * <p>
-	 * The reason why this downside is accepted is because {@link Queue#maintain()}
-	 * calls this method quite often, depending on how much tasks are
-	 * pending in the Queue. This can potentially slow down maintenance
-	 * so that it takes tens of seconds.
+	 * The reason for the caching is, that this method is called quite often
+	 * by {@link Queue#maintain()}, a function that potentially blocks the
+	 * entire server from progressing with builds.
+	 * <br/>
+	 * Thus, this method must take the minimum possible amount of time, which
+	 * means that reflection is to expensive, as well as generating the label
+	 * from scratch.
+	 * <p>
+	 * This has the downside of this method ignoring versioning completely,
+	 * which might affect the result of this call through changing the
+	 * inheritance.
+	 * This is an accepted break, compared to the potential slowdown of
+	 * {@link Queue#maintain()}.
 	 */
 	public Label getAssignedLabel() {
-		//Check if build is called from Queue.maintain()
-		boolean isMaint = Reflection.calledFromMethod(
-				Queue.class, "maintain"
-		);
-		if (isMaint) {
-			//Check if there's a cached value
-			Object cached = onChangeBuffer.get(this, "maintenanceAssignedLabel");
-			if (cached != null && cached instanceof Label) {
-				return (Label) cached;
-			}
+		//Check if there's a cached value
+		Object cached = onChangeBuffer.get(this, "maintenanceAssignedLabel");
+		if (cached != null && cached instanceof Label) {
+			return (Label) cached;
 		}
 		
-		Label lbl = this.getAssignedLabel(IMode.AUTO);
+		//Generate a new label, forcing inheritance
+		Label lbl = this.getAssignedLabel(IMode.INHERIT_FORCED);
 		if (lbl == null) {
 			lbl = super.getAssignedLabel();
 		}
-		if (lbl != null && isMaint) {
+		
+		//Caching the result
+		if (lbl != null) {
 			onChangeBuffer.set(this, "maintenanceAssignedLabel", lbl);
 		}
 		return lbl;

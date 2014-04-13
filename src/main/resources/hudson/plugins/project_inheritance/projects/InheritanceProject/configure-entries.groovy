@@ -21,9 +21,11 @@
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 
-f = namespace(lib.FormTagLib);
-l = namespace(lib.LayoutTagLib);
-ct = namespace(lib.CustomTagLib);
+f = namespace(lib.FormTagLib)
+l = namespace(lib.LayoutTagLib)
+ct = namespace(lib.CustomTagLib)
+
+p = namespace("/lib/hudson/project")
 
 
 include(my, "transient-job-fields")
@@ -88,7 +90,20 @@ ct.colored_block(backCol: "LightGreen", borderCol: "navy") {
 	include(my, "configure-inheritance")
 }
 
+
+//Now, the base configuration; we copy it instead of reference it, to make sure
+//that labels can be generated quickly
 f.section(title: _("Base Project Configuration")) {
-	include(my, "/hudson/model/Project/configure-entries")
+	//include(my, "/hudson/model/Project/configure-entries")
+	
+	include(my, "base/configure-base-settings")
+
+	p.config_trigger() {
+		p.config_upstream_pseudo_trigger()
+	}
+
+	p.config_buildWrappers()
+	p.config_builders()
+	p.config_publishers2()
 }
 
