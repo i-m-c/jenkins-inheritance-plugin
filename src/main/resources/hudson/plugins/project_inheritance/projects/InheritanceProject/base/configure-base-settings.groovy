@@ -76,4 +76,4 @@ f.section(title: _("Advanced Project Options")) {
 	}
 }
 
-this.configure_scm()
+p.config_scm()
