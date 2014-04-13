@@ -4455,8 +4455,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				continue;
 			}
 			
-			//If the PD is seen again, we verify if the restrictions fit
-			if (!s.hasToBeOfThisClass.isAssignableFrom(pd.getClass())) {
+			/* Check if the scoped forms can be cast in at least one direction,
+			 * which means that they share parenthood.
+			 * This avoids an IntegerParamer becoming a StringParameter, but
+			 * allows a PasswordParameter to merge with a StringParameter.
+			 */
+			boolean isScopeCastToCurrent = pd.getClass().isAssignableFrom(s.hasToBeOfThisClass);
+			boolean isCurrentCastToScope = s.hasToBeOfThisClass.isAssignableFrom(pd.getClass());
+			if (!(isScopeCastToCurrent || isCurrentCastToScope)) {
 				return new AbstractMap.SimpleEntry<Boolean, String>(
 						false, "Parameter '" + pd.getName() +
 						"' redefined with different class name."
