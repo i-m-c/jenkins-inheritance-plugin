@@ -88,7 +88,7 @@ l.layout(title: my.displayName) {
 			h2(style: "color:red", "This project has a parameter inconsistency!")
 			span("Reason: " + paramCheck.getValue())
 		}
-
+		
 		//Printing invalid project references
 		for (i in my.getProjectReferenceIssues()) {
 			h3(style: "color:red", i)
@@ -96,6 +96,8 @@ l.layout(title: my.displayName) {
 		
 		//Inject main index page contents from supertype
 		t.editableDescription(permission: my.CONFIGURE)
+		include(my, "inheritanceParameters")
+		
 		include(my, "jobpropertysummaries")
 		include(my, "main")
 		include(my, "permalinks")
