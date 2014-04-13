@@ -79,6 +79,21 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 		return projectVersions;
 	}
 	
+	private void setVersions() {
+		Map<String, Long> versions = getProjectVersions();
+		if (versions != null) {
+			//Set the normal versioning (will not register values in thread)
+			InheritanceProject.setVersioningMap(versions);
+			//Save the versioning also in the local thread, since by this point
+			//we might not have an HTTPRequest to use as a storage anymore
+			InheritanceProject.setVersioningMapInThread(versions);
+		}
+	}
+	
+	private void unsetVersions() {
+		InheritanceProject.unsetVersioningMap();
+	}
+	
 	
 	/**
 	 * This method schedules the execution of this build object.
@@ -93,15 +108,11 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	@SuppressWarnings("unchecked")
 	public void run() {
 		//Making sure that we set the desired versions correctly
-		Map<String, Long> versions = getProjectVersions();
-		if (versions != null) {
-			InheritanceProject.setVersioningMap(versions);
-		}
+		this.setVersions();
 		try {
 			super.execute(new InheritanceBuildExecution());
 		} finally {
-			//At the end; remove the versioning data stored in the current thread
-			ThreadAssocStore.getInstance().clear(Thread.currentThread());
+			this.unsetVersions();
 		}
 	}
 	
@@ -123,34 +134,40 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			}
 			InheritanceBuild build = (InheritanceBuild) run;
 			
-			/* Check if all the parameters were set right; and somebody did not
-			 * forget to set a parameter correctly.
-			 */
-			List<ParametersAction> actions =
-					build.getActions(ParametersAction.class);
-			
-			for (ParametersAction pa : actions) {
-				for (ParameterValue pv : pa.getParameters()) {
-					if (!(pv instanceof InheritableStringParameterValue)) {
-						continue;
-					}
-					InheritableStringParameterValue ispv =
-							(InheritableStringParameterValue) pv;
-					//Check if a value should've been set, but was not
-					if (!ispv.getMustHaveValueSet()) { continue; }
-					if (ispv.value == null || ispv.value.isEmpty()) {
-						//We detected an invalid value
-						listener.fatalError(String.format(
-								"Parameter '%s' has no value, but was required to be set. Aborting!",
-								ispv.getName()
-						));
-						throw new RunnerAbortedException();
+			//Fetch the versions that are desired and save them into the
+			//current thread
+			build.setVersions();
+			try {
+				/* Check if all the parameters were set right; and somebody did not
+				 * forget to set a parameter correctly.
+				 */
+				List<ParametersAction> actions =
+						build.getActions(ParametersAction.class);
+				
+				for (ParametersAction pa : actions) {
+					for (ParameterValue pv : pa.getParameters()) {
+						if (!(pv instanceof InheritableStringParameterValue)) {
+							continue;
+						}
+						InheritableStringParameterValue ispv =
+								(InheritableStringParameterValue) pv;
+						//Check if a value should've been set, but was not
+						if (!ispv.getMustHaveValueSet()) { continue; }
+						if (ispv.value == null || ispv.value.isEmpty()) {
+							//We detected an invalid value
+							listener.fatalError(String.format(
+									"Parameter '%s' has no value, but was required to be set. Aborting!",
+									ispv.getName()
+							));
+							throw new RunnerAbortedException();
+						}
 					}
 				}
+				//Call the regular build response
+				return super.doRun(listener);
+			} finally {
+				build.unsetVersions();
 			}
-			
-			//Call the regular build response
-			return super.doRun(listener);
 		}
 		
 		/**

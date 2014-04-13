@@ -71,7 +71,6 @@ import hudson.plugins.project_inheritance.projects.references.ProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
 import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
 import hudson.plugins.project_inheritance.util.Helpers;
-import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.plugins.project_inheritance.util.TimedBuffer;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore;
@@ -1052,14 +1051,34 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * 
 	 * @return raw XML string
 	 */
-	public String doGetConfigAsXML() {
-		Object obj = onSelfChangeBuffer.get(this, "doGetConfigAsXML");
-		if (obj != null && obj instanceof String) {
-			return (String) obj;
+	public String doGetConfigAsXML(StaplerRequest req, StaplerResponse rsp) {
+		//Check if the user only wants the local data
+		String depth = req.getParameter("depth");
+		int iDepth = 0;
+		if (depth != null && !depth.isEmpty()) {
+			try {
+				iDepth = Integer.valueOf(depth);
+			} catch (NumberFormatException ex) { }
 		}
-		String str = Jenkins.XSTREAM2.toXML(this);
-		onSelfChangeBuffer.set(this, "doGetConfigAsXML", str);
-		return str;
+		if (iDepth <= 0) {
+			Object obj = onSelfChangeBuffer.get(this, "doGetConfigAsXML");
+			if (obj != null && obj instanceof String) {
+				return (String) obj;
+			}
+			String str = Jenkins.XSTREAM2.toXML(this);
+			onSelfChangeBuffer.set(this, "doGetConfigAsXML", str);
+			return str;
+		} else {
+			Map<String, InheritanceProject> projs = new LinkedHashMap();
+			for (AbstractProjectReference apr : this.getAllParentReferences(SELECTOR.BUILDER)) {
+				InheritanceProject ip = apr.getProject();
+				if (ip == null) { continue; }
+				projs.put(ip.getFullName(), ip);
+			}
+			//Adding ourselves last
+			projs.put(this.getFullName(), this);
+			return Jenkins.XSTREAM2.toXML(projs);
+		}
 	}
 	
 	/**
@@ -1497,7 +1516,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public void doBuild(StaplerRequest req, StaplerResponse rsp, @QueryParameter TimeDuration delay)
 			throws IOException, ServletException {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.getInstance().clear(Thread.currentThread());
+		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//The delay parameter might be null in case somebody used a custom URL
 		if (delay == null) {
@@ -1579,7 +1598,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public void doBuildSpecificVersion(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.getInstance().clear(Thread.currentThread());
+		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//If we did not submit a form; just display the initial data
 		if(!req.getMethod().equals("POST")) {
@@ -1619,7 +1638,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public void doBuildWithParameters(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.getInstance().clear(Thread.currentThread());
+		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//TODO: The below function did not have the TimeDuration param previously
 		TimeDuration td = new TimeDuration(0);
@@ -1632,7 +1651,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	public QueueTaskFuture<InheritanceBuild> scheduleBuild2(
 			int quietPeriod, Cause c, Collection<? extends Action> actions) {
 		//Purge whatever's stored in the thread from a previous run
-		ThreadAssocStore.getInstance().clear(Thread.currentThread());
+		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//Checking if a version-setting action is present,
 		boolean hasVersioningAction = false;
@@ -3851,13 +3870,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	public static void setVersioningMap(Map<String, Long> map) {
 		StaplerRequest req = Stapler.getCurrentRequest();
+		//Saving the versioning map into the current request
 		if (req != null) {
-			//Saving the versioning to the request
 			req.setAttribute("versions", map);
 			//Removing the versioning buffer
 			req.removeAttribute("versionedObjectBuffer");
 		}
-		//Setting the versioning for the current thread; just to be sure
+	}
+	
+	public static void setVersioningMapInThread(Map<String, Long> map) {
+		//Setting the versioning for the current thread, in case the request is unavailable
 		ThreadAssocStore.getInstance().setValue("versions", map);
 	}
 	
@@ -3869,8 +3891,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			//Removing the versioning buffer
 			req.removeAttribute("versionedObjectBuffer");
 		}
-		//Setting the versioning for the current thread; just to be sure
-		ThreadAssocStore.getInstance().setValue("versions", null);
+		//Unsetting the versioning in the thread (in case it was set)
+		ThreadAssocStore.getInstance().clear("versions");
 	}
 	
 	
