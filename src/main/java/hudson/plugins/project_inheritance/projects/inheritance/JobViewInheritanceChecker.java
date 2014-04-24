@@ -18,9 +18,9 @@ public class JobViewInheritanceChecker extends RequestInheritanceChecker {
 
     private static final String JOB_RUN_PAGE_REGEX         = "[0-9]+/.*";
 
-    private static final String TEST_TREND_GRAPH_REGEX     = "test/trend";
+    private static final String TEST_TREND_GRAPH_REGEX     = "test/trend(Map)?";
 
-    private static final String FINDBUGS_TREND_GRAPH_REGEX = "findbugs/trendGraph/png";
+    private static final String FINDBUGS_TREND_GRAPH_REGEX = "findbugs/trendGraph/(png|map)";
 
     private static final String JACOCO_TREND_GRAPH_REGEX   = "jacoco/graph";
 

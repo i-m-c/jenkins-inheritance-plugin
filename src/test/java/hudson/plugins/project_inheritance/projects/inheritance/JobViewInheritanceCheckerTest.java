@@ -28,7 +28,7 @@ public class JobViewInheritanceCheckerTest {
         boolean result = checker.isInheritanceRequired(requestUri);
         assertFalse(result);
     }
-    
+
     @Test
     public void isInheritanceRequired_specificBuildSubpageURI_retunsTrue() {
         JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
@@ -36,7 +36,7 @@ public class JobViewInheritanceCheckerTest {
         boolean result = checker.isInheritanceRequired(requestUri);
         assertTrue(result);
     }
-    
+
     @Test
     public void isInheritanceRequired_jobMainPageURI_retunsTrue() {
         JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
@@ -44,7 +44,7 @@ public class JobViewInheritanceCheckerTest {
         boolean result = checker.isInheritanceRequired(requestUri);
         assertTrue(result);
     }
-    
+
     @Test
     public void isInheritanceRequired_testTrendChartURI_retunsTrue() {
         JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
@@ -52,7 +52,15 @@ public class JobViewInheritanceCheckerTest {
         boolean result = checker.isInheritanceRequired(requestUri);
         assertTrue(result);
     }
-    
+
+    @Test
+    public void isInheritanceRequired_testTrendLazyMapURI_retunsTrue() {
+        JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
+        String requestUri = "http://server_name/job/JobName/test/trendMap";
+        boolean result = checker.isInheritanceRequired(requestUri);
+        assertTrue(result);
+    }
+
     @Test
     public void isInheritanceRequired_findbugsTrendChartURI_retunsTrue() {
         JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
@@ -60,6 +68,15 @@ public class JobViewInheritanceCheckerTest {
         boolean result = checker.isInheritanceRequired(requestUri);
         assertTrue(result);
     }
+
+    @Test
+    public void isInheritanceRequired_findbugsTrendLazyMapURI_retunsTrue() {
+        JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
+        String requestUri = "http://server_name/job/JobName/findbugs/trendGraph/map";
+        boolean result = checker.isInheritanceRequired(requestUri);
+        assertTrue(result);
+    }
+
     @Test
     public void isInheritanceRequired_jacocoTrendChartURI_retunsTrue() {
         JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
@@ -67,7 +84,7 @@ public class JobViewInheritanceCheckerTest {
         boolean result = checker.isInheritanceRequired(requestUri);
         assertTrue(result);
     }
-    
+
     @Test
     public void isInheritanceRequired_otherJobSubpageURI_retunsFalse() {
         JobViewInheritanceChecker checker = new JobViewInheritanceChecker();
