@@ -143,6 +143,7 @@ import net.sf.json.JSONException;
 import net.sf.json.JSONObject;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.HttpResponses;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
@@ -578,20 +579,17 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		HashMap<String, InheritanceProject> pMap =
 				new HashMap<String, InheritanceProject>();
-		for (AbstractProject p : Hudson.getInstance().getAllItems(AbstractProject.class)) {
-			// We ensure that we may only inherit from actually inheritable,
-			// non-transient projects
-			if (p instanceof InheritanceProject) {
-				pMap.put(p.getName(), (InheritanceProject) p);
-			}
+		for (InheritanceProject p : Hudson.getInstance().getAllItems(InheritanceProject.class)) {
+			pMap.put(p.getName(), (InheritanceProject) p);
 		}
 		
 		onChangeBuffer.set(null, "getProjectsMap", pMap);
 		return pMap;
 	}
 	
-	public static InheritanceProject getProjectByName(String name) {
-		TopLevelItem item = Jenkins.getInstance().getItem(name);
+	public static InheritanceProject getProjectByName(ItemGroup context, String name) {
+        if (context == null) context = Jenkins.getInstance();
+		Item item = context.getItem(name);
 		if (item instanceof InheritanceProject) {
 			return (InheritanceProject) item;
 		}
@@ -2040,7 +2038,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 		ip = null;
 		if (jobName != null) {
-			ip = InheritanceProject.getProjectByName(jobName);
+			ip = InheritanceProject.getProjectByName(req.findAncestorObject(ItemGroup.class), jobName);
 		}
 		return ip;
 	}
@@ -4745,10 +4743,10 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return this.doFillCreationClassItems();
 		}
 	
-		public ListBoxModel doFillUserDesiredVersionItems() {
+		public ListBoxModel doFillUserDesiredVersionItems(@AncestorInPath ItemGroup context) {
 			ListBoxModel verBox = new ListBoxModel();
 			
-			InheritanceProject ip = this.getConfiguredProject();
+			InheritanceProject ip = this.getConfiguredProject(context, Stapler.getCurrentRequest());
 			if (ip != null) {
 				for (Long version : ip.getVersionIDs()) {
 					verBox.add(version.toString());
@@ -4768,14 +4766,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		 * to check for the name of the project under configuration.
 		 * It then tries to retrieve the object associated with that name.
 		 */
-		public InheritanceProject getConfiguredProject(StaplerRequest req) {
+		public InheritanceProject getConfiguredProject(ItemGroup context, StaplerRequest req) {
 			//Fetching the current request from the user
 			if (req == null) { return null; }
 			
 			//Then, trying to fetch an ancestor
-			InheritanceProject ip = req.findAncestorObject(
-					InheritanceProject.class
-			);
+			InheritanceProject ip = req.findAncestorObject(InheritanceProject.class);
 			if (ip != null) {
 				return ip;
 			}
@@ -4789,13 +4785,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			if (pName == null || pName.length() == 0) { return null; }
 			
 			//Now that we have the name, we try to match it to a Project
-			return InheritanceProject.getProjectByName(pName);
+			return InheritanceProject.getProjectByName(context, pName);
 		}
-		
-		protected InheritanceProject getConfiguredProject() {
-			return this.getConfiguredProject(Stapler.getCurrentRequest());
-		}
-		
+
 		public synchronized void addProjectToBeCreatedTransient(String name) {
 			//TODO: Do not allow this set to grow too long in case of error
 			this.projectsToBeCreatedTransient.add(name);
