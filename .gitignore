@@ -6,4 +6,6 @@ work
 .project
 .settings
 .classpath
+.idea/
+*.iml
 /bin
