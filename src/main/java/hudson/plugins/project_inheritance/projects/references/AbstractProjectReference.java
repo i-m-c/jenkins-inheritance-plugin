@@ -23,6 +23,7 @@ package hudson.plugins.project_inheritance.projects.references;
 import hudson.DescriptorExtensionList;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
+import hudson.model.ItemGroup;
 import hudson.model.ParameterDefinition;
 import hudson.model.Project;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
@@ -40,6 +41,7 @@ import java.util.regex.Pattern;
 
 import jenkins.model.Jenkins;
 
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.export.ExportedBean;
@@ -288,12 +290,12 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 			return FormValidation.ok();
 		}
 		
-		public ListBoxModel doFillNameItems(@QueryParameter String name) {
+		public ListBoxModel doFillNameItems(@AncestorInPath ItemGroup context, @QueryParameter String name) {
 			TreeSet<String> projNames = new TreeSet<String>();
 			for (InheritanceProject ip : InheritanceProject.getProjectsMap().values()) {
 				//We ensure that both are compatible
 				if (this.projectIsCompatible(ip)) {
-					projNames.add(ip.getName());
+					projNames.add(ip.getRelativeNameFrom(context));
 				}
 			}
 			//Adding the previous definition; if any is already present
