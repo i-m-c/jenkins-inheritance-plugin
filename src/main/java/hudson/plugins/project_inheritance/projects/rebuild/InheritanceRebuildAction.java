@@ -26,6 +26,8 @@ import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParametersAction;
+import hudson.model.StringParameterDefinition;
+import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
@@ -33,15 +35,18 @@ import hudson.plugins.project_inheritance.projects.parameters.InheritanceParamet
 import hudson.plugins.project_inheritance.util.Reflection;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.servlet.ServletException;
 
 import jenkins.util.TimeDuration;
-
 import net.sf.json.JSONArray;
 import net.sf.json.JSONException;
 import net.sf.json.JSONObject;
@@ -192,8 +197,9 @@ public class InheritanceRebuildAction implements Action {
 		List<ParameterDefinition> modLst =
 				new LinkedList<ParameterDefinition>();
 		
-		//Then, we adjust their default values, to reflect those actually set
+		//Adjust their default values, to reflect those actually set
 		//for the previous job
+		Set<String> handledVars = new HashSet<String>();
 		for (ParameterDefinition pd : pdLst) {
 			//Check if that definition has the "hidden" property set
 			if (showHidden != null) {
@@ -201,6 +207,7 @@ public class InheritanceRebuildAction implements Action {
 				boolean isHidden = (o != null && o instanceof Boolean && (Boolean)o);
 				if (showHidden && ! isHidden || !showHidden && isHidden) {
 					//Ignore this entry
+					handledVars.add(pd.getName());
 					continue;
 				}
 			}
@@ -209,11 +216,40 @@ public class InheritanceRebuildAction implements Action {
 			if (pv == null) {
 				//Using regular default valued definition
 				modLst.add(pd);
+				handledVars.add(pd.getName());
 				continue;
 			}
 			//Otherwise, we fetch&add a copy with a new default value
 			modLst.add(pd.copyWithDefaultValue(pv));
+			handledVars.add(pv.getName());
 		}
+		
+		//Now, at last, we create StringParameterValues for all variables not
+		//covered by ParameterDefinitions from the job (i.e. dynamically contributed vars)
+		//NOTE: Dynamically allocated variables are ALWAYS hidden
+		if (showHidden != null && showHidden) {
+			for (ParameterValue pv : map.values()) {
+				//Ignore params that were already added above
+				if (handledVars.contains(pv.getName())) { continue; }
+				//Ignore those, that are not strings
+				if (!(pv instanceof StringParameterValue)) { continue; }
+				StringParameterValue spv = (StringParameterValue) pv;
+				
+				modLst.add(new StringParameterDefinition(spv.getName(), spv.value));
+			}
+		}
+		
+		//Sort the modified list by name
+		Collections.sort(modLst, new Comparator<ParameterDefinition>() {
+			@Override
+			public int compare(ParameterDefinition o1, ParameterDefinition o2) {
+				if (o1 == null && o2 == null) { return 0; }
+				if (o1 == null) { return -1; }
+				if (o2 == null) { return 1; }
+				return o1.getName().compareTo(o2.getName());
+			}
+		});
+		
 		//And finally, we return the tweaked list of entries
 		return modLst;
 	}

@@ -30,6 +30,7 @@ import hudson.model.Job;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
+import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
@@ -284,11 +285,20 @@ public class InheritanceParametersDefinitionProperty extends
 				String name = jo.getString("name");
 				
 				ParameterDefinition d = this.getParameterDefinition(name);
-				if (d == null) {
-					throw new IllegalArgumentException("No such parameter definition: " + name);
+				ParameterValue parameterValue;
+				if (d != null) {
+					parameterValue = d.createValue(req, jo);
+				} else if (jo.has("value")) {
+					//Create an SPV
+					parameterValue = new StringParameterValue(
+							name, jo.getString("value")
+					);
+				} else {
+					throw new IllegalArgumentException(
+							"No such parameter definition and also not a string parameter: " + name);
 				}
-				ParameterValue parameterValue = d.createValue(req, jo);
 				values.add(parameterValue);
+				
 			}
 		}
 
