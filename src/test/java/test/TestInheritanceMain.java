@@ -202,8 +202,6 @@ public class TestInheritanceMain extends HudsonTestCase {
 	}
 
 	protected boolean canRunTests() {
-		return true;
-		/*
 		VersionNumber v = Jenkins.getVersion();
 		if (v.isOlderThan(new VersionNumber("1.520"))) {
 			//On Windows, these test cases fail during tearDown() in Jenkins < 1.520
@@ -212,7 +210,6 @@ public class TestInheritanceMain extends HudsonTestCase {
 			}
 		}
 		return true;
-		*/
 	}
 	
 	// === TEST EXECUTION ===
