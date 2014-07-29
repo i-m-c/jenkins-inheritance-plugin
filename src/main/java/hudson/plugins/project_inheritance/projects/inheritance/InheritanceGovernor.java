@@ -24,10 +24,10 @@ import hudson.ExtensionList;
 import hudson.cli.BuildCommand;
 import hudson.model.Build;
 import hudson.model.Describable;
+import hudson.model.Queue;
 import hudson.model.Saveable;
 import hudson.model.Descriptor;
 import hudson.model.Project;
-import hudson.model.Queue;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
@@ -35,6 +35,7 @@ import hudson.plugins.project_inheritance.projects.references.ProjectReference.P
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
 import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.scm.SCM;
+import hudson.tasks.BuildStep;
 import hudson.tasks.BuildTrigger;
 import hudson.triggers.Trigger;
 import hudson.util.DescribableList;
@@ -444,7 +445,7 @@ public abstract class InheritanceGovernor<T> {
 		if (Reflection.calledFromClass(
 				Build.class, BuildCommand.class,
 				Queue.class, BuildTrigger.class,
-				Trigger.class
+				Trigger.class, BuildStep.class
 			) ||
 			Reflection.calledFromMethod(
 					InheritanceProject.class,
