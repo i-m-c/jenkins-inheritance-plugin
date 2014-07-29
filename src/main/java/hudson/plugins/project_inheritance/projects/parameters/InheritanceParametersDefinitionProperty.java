@@ -31,7 +31,10 @@ import hudson.model.ParameterDefinition;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
+import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
 import hudson.plugins.project_inheritance.util.LimitedHashMap;
 import hudson.plugins.project_inheritance.util.Reflection;
 
@@ -40,7 +43,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -48,8 +50,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -104,12 +106,12 @@ import org.kohsuke.stapler.export.Flavor;
  * 		keep the saving/loading of Jobs intact and unaltered.
  * </li><li>
  * 		Whenever any part of Jenkins request this property, it is instead
- * 		presented with a new instance of this class. This instance contains
- * 		copies of all {@link ParameterDefinition}s.
+ * 		presented with a new instance of this class. This instance is able to
+ * 		walk the inheritance tree, to gather the correct final values upon
+ * 		building.
  * </li><li>
- * 		Additionally, this class gets copies of <b>all</b> other
- * 		{@link ParameterDefinition}s from the correct versions of all parents,
- * 		hashed by their name and ordered by their priority.
+ * 		Additionally, this class is capable of returning a full "paper-trail"
+ * 		of which project set which parameter in which way.
  * </li><li>
  * 		The copies of the {@link InheritableStringParameterDefinition}s also
  * 		get a reference back to the instance of this class. This can then be
@@ -117,7 +119,7 @@ import org.kohsuke.stapler.export.Flavor;
  * </li>
  * </ol>
  * The obvious downside to this approach is that the number of created objects
- * rises dramatically. Instead of only creating one {@link ParameterValue}
+ * increases. Instead of only creating one {@link ParameterValue}
  * per {@link ParameterDefinition} for each {@link Build}, numerous
  * copies of {@link ParametersDefinitionProperty}s and {@link ParameterDefinition}
  * are created every time {@link Job#getProperties()} or a similar
@@ -130,7 +132,6 @@ import org.kohsuke.stapler.export.Flavor;
  * 
  * @author mhschroe
  */
-
 public class InheritanceParametersDefinitionProperty extends
 		ParametersDefinitionProperty {
 	
@@ -164,27 +165,23 @@ public class InheritanceParametersDefinitionProperty extends
 	}
 	
 	/**
-	 * This map contains <b>all</b> {@link ParameterDefinition}s and their
-	 * original owners that are reachable through the inheritance tree. Each
-	 * entry is be a list that is sorted by inheritance order.
-	 * <p>
-	 * This is contrary to the list you can get through
-	 * {@link #getParameterDefinitions()} in that it lists all the
-	 * parameters that have to be considered for value derivation without
-	 * having to look up the full inheritance tree again.
+	 * Since {@link InheritanceParametersDefinitionProperty} instances are
+	 * generated uniquely for each call, we can cache the scope, without
+	 * having to worry about changing inheritance or versioning.
 	 */
-	private transient Map<String, List<ScopeEntry>> fullScope =
-			new HashMap<String, List<ScopeEntry>>();
+	private transient List<ScopeEntry> scopeCache = null;
 	
-	private transient ReentrantReadWriteLock scopeLock =
-			new ReentrantReadWriteLock();
 	
+	// === CONSTRUCTORS AND CONSTRUCTOR HELPERS ===
 	
 	public InheritanceParametersDefinitionProperty(
 			AbstractProject<?,?> owner,
 			List<ParameterDefinition> parameterDefinitions) {
-		super(sortParametersByName(parameterDefinitions));
+		super(copyAndSortParametersByName(parameterDefinitions));
+		
+		//Save the final owner that created this IPDP
 		this.owner = owner;
+		
 		//Applying the current owner and this object to the PDs, if necessary.
 		this.applyOwnerToDefinitions();
 	}
@@ -199,46 +196,21 @@ public class InheritanceParametersDefinitionProperty extends
 			AbstractProject<?,?> owner,
 			ParametersDefinitionProperty other) {
 		this(owner, other.getParameterDefinitions());
-		//Then, we copy the scope
-		if (other instanceof InheritanceParametersDefinitionProperty) {
-			InheritanceParametersDefinitionProperty ipdp =
-					(InheritanceParametersDefinitionProperty) other;
-			
-			ipdp.scopeLock.readLock().lock();
-			this.scopeLock.writeLock().lock();
-			try {
-				for (String pName : ipdp.fullScope.keySet()) {
-					List<ScopeEntry> oLst = ipdp.fullScope.get(pName);
-					if (oLst == null) { continue; }
-					LinkedList<ScopeEntry> newLst = new LinkedList<ScopeEntry>();
-					for (ScopeEntry entry : oLst) {
-						newLst.add(new ScopeEntry(entry.owner, entry.param));
-					}
-					this.fullScope.put(pName, newLst);
-				}
-			} finally {
-				this.scopeLock.writeLock().unlock();
-				ipdp.scopeLock.readLock().unlock();
-			}
-		} else {
-			this.addScopedParameterDefinitions(
-					(owner != null) ? owner.getName() : "",
-					other.getParameterDefinitions()
-			);
-		}
 	}
 	
-	public static final List<ParameterDefinition> sortParametersByName(List<ParameterDefinition> in) {
-		//We ensure that the list of PDs is sorted on its name
-		Collections.sort(
-			in,
-			new Comparator<ParameterDefinition>() {
-				public int compare(ParameterDefinition o1, ParameterDefinition o2) {
-					return o1.getName().compareTo(o2.getName());
+	public static final List<ParameterDefinition> copyAndSortParametersByName(List<ParameterDefinition> in) {
+		//Crate a copy of all PDs in that list
+		TreeSet<ParameterDefinition> tree = new TreeSet<ParameterDefinition>(
+				new Comparator<ParameterDefinition>() {
+					public int compare(ParameterDefinition o1, ParameterDefinition o2) {
+						return o1.getName().compareTo(o2.getName());
+					}
 				}
-			}
 		);
-		return in;
+		for (ParameterDefinition pd : in) {
+			tree.add(pd.copyWithDefaultValue(pd.getDefaultParameterValue()));
+		}
+		return new LinkedList<ParameterDefinition>(tree);
 	}
 	
 	public static InheritanceParametersDefinitionProperty createMerged(
@@ -272,38 +244,29 @@ public class InheritanceParametersDefinitionProperty extends
 		InheritanceParametersDefinitionProperty out =
 				new InheritanceParametersDefinitionProperty(newOwner, unifyList);
 		
-		//At the end, we merge the scoping informations
-		for (int i = pdps.length-1; i >= 0; i--) {
-			ParametersDefinitionProperty pdp = pdps[i];
-			
-			if (pdp instanceof InheritanceParametersDefinitionProperty) {
-				//We deal with an already inherited parameter; so we need to
-				//copy the scope exactly.
-				InheritanceParametersDefinitionProperty ipdp =
-						(InheritanceParametersDefinitionProperty) pdp;
-				for (ScopeEntry scope : ipdp.getAllScopedParameterDefinitions()) {
-					out.addScopedParameterDefinitions(scope);
-				}
-			} else {
-				//No inheritance means the scope is fully local
-				String ownerName =
-					(pdp.getOwner() != null) ? pdp.getOwner().getName() : "";
-				out.addScopedParameterDefinitions(
-						ownerName, pdp.getParameterDefinitions()
-				);
-			}
-			
-		}
-		
 		return out;
+	}
+	
+	private void applyOwnerToDefinitions() {
+		for (ParameterDefinition pd : this.getParameterDefinitions()) {
+			if (!(pd instanceof InheritableStringParameterDefinition)) {
+				continue;
+			}
+			InheritableStringParameterDefinition ispd =
+					(InheritableStringParameterDefinition) pd;
+			ispd.setRootProperty(this);
+		}
 	}
 	
 	
 	
+	// === BUILD HANDLING METHODS ===
+	
 	/**
 	 * {@inheritDoc}
 	 */
-	public void _doBuild(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
+	public void _doBuild(StaplerRequest req, StaplerResponse rsp)
+			throws IOException, ServletException {
 		if(!req.getMethod().equals("POST")) {
 			// show the parameter entry form.
 			req.getView(this,"index.jelly").forward(req,rsp);
@@ -320,9 +283,10 @@ public class InheritanceParametersDefinitionProperty extends
 				JSONObject jo = (JSONObject) o;
 				String name = jo.getString("name");
 				
-				ParameterDefinition d = getParameterDefinition(name);
-				if(d==null)
+				ParameterDefinition d = this.getParameterDefinition(name);
+				if (d == null) {
 					throw new IllegalArgumentException("No such parameter definition: " + name);
+				}
 				ParameterValue parameterValue = d.createValue(req, jo);
 				values.add(parameterValue);
 			}
@@ -389,17 +353,7 @@ public class InheritanceParametersDefinitionProperty extends
 	}
 	
 	
-	
-	private void applyOwnerToDefinitions() {
-		for (ParameterDefinition pd : super.getParameterDefinitions()) {
-			if (!(pd instanceof InheritableStringParameterDefinition)) {
-				continue;
-			}
-			InheritableStringParameterDefinition ispd =
-					(InheritableStringParameterDefinition) pd;
-			ispd.setRootProperty(this);
-		}
-	}
+	// === VERSIONING COMMUNICATION, STORAG AND HANDLING METHODS ===
 	
 	private Map<String,Long> getVersioningMap() {
 		if (this.owner == null || !(this.owner instanceof InheritanceProject)) {
@@ -496,7 +450,10 @@ public class InheritanceParametersDefinitionProperty extends
 		return out;
 	}
 	
-
+	
+	
+	// === PARAMETER RETRIEVAL AND SUBSET GENERATION ===
+	
 	public List<ParameterDefinition> getParameterDefinitionSubset(boolean showHidden) {
 		LinkedList<ParameterDefinition> out =
 				new LinkedList<ParameterDefinition>();
@@ -534,75 +491,86 @@ public class InheritanceParametersDefinitionProperty extends
 	}
 	
 	
+	// === PARAMETER SCOPE COMPUATION ===
+	
+	/**
+	 * Returns all parameter definitions that are involved in generating parameter values.
+	 * <p>
+	 * It walks the inheritance tree for the current request and
+	 * generates a list of all parameter declarations that are involved in
+	 * generating the final values of all parameters.
+	 * <p>
+	 * The returned list is sorted in order of when each definition is
+	 * encountered. Do note that it is likely, that parameters with the same
+	 * name are not stored sequentially.
+	 * <p>
+	 * Do note that the list might be cached, in which case the generated list
+	 * is unmodifiable.
+	 * <p>
+	 * <b>Beware:</b> The returned scope contains the original
+	 * {@link ParameterDefinition}s, as they are stored in the project class
+	 * instances. As such, they are not glued together with an
+	 * {@link InheritableStringParameterDefinition} and as such have no
+	 * contact to each other. Thus, you can't use their methods that need to
+	 * access the other parameters. This especially applies to instances of
+	 * {@link InheritableStringParameterReferenceDefinition}!
+	 * 
+	 * 
+	 * @return a list of {@link ScopeEntry} instances, sorted by order of
+	 * derivation by inheritance.
+	 */
 	public List<ScopeEntry> getAllScopedParameterDefinitions() {
-		List<ScopeEntry> lst = new LinkedList<ScopeEntry>();
-		this.scopeLock.readLock().lock();
-		try {
-			for (List<ScopeEntry> subLst : fullScope.values()) {
-				lst.addAll(subLst);
-			}
-		} finally {
-			this.scopeLock.readLock().unlock();
+		if (this.scopeCache != null) {
+			return this.scopeCache;
 		}
-		return lst;
+		
+		List<ScopeEntry> lst = new LinkedList<ScopeEntry>();
+		
+		//Fetch the current owner
+		AbstractProject<?, ?> p = this.getOwner();
+		if (p == null || !(p instanceof InheritanceProject)) {
+			return lst;
+		}
+		InheritanceProject ip = (InheritanceProject) p;
+		
+		//Now, we get the sorted list of all parents
+		for (AbstractProjectReference ref : ip.getAllParentReferences(SELECTOR.PARAMETER, true)) {
+			InheritanceProject par = ref.getProject();
+			if (par == null) { continue; }
+			
+			//Grab the LOCALLY defined parameters for the project
+			ParametersDefinitionProperty parPDP = par.getProperty(
+					ParametersDefinitionProperty.class,
+					IMode.LOCAL_ONLY
+			);
+			if (parPDP == null) { continue; }
+			for (ParameterDefinition pd : parPDP.getParameterDefinitions()) {
+				lst.add(new ScopeEntry(par.getFullName(), pd));
+			}
+		}
+		
+		//At the end, we must also add the parameters from a possible variance
+		InheritanceParametersDefinitionProperty variance = ip.getVarianceParameters();
+		if (variance != null) {
+			for (ParameterDefinition pd : variance.getParameterDefinitions()) {
+				lst.add(new ScopeEntry(ip.getFullName(), pd));
+			}
+		}
+		
+		//Caching & returning the result
+		this.scopeCache = Collections.unmodifiableList(lst);
+		return this.scopeCache;
 	}
 	
 	public List<ScopeEntry> getScopedParameterDefinition(String name) {
-		this.scopeLock.readLock().lock();
-		try {
-			List<ScopeEntry> lst = fullScope.get(name);
-			if (lst == null) { return null; }
-			return Collections.unmodifiableList(lst);
-		} finally {
-			this.scopeLock.readLock().unlock();
-		}
-		
-	}
-	
-	
-	public void addScopedParameterDefinitions(ParametersDefinitionProperty pdp) {
-		String owner = (pdp.getOwner() != null) ? pdp.getOwner().getName() : "";
-		this.addScopedParameterDefinitions(owner, pdp.getParameterDefinitions());
-	}
-	
-	public void addScopedParameterDefinitions(ScopeEntry entry) {
-		if (entry == null || entry.param == null) {
-			return;
-		}
-		this.scopeLock.writeLock().lock();
-		try {
-			List<ScopeEntry> sLst = fullScope.get(entry.param.getName());
-			if (sLst == null) {
-				sLst = new LinkedList<ScopeEntry>();
-			}
-			sLst.add(new ScopeEntry(entry.owner, entry.param));
-			fullScope.put(entry.param.getName(), sLst);
-		} finally {
-			this.scopeLock.writeLock().unlock();
-		}
-	}
-	
-	public void addScopedParameterDefinitions(String owner, Collection<ParameterDefinition> pds) {
-		for (ParameterDefinition pd : pds) {
-			String pdName = pd.getName();
-			this.scopeLock.writeLock().lock();
-			try {
-				List<ScopeEntry> lst = fullScope.get(pdName);
-				if (lst == null) {
-					lst = new LinkedList<ScopeEntry>();
-					lst.add(new ScopeEntry(owner, pd));
-					fullScope.put(pdName, lst);
-				} else {
-					lst.add(new ScopeEntry(owner, pd));
-				}
-			} finally {
-				this.scopeLock.writeLock().unlock();
+		List<ScopeEntry> all = getAllScopedParameterDefinitions();
+		List<ScopeEntry> out = new LinkedList<ScopeEntry>();
+		for (ScopeEntry se : all) {
+			if (se.param.getName().equals(name)) {
+				out.add(se);
 			}
 		}
-	}
-	
-	public void addScopedParameterDefinitions(String owner, ParameterDefinition... pds) {
-		this.addScopedParameterDefinitions(owner, Arrays.asList(pds));
+		return out;
 	}
 	
 	

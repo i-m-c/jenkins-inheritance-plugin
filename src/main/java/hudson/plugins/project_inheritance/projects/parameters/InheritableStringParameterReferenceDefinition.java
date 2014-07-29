@@ -22,6 +22,8 @@ package hudson.plugins.project_inheritance.projects.parameters;
 
 import hudson.Extension;
 import hudson.model.ParameterDefinition;
+import hudson.model.ParameterValue;
+import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
@@ -61,7 +63,7 @@ public class InheritableStringParameterReferenceDefinition extends
 		}
 		
 		//Fetch the owner of this reference
-		String selfOwner = ipdp.getOwner().getDisplayName();
+		String selfOwner = ipdp.getOwner().getFullName();
 		
 		List<ScopeEntry> scope = ipdp.getAllScopedParameterDefinitions();
 		ListIterator<ScopeEntry> iter = scope.listIterator(scope.size());
@@ -79,6 +81,20 @@ public class InheritableStringParameterReferenceDefinition extends
 			}
 		}
 		return null;
+	}
+	
+	@Override
+	public ParameterDefinition copyWithDefaultValue(ParameterValue defaultValue) {
+		if (!(defaultValue instanceof StringParameterValue)) {
+			//This should never happen
+			return super.copyWithDefaultValue(defaultValue);
+		}
+		
+		StringParameterValue spv = ((StringParameterValue) defaultValue);
+		String value = spv.value;
+		return new InheritableStringParameterReferenceDefinition(
+				this.getName(), value
+		);
 	}
 	
 	

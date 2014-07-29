@@ -413,13 +413,17 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		IModes currMode = IModes.OVERWRITABLE;
 		boolean mustHaveValueSet = false;
 		
-		for (ScopeEntry scope : fullScope) {
+		Iterator<ScopeEntry> iter = fullScope.iterator();
+		while(iter.hasNext()) {
+			ScopeEntry scope = iter.next();
 			if (!(scope.param instanceof InheritableStringParameterDefinition)) {
 				continue;
 			}
 			InheritableStringParameterDefinition ispd =
 					(InheritableStringParameterDefinition) scope.param;
-			String ispdVal = (ispd == this)
+			
+			//The last value from the scope gets overwritten by the user-entered value
+			String ispdVal = (!iter.hasNext())
 					? userEnteredValue
 					: ispd.getDefaultValue();
 			
