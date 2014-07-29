@@ -21,6 +21,7 @@ import hudson.plugins.project_inheritance.projects.references.AbstractProjectRef
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.SlaveComputer;
+import hudson.util.VersionNumber;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -40,6 +41,7 @@ import javax.xml.transform.stream.StreamSource;
 import jenkins.model.Jenkins;
 import junit.framework.TestCase;
 
+import org.apache.commons.lang.SystemUtils;
 import org.jvnet.hudson.test.HudsonTestCase;
 
 public class TestInheritanceMain extends HudsonTestCase {
