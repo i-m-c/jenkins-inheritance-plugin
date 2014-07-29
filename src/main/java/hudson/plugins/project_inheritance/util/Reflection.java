@@ -191,6 +191,39 @@ public class Reflection {
 			new AssignabilityChecker();
 	
 	
+	public static boolean calledFromClassNames(String... classes) {
+		return calledFromClassNames(MAX_STACK_DEPTH, classes);
+	}
+	
+	public static boolean calledFromClassNames(int maxDepth, String... classes) {
+		if (classes == null || classes.length == 0) {
+			return false;
+		}
+		if (maxDepth <= 0) {
+			maxDepth = Integer.MAX_VALUE;
+		}
+		//Fetch the call stack
+		StackTraceElement[] stackTrace =
+				new Throwable().getStackTrace(); 
+		if (stackTrace == null || stackTrace.length == 0) {
+			return false;
+		}
+		
+		//A quick lookup table for the class name
+		Set<String> clSet = new HashSet<String>(Arrays.asList(classes));
+		
+		//Then, checking for each stack element, whether a stack-class matches
+		int cnt = 0;
+		for (StackTraceElement ste : stackTrace) {
+			if (cnt++ >= maxDepth) { break; }
+			if (clSet.contains(ste.getClassName())) {
+				return true;
+			}
+		}
+		//No such class on the stack (or no class can be resolved)
+		return false;
+	}
+	
 	/**
 	* Wrapper for {@link #calledFromClass(Class, int)}, with the maxDepth set
 	* to {@value #MAX_STACK_DEPTH}.

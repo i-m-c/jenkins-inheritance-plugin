@@ -3865,12 +3865,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	@Override
 	public boolean isBuildable() {
 		if (!super.isBuildable()) {
-			log.warning(String.format("%s not buildable; super.isBuildable() is false", this.getFullName()));
+			log.fine(String.format("%s not buildable; super.isBuildable() is false", this.getFullName()));
 			return false;
 		}
 		//Then, we check if it's an abstract job
 		if (this.isAbstract) {
-			log.warning(String.format("%s not buildable; project is abstract", this.getFullName()));
+			log.fine(String.format("%s not buildable; project is abstract", this.getFullName()));
 			return false;
 		}
 		
@@ -3879,7 +3879,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		AbstractMap.SimpleEntry<Boolean, String> paramCheck =
 				this.getParameterSanity();
 		if (paramCheck.getKey() == false) {
-			log.warning(String.format("%s not buildable; Parameter inconsistency: %s", this.getFullName(), paramCheck.getValue()));
+			log.fine(String.format("%s not buildable; Parameter inconsistency: %s", this.getFullName(), paramCheck.getValue()));
 			return false;
 		}
 		

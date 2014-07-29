@@ -420,22 +420,13 @@ public abstract class InheritanceGovernor<T> {
 		 * 3.) The project is called in the context of a build
 		 * 4.) The queue queries properties of the project 
 		 */
-		if (forcedInherit || root.getIsTransient() ||
-				Reflection.calledFromClass(
-						Build.class, BuildCommand.class,
-						Queue.class, BuildTrigger.class
-				) ||
-				Reflection.calledFromMethod(
-						InheritanceProject.class,
-						"doBuild", "scheduleBuild2", "doBuildWithParameters"
-				) ||
-				Reflection.calledFromMethod(
-						Trigger.class,
-						"checkTriggers"
-				)) {
+		
+		//Check forced inheritance or transience
+		if (forcedInherit || root.getIsTransient()) {
 			return true;
 		}
-		//Another possibility is that the user requested a build page
+		
+		//Checking the Stapler Request, because it is fast
 		StaplerRequest req = Stapler.getCurrentRequest();
 		if (req != null) {
 			String uri = req.getRequestURI();
@@ -449,7 +440,21 @@ public abstract class InheritanceGovernor<T> {
 			}
 		}
 		
-		//in all other cases, we don't require (or want) inheritance
+		//Check via expensive stack reflection
+		if (Reflection.calledFromClass(
+				Build.class, BuildCommand.class,
+				Queue.class, BuildTrigger.class,
+				Trigger.class
+			) ||
+			Reflection.calledFromMethod(
+					InheritanceProject.class,
+					"doBuild", "scheduleBuild2", "doBuildWithParameters"
+			)
+		) {
+			return true;
+		}
+		
+		//In all other cases, we don't require (or want) inheritance
 		return false;
 	}
 	
