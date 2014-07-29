@@ -4476,7 +4476,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Creating a small local class to store sanity information
 		final class SanityRestrictions {
 			public Class<?> hasToBeOfThisClass;
-			public boolean hasToBeFixed;
+			
 			public boolean hasToHaveDefaultSet;
 			public boolean hasToBeAssigned;
 			
@@ -4503,7 +4503,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				if (pd instanceof InheritableStringParameterDefinition) {
 					InheritableStringParameterDefinition ispd =
 							(InheritableStringParameterDefinition) pd;
-					s.hasToBeFixed = (ispd.getInheritanceModeAsVar() == IModes.FIXED);
 					s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
 					s.hasToBeAssigned = ispd.getMustBeAssigned();
 					
@@ -4512,8 +4511,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					
 					s.previousMode = ispd.getInheritanceModeAsVar();
 				} else {
-					s.hasToBeFixed = false;
 					s.hasToHaveDefaultSet = false;
+					s.previousMode = IModes.OVERWRITABLE;
 				}
 				
 				//No sense in checking this param instance further, as a
@@ -4536,7 +4535,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				);
 			}
 			
-			if (s.hasToBeFixed) {
+			if (s.previousMode == IModes.FIXED) {
 				return new AbstractMap.SimpleEntry<Boolean, String>(
 						false, "Fixed parameter '" + pd.getName() +
 						"' may not be redefined at all."
@@ -4580,27 +4579,34 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				String defVal = ispd.getDefaultValue();
 				boolean defValNewlySet = !(defVal == null || defVal.isEmpty());
 				
-				switch(s.previousMode) {
-					case OVERWRITABLE:
-						//An overwrite always causes the default to be discarded
-						s.hadDefaultSet = defValNewlySet;
-						break;
-					case EXTENSIBLE:
-						//An extension does not overwrite an already set default
-						if (!s.hadDefaultSet) {
+				try {
+					switch(s.previousMode) {
+						case OVERWRITABLE:
+							//An overwrite always causes the default to be discarded
 							s.hadDefaultSet = defValNewlySet;
-						}
-						break;
-					case FIXED:
-						//FIXED parameters are ignored
-						break;
-					default:
-						log.warning(
-								"Detected invalid inheritance mode: " +
-								s.previousMode.toString() + " on " +
-								this.getName() + "->" + pd.getName()
-						);
-						break;
+							break;
+						case EXTENSIBLE:
+							//An extension does not overwrite an already set default
+							if (!s.hadDefaultSet) {
+								s.hadDefaultSet = defValNewlySet;
+							}
+							break;
+						case FIXED:
+							//FIXED parameters are ignored
+							break;
+						default:
+							log.warning(
+									"Detected invalid inheritance mode: " +
+									s.previousMode.toString() + " on " +
+									this.getName() + "->" + pd.getName()
+							);
+							break;
+					}
+				} finally {
+					//In any case, we overwrite the sanity details with the new values
+					s.previousMode = ispd.getInheritanceModeAsVar();
+					s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
+					s.hasToBeAssigned = ispd.getMustBeAssigned();
 				}
 			}
 		}

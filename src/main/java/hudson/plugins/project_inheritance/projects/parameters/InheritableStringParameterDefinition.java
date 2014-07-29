@@ -315,10 +315,13 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	}
 	
 	public String getInheritanceMode() {
-		return this.inheritanceMode.name();
+		return this.getInheritanceModeAsVar().name();
 	}
 	
 	public IModes getInheritanceModeAsVar() {
+		if (this.inheritanceMode == null) {
+			return IModes.OVERWRITABLE;
+		}
 		return this.inheritanceMode;
 	}
 	
