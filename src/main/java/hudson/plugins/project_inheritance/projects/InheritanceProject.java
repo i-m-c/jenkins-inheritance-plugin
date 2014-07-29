@@ -41,6 +41,7 @@ import hudson.model.Cause.UserIdCause;
 import hudson.model.CauseAction;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
+import hudson.model.Queue.WaitingItem;
 import hudson.model.Hudson;
 import hudson.model.Job;
 import hudson.model.Label;
@@ -130,6 +131,7 @@ import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
 
 import javax.servlet.ServletException;
+import javax.xml.transform.Source;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.TransformerException;
@@ -758,6 +760,20 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		ProjectCreationEngine.instance.notifyProjectChange(this);
 	}
 	
+	@Override
+	public void updateByXml(Source source) throws IOException {
+		//Instruct the parent to update us
+		super.updateByXml(source);
+		//Then, save a new version
+		
+		clearBuffers(this);
+		this.dumpConfigToNewVersion("New version uploaded as XML via API/CLI");
+		clearBuffers(this);
+		
+		//Notify the PCE about our changes
+		ProjectCreationEngine.instance.notifyProjectChange(this);
+	}
+	
 	@RequirePOST
 	public synchronized void doSubmitChildJobCreation(
 			StaplerRequest req, StaplerResponse rsp)
@@ -892,28 +908,71 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	/**
 	 * Adds the given {@link ProjectReference} as a parent to this node.
-	 * 
+	 * <p>
 	 * TODO: The fact that this function is public is really nasty.
 	 * Basically, references should only be used through the validated
 	 * frontend, or set by the equally validated {@link ProjectCreationEngine}.
-	 * 
+	 * <p>
 	 * Of course, since the user can just scribble around in the XML -- if
 	 * the job isn't transient -- we can't prevent broken references
 	 * anyway.
+	 * <p>
+	 * Do note that this change will not trigger any versioning or saving to
+	 * disk. If you use this, you need to know exactly what you're doing; for
+	 * example calling this in proper UnitTests.
 	 * 
-	 * @param ref
+	 * @param ref the reference to add
+	 * @param noDuplicateCheck set to false, if no duplication check shall be done.
+	 * 		This is only useful in Unit-tests and nowhere else.
 	 */
-	public void addParentReference(AbstractProjectReference ref) {
+	public void addParentReference(AbstractProjectReference ref, boolean duplicateCheck) {
 		//Checking if we already have such a reference
-		for (AbstractProjectReference ourRef : this.getParentReferences()) {
-			if (ourRef.getName().equals(ref.getName())) {
-				//No point in duplicated references
-				return;
+		if (duplicateCheck) {
+			for (AbstractProjectReference ourRef : this.getParentReferences()) {
+				if (ourRef.getName().equals(ref.getName())) {
+					//No point in duplicated references
+					return;
+				}
 			}
 		}
 		//Otherwise, we can add it. Of course, it might still lead to circular
 		//references, or simply and plainly not exist
 		this.parentReferences.push(ref);
+		
+		//And invalidating all caches
+		clearBuffers(this);
+	}
+	
+	/**
+	 * Wrapper around
+	 * {@link #addParentReference(AbstractProjectReference, boolean)} with
+	 * duplication check enabled.
+	 * 
+	 * @param ref the references to add as a parent.
+	 */
+	public void addParentReference(AbstractProjectReference ref) {
+		this.addParentReference(ref, true);
+	}
+	
+	/**
+	 * Removes a parent reference.
+	 * <p>
+	 * Same caveats apply as for {@link #addParentReference(AbstractProjectReference)}.
+	 * 
+	 * @param name the name of the project for which to remove one parent reference.
+	 * @return true, if a parent reference was removed.
+	 */
+	public boolean removeParentReference(String name) {
+		Iterator<AbstractProjectReference> iter = this.parentReferences.iterator();
+		while (iter.hasNext()) {
+			AbstractProjectReference apr = iter.next();
+			if (apr.getName().equals(name)) {
+				iter.remove();
+				clearBuffers(this);
+				return true;
+			}
+		}
+		return false;
 	}
 	
 	public void setVarianceLabel(String variance) {
@@ -1650,6 +1709,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	/**
 	 * {@inheritDoc}
+	 * <p>
+	 * <b>Do note:</b> This method is <i>not</i> calling the super-implementation,
+	 * because it is not aware that the default values for parameters must be
+	 * derived via inheritance, if the method is called directly (instead of
+	 * via the CLI).
+	 * 
+	 * @see InheritableStringParameterDefinition#getDefaultParameterValue()
 	 */
 	public QueueTaskFuture<InheritanceBuild> scheduleBuild2(
 			int quietPeriod, Cause c, Collection<? extends Action> actions) {
@@ -1700,8 +1766,32 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			actions = newActions;
 		}
 		
-		//At the end, start the build with the new set of actions
-		return super.scheduleBuild2(quietPeriod, c, actions);
+		//The buildable check must be done after versioning assignment
+		if (!isBuildable()) { return null; }
+
+		List<Action> queueActions = new ArrayList<Action>(actions);
+		if (isParameterized() && Util.filter(queueActions, ParametersAction.class).isEmpty()) {
+			List<ParameterValue> pvLst = new ArrayList<ParameterValue>();
+			for (ParameterDefinition def : this.getParameters()) {
+				if (def instanceof InheritableStringParameterDefinition) {
+					InheritableStringParameterDefinition ispd =
+							(InheritableStringParameterDefinition) def;
+					pvLst.add(ispd.createValue(ispd.getDefaultValue()));
+				} else {
+					pvLst.add(def.getDefaultParameterValue());
+				}
+			}
+			queueActions.add(new ParametersAction(pvLst));
+		}
+		
+		if (c != null) {
+			queueActions.add(new CauseAction(c));
+		}
+		
+		WaitingItem i = Jenkins.getInstance().getQueue().schedule(
+				this, quietPeriod, queueActions
+		);
+		return (i == null) ? null : (QueueTaskFuture)i.getFuture();
 	}
 	
 	/**
@@ -2022,7 +2112,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.versionStore.undoVersion(v);
 		}
 		//Save the file, to persist our changes
-		this.versionStore.save(this.getVersionFile());
+		try {
+			this.versionStore.save(this.getVersionFile());
+		} catch (IOException ex) {
+			log.severe(String.format(
+					"Failed to save version to: %s; Reason = %s",
+					this.getVersionFile(), ex.getMessage()
+			));
+		}
 	}
 	
 	

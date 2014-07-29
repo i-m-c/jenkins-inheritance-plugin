@@ -250,25 +250,39 @@ public class VersionedObjectStore implements Serializable {
 	 * 
 	 * @param file the file to save the data to. The data is dumped
 	 * as GZIP-compressed XML.
+	 * @throws IOException 
 	 */
-	public synchronized void save(File file) {
+	public synchronized void save(File file) throws IOException {
 		if (file == null) {
 			//Return silently, as the user explicitly wanted a null-save
 			return;
 		}
+		//Create a temporary file for the output file
+		File tmpFile = File.createTempFile("atomic", null, file.getParentFile());
+		if (tmpFile == null) {
+			throw new IOException("Could not create atomic file for saving versions");
+		}
+		GZIPOutputStream gzos = null;
 		try {
 			//Preparing the nested streams
-			FileOutputStream fos = new FileOutputStream(file);
-			GZIPOutputStream gzos = new GZIPOutputStream(fos);
+			gzos = new GZIPOutputStream(new FileOutputStream(tmpFile));
 			//Dumping the XML stream
 			Jenkins.XSTREAM2.toXMLUTF8(this, gzos);
 			//Closing the file stream; no need to flush as that happened above
 			gzos.close();
+			if (file.exists() && !file.delete()) {
+				tmpFile.delete();
+				throw new IOException("Unable to delete " + file);
+			}
+			tmpFile.renameTo(file);
 		} catch (Exception ex) {
 			log.warning(
 					"Saving versioned object store failed due to exception: " +
 					ex.toString()
 			);
+		} finally {
+			if (gzos != null) { gzos.close(); }
+			tmpFile.delete();
 		}
 	}
 	
@@ -289,27 +303,36 @@ public class VersionedObjectStore implements Serializable {
 		
 		//Checking if the file is GZ compressed
 		RandomAccessFile raf = new RandomAccessFile(file, "r");
-		if (raf.length() <= 2) {
-			raf.close();
-			throw new IOException("File too short: " + file.toString());
+		boolean isGZ = false;
+		try {
+			if (raf.length() <= 2) {
+				throw new IOException("File too short: " + file.toString());
+			}
+			int magic = GZIPInputStream.GZIP_MAGIC;
+			byte[] bArr = new byte[2]; raf.read(bArr);
+			byte m1 = (byte) (magic >> 8);
+			byte m0 = (byte) magic;
+			isGZ = (bArr[0] == m0 && bArr[1] == m1);
+		} finally {
+			if (raf != null) { raf.close(); }
 		}
-		int magic = GZIPInputStream.GZIP_MAGIC;
-		byte[] bArr = new byte[2]; raf.read(bArr);
-		byte m1 = (byte) (magic >> 8);
-		byte m0 = (byte) magic;
-		boolean isGZ = (bArr[0] == m0 && bArr[1] == m1);
-		raf.close();
 		
 		InputStream is = new FileInputStream(file);
-		if (isGZ) {
-			is = new GZIPInputStream(is);
-		}
-		Object obj = Jenkins.XSTREAM2.fromXML(is);
-		//Verifying that the object is a VOS
-		if (obj instanceof VersionedObjectStore) {
-			return (VersionedObjectStore) obj;
-		} else {
-			throw new IllegalArgumentException("File does not describe a VersionedObjectStore");
+		try {
+			if (isGZ) {
+				is = new GZIPInputStream(is);
+			}
+			Object obj = Jenkins.XSTREAM2.fromXML(is);
+			//Verifying that the object is a VOS
+			if (obj instanceof VersionedObjectStore) {
+				return (VersionedObjectStore) obj;
+			} else {
+				throw new IllegalArgumentException(
+						"File does not describe a VersionedObjectStore"
+				);
+			}
+		} finally {
+			if (is != null) { is.close(); }
 		}
 	}
 	

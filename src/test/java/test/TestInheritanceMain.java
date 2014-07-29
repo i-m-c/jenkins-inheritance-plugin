@@ -1,16 +1,37 @@
 package test;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertNotEquals;
+import hudson.XmlFile;
+import hudson.model.ParameterValue;
+import hudson.model.Result;
+import hudson.model.TopLevelItem;
+import hudson.model.Computer;
+import hudson.model.ParameterDefinition;
+import hudson.model.ParametersAction;
+import hudson.model.ParametersDefinitionProperty;
+import hudson.model.StringParameterValue;
+import hudson.model.queue.QueueTaskFuture;
+import hudson.plugins.project_inheritance.projects.InheritanceBuild;
+import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
+import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
+import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
+import hudson.remoting.VirtualChannel;
+import hudson.slaves.SlaveComputer;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
 import javax.xml.transform.Source;
@@ -18,42 +39,94 @@ import javax.xml.transform.stream.StreamSource;
 
 import jenkins.model.Jenkins;
 import junit.framework.TestCase;
-import hudson.XmlFile;
-import hudson.lifecycle.RestartNotSupportedException;
-import hudson.model.JobProperty;
-import hudson.model.JobPropertyDescriptor;
-import hudson.model.Computer;
-import hudson.model.queue.QueueTaskFuture;
-import hudson.plugins.project_inheritance.projects.InheritanceBuild;
-import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
-import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ProjectReference;
-import hudson.remoting.VirtualChannel;
-import hudson.slaves.SlaveComputer;
-import hudson.util.VersionNumber;
 
-import org.apache.commons.lang.SystemUtils;
 import org.jvnet.hudson.test.HudsonTestCase;
 
 public class TestInheritanceMain extends HudsonTestCase {
-	/* Sample projects needed for testing */
-	String parentJob;
-	String childJob1;
-	String childJob2;
-	String childJob3;
-	InheritanceProject parentProject;
-	InheritanceProject childProject1;
-	InheritanceProject childProject2;
-	InheritanceProject childProject3;
-	String parentName;
-	String child1Name;
-	String child2Name;
-	String child3Name;
-
+	private static final Logger log = Logger.getLogger(
+			TestInheritanceMain.class.toString()
+	);
+	
+	
+	private static class XmlProject {
+		public final InheritanceProject project;
+		public final String xmlFile;
+		
+		public XmlProject(String name) throws IOException {
+			this(name, null);
+		}
+		
+		public XmlProject(String name, String xmlFile) throws IOException {
+			this.xmlFile = xmlFile;
+			//Create the project -- optionally from the given XML
+			Jenkins j = Jenkins.getInstance();
+			project = (InheritanceProject) j.createProject(
+					InheritanceProject.DESCRIPTOR, name
+			);
+		}
+		
+		public void loadFromXml() throws IOException {
+			if (xmlFile == null) {
+				Source s = new StreamSource(new FileInputStream(new File(xmlFile)));
+				project.updateByXml(s);
+			}
+		}
+		
+		public void setParameter(InheritableStringParameterDefinition pd) throws IOException {
+			ParametersDefinitionProperty pdp = this.project.getProperty(
+					ParametersDefinitionProperty.class, IMode.LOCAL_ONLY
+			);
+			if (pdp == null) {
+				pdp = new ParametersDefinitionProperty(pd);
+				this.project.addProperty(pdp);
+			} else {
+				List<ParameterDefinition> defs = pdp.getParameterDefinitions();
+				Iterator<ParameterDefinition> iter = defs.iterator();
+				//Remove definitions that are in the way
+				while (iter.hasNext()) {
+					ParameterDefinition param = iter.next();
+					if (param.getName().equals(pd.getName())) {
+						iter.remove();
+					}
+				}
+				defs.add(pd);
+			}
+			this.project.removeProperty(ParametersDefinitionProperty.class);
+			this.project.addProperty(pdp);
+		}
+		
+		public void setParameter(String name, String value) throws IOException {
+			this.setParameter(new InheritableStringParameterDefinition(
+					name, value
+			));
+		}
+		
+		public void addParent(String pName, String variance, ParameterDefinition... defs) {
+			AbstractProjectReference ref;
+			if (defs != null && defs.length > 0) {
+				ref = new ParameterizedProjectReference(pName, variance, Arrays.asList(defs));
+			} else {
+				ref = new SimpleProjectReference(pName);
+			}
+			this.project.addParentReference(ref, false);
+		}
+		
+		public boolean dropParent(String pName) {
+			return this.project.removeParentReference(pName);
+		}
+	}
+	
+	
+	public TestInheritanceMain() {
+		super();
+	}
+	
+	public TestInheritanceMain(String name) {
+		super(name);
+	}
+	
 	private void printInfo(String info) {
-		System.out.println("[testInheritanceMain] " + info);
+		log.info("[testInheritanceMain] " + info);
 	}
 
 	private InheritanceBuild buildAndLookForString(InheritanceProject project,
@@ -126,35 +199,11 @@ public class TestInheritanceMain extends HudsonTestCase {
 		printInfo("setUp()");
 		setPluginManager(null);
 		super.setUp();
-		// Depending on the os, the jobs have different build steps
-		if (System.getProperty("os.name").toLowerCase().contains("win")) {
-			parentJob = "src\\test\\xmljobs\\win\\job1.xml";
-			childJob1 = "src\\test\\xmljobs\\win\\job2.xml";
-			childJob2 = "src\\test\\xmljobs\\win\\job3.xml";
-			childJob3 = "src\\test\\xmljobs\\win\\job4.xml";
-		} else {
-			parentJob = "src/test/xmljobs/linux/job1.xml";
-			childJob1 = "src/test/xmljobs/linux/job2.xml";
-			childJob2 = "src/test/xmljobs/linux/job3.xml";
-			childJob3 = "src/test/xmljobs/linux/job4.xml";
-		}
-		parentName = "test_tcloud1";
-		child1Name = "test_tcloud2";
-		child2Name = "test_tcloud3";
-		child3Name = "test_tcloud4";
-		/* Setting two initial projects */
-		Jenkins j = Jenkins.getInstance();
-		parentProject = (InheritanceProject) j.createProject(
-				InheritanceProject.DESCRIPTOR, parentName);
-		childProject1 = (InheritanceProject) j.createProject(
-				InheritanceProject.DESCRIPTOR, child1Name);
-		childProject2 = (InheritanceProject) Jenkins.getInstance()
-				.createProject(InheritanceProject.DESCRIPTOR, child2Name);
-		childProject3 = (InheritanceProject) Jenkins.getInstance()
-				.createProject(InheritanceProject.DESCRIPTOR, child3Name);
 	}
 
 	protected boolean canRunTests() {
+		return true;
+		/*
 		VersionNumber v = Jenkins.getVersion();
 		if (v.isOlderThan(new VersionNumber("1.520"))) {
 			//On Windows, these test cases fail during tearDown() in Jenkins < 1.520
@@ -163,10 +212,18 @@ public class TestInheritanceMain extends HudsonTestCase {
 			}
 		}
 		return true;
+		*/
 	}
 	
 	// === TEST EXECUTION ===
 	
+	/**
+	 * This test uses two projects, where one inherits properties from another
+	 * and verifies, that the general set-up of this is sane.
+	 * 
+	 * @throws IOException
+	 * @throws ServletException
+	 */
 	public void testGeneralProperties() throws IOException, ServletException {
 		printInfo("testGeneralProperties()");
 		
@@ -175,251 +232,110 @@ public class TestInheritanceMain extends HudsonTestCase {
 			return;
 		}
 		
-		InputStream is1 = new FileInputStream(new File(parentJob));
-		parentProject.updateByXml((Source) new StreamSource(is1));
-		is1.close();
-		InputStream is2 = new FileInputStream(new File(childJob1));
-		childProject1.updateByXml((Source) new StreamSource(is2));
-		is2.close();
+		//Creating a parent and child project
+		XmlProject parent = new XmlProject("parent");
+		XmlProject child = new XmlProject("child");
+		
+		//Attach one parameter to the parent
+		parent.setParameter("param1", "parent");
+		//And link the child to the parent
+		child.addParent(parent.project.getFullName(), null);
+		
 		printInfo("Testing project comparison...");
-		assertNotEquals("Project comparison failed", childProject1.compareTo(parentProject), 0);
-		printInfo("Testing attribute changing (e.g. abstract)...");
-		assertTrue("Abstract property is not changed correctly", parentProject.isAbstract);
-		parentProject.isAbstract = false;
-		assertFalse("Abstract property is not changed correctly", parentProject.isAbstract);
-		parentProject.isAbstract = true;
+		assertNotEquals(
+				"Project comparison failed",
+				child.project.compareTo(parent.project), 0
+		);
+		
+		printInfo("Testing direct attribute changing (e.g. abstract)...");
+		assertFalse("Abstract property does not default to false", parent.project.isAbstract);
+		parent.project.isAbstract = true;
+		assertTrue("Abstract property is not changed correctly", parent.project.isAbstract);
+		
+		//Test if renaming keeps references intact
 		printInfo("Testing renaming of projects...");
-		parentProject.renameTo("First project beta");
-		for (InheritanceProject p : InheritanceProject.getProjectsMap().values()) {
+		parent.project.renameTo("parent-renamed");
+		TopLevelItem it = Jenkins.getInstance().getItem("parent-renamed");
+		assertEquals("Project renaming failed", it, parent.project);
+		
+		for (TopLevelItem item : Jenkins.getInstance().getItems()) {
+			if (!(item instanceof InheritanceProject)) {
+				continue;
+			}
+			InheritanceProject p = (InheritanceProject) item;
 			for (AbstractProjectReference ref : p.getParentReferences()) {
-				assertNotEquals("References not updated properly when renaming",ref.getName(), parentName);
+				assertEquals(
+						"References not updated properly when renaming",
+						ref.getName(), "parent-renamed"
+				);
 			}
 			for (AbstractProjectReference ref : p.getCompatibleProjects()) {
-				assertNotEquals("References not updated properly when renaming", ref.getName(), parentName);
+				assertEquals(
+						"References not updated properly when renaming",
+						ref.getName(), "parent-renamed"
+				);
 			}
 		}
-		assertEquals(childProject1.getParentProjects().get(0), parentProject);
-		parentProject.renameTo(parentName);
-		assertEquals(parentProject.getName(), parentProject.getSVGLabel());
-		printInfo("Testing ID properties...");
-		assertEquals(parentProject.getVersionIDs().size(), 0);
-		assertNull(parentProject.getLatestVersion());
-		assertEquals(parentProject.getAllInheritedVersionsList().size(), 0);
+		//Checking identity of the renamed parent
+		assertTrue(
+				"Renaming caused reference inconsistency",
+				child.project.getParentProjects().contains(it)
+		);
+		
+		printInfo("Testing ID & versioning properties...");
+		assertEquals(parent.project.getVersionIDs().size(), 0);
+		assertNull(parent.project.getLatestVersion());
+		assertEquals(parent.project.getAllInheritedVersionsList().size(), 0);
+		
+		
 		printInfo("Checking SVG details...");
 		assertStringContains("The SVG details should contain the number" +
-				" of build steps", parentProject.getSVGDetail(), "0 build steps");
+				" of build steps", parent.project.getSVGDetail(), "0 build steps");
 		assertStringContains("The SVG details should contain the number" +
-				" of publishers", parentProject.getSVGDetail(), "0 publishers");
+				" of publishers", parent.project.getSVGDetail(), "0 publishers");
 		try {
 			@SuppressWarnings("unused")
-			URL newUrl = parentProject.getSVGLabelLink();
+			URL newUrl = parent.project.getSVGLabelLink();
 			TestCase.fail("The SVG label link should give " +
 					" an IllegalStateException");
 		} catch (IllegalStateException ex) {
 		}
-		printInfo("Checking related and compatible projects...");
-		/* Should this be this way? 
-		 * assertEquals(parentProject.getRelatedProjects().size(), 1);
-		 */
-		assertTrue("The list of compatible projects should be empty",
-				parentProject.getCompatibleProjects().isEmpty());
-		printInfo("Checking the parameter derivation list...");
-		assertEquals("The list of parameters should have one parameter"
-				,parentProject.getParameterDerivationList().size(), 1);
-		assertNull(parentProject.getAssignedLabelString());
-		printInfo("Checking default quiet period...");
-		assertEquals("The quiet period should be 5"
-				,parentProject.getQuietPeriod(), 5);
-		assertEquals("The overrides collection should be empty"
-				, parentProject.getOverrides().size(), 0);
-		printInfo("Checking that there are no reference issues...");
-		assertEquals("There should not be reference issues",
-				parentProject.getProjectReferenceIssues().size(), 0);
+		printInfo("Checking miscellaneous properties");
+		assertTrue(
+				"The list of compatible projects should be empty",
+				parent.project.getCompatibleProjects().isEmpty());
+		assertEquals(
+				"The list of parameters should have one parameter",
+				parent.project.getParameterDerivationList().size(), 1);
+		assertNull(
+				"Labels have been assigned, but shouldn't have been",
+				parent.project.getAssignedLabelString()
+		);
+		
+		assertEquals(
+				"The quiet period should be 5",
+				parent.project.getQuietPeriod(), 5
+		);
+		assertEquals(
+				"The overrides collection should be empty",
+				parent.project.getOverrides().size(), 0);
+		
+		assertEquals(
+				"There should not be reference issues",
+				parent.project.getProjectReferenceIssues().size(), 0
+		);
 	}
-
-	public void testCreationParentManual() throws IOException {
-		printInfo("testCreationParentManual()");
-		
-		if (!canRunTests()) {
-			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
-			return;
-		}
-		
-		printInfo("Adding manually a parent...");
-		childProject1.addParentReference(new ProjectReference(parentName, 0));
-		printInfo("Testing whether relationship is ok...");
-		assertEquals("The relationship is not well established with addParentReference"
-				, childProject1.getParentProjects().get(0), parentProject);
-		/* Duplicate references should not be allowed */
-		printInfo("Adding same parent...");
-		childProject1.addParentReference(new ProjectReference(parentName, 0));
-		printInfo("Checking that duplicated relationships do not exist...");
-		assertEquals("There should be only one relationship"
-				, childProject1.getRelationships().size(), 1);
-		assertEquals("There is not only one parent reference"
-				,childProject1.getParentReferences().size(), 1);
-		assertEquals("There is not only one child of the parent job"
-				, parentProject.getChildrenProjects().get(0), childProject1);
-	}
-
-	public void testCreationParent() throws IOException {
-		printInfo("testCreationParent()");
-		
-		if (!canRunTests()) {
-			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
-			return;
-		}
-		
-		printInfo("Loading two projects from file...");
-		InputStream is1 = new FileInputStream(new File(parentJob));
-		parentProject.updateByXml((Source) new StreamSource(is1));
-		is1.close();
-		InputStream is2 = new FileInputStream(new File(childJob1));
-		childProject1.updateByXml((Source) new StreamSource(is2));
-		is2.close();
-		printInfo("Testing their relation...");
-		assertEquals("The relation was not loaded correctly from the xml",
-				childProject1.getParentProjects().get(0), parentProject);
-	}
-
-	public void testParameterInheritanceManual() throws IOException {
-		printInfo("testParameterInheritanceManual()");
-		
-		if (!canRunTests()) {
-			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
-			return;
-		}
-		
-		printInfo("Creating a job with parameter1 = 0...");
-		InputStream is1 = new FileInputStream(new File(parentJob));
-		parentProject.updateByXml((Source) new StreamSource(is1));
-		is1.close();
-		printInfo("Creating a child job with parameter1 = 5...");
-		InputStream is2 = new FileInputStream(new File(childJob2));
-		childProject1.updateByXml((Source) new StreamSource(is2));
-		is2.close();
-		printInfo("Checking that the parent has only parameter1 = 0...");
-		Map<JobPropertyDescriptor, JobProperty<? super InheritanceProject>> properties = parentProject
-				.getProperties();
-		boolean found = false;
-		for (JobProperty<? super InheritanceProject> prop : properties.values()) {
-			if (prop == null) {
-				continue;
-			}
-			if (prop instanceof InheritanceParametersDefinitionProperty) {
-				InheritanceParametersDefinitionProperty ipdp = (InheritanceParametersDefinitionProperty) prop;
-				InheritableStringParameterDefinition pd = (InheritableStringParameterDefinition) ipdp
-						.getParameterDefinition("parameter1");
-				assertEquals(pd.getDefaultParameterValue().value, "0");
-				found = true;
-			}
-		}
-		assertTrue("The expected parameter was not found",found);
-		printInfo("Checking that the parent has only parameter1 = 5...");
-		Map<JobPropertyDescriptor, JobProperty<? super InheritanceProject>> propertiesChild = childProject1
-				.getProperties();
-		found = false;
-		for (JobProperty<? super InheritanceProject> prop : propertiesChild
-				.values()) {
-			if (prop == null) {
-				continue;
-			}
-			if (prop instanceof InheritanceParametersDefinitionProperty) {
-				InheritanceParametersDefinitionProperty ipdp = (InheritanceParametersDefinitionProperty) prop;
-				InheritableStringParameterDefinition pd = (InheritableStringParameterDefinition) ipdp
-						.getParameterDefinition("parameter1");
-				assertEquals(pd.getDefaultParameterValue().value, "5");
-				found = true;
-			}
-		}
-		assertTrue("The expected parameter was not found",found);
-	}
-
-	public void testParameterInheritanceEffect() throws IOException,
-			InterruptedException, ExecutionException {
-		printInfo("testParameterInheritanceEffect()");
-		
-		if (!canRunTests()) {
-			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
-			return;
-		}
-		
-		/* Parent job with parameter = 0 */
-		InputStream is1 = new FileInputStream(new File(parentJob));
-		parentProject.updateByXml((Source) new StreamSource(is1));
-		is1.close();
-		/* Child job with no overwriting, thus parameter = 0 */
-		printInfo("Creating a child job that inherits parameter1 = 0...");
-		InputStream is2 = new FileInputStream(new File(childJob1));
-		childProject1.updateByXml((Source) new StreamSource(is2));
-		is2.close();
-		/* Child job overwriting parameter = 5 */
-		printInfo("Creating a child job that overwrites parameter1 = 5...");
-		InputStream is3 = new FileInputStream(new File(childJob2));
-		childProject2.updateByXml((Source) new StreamSource(is3));
-		is3.close();
-		printInfo("Checking that we cannot schedule a build for the parent (abstract job)...");
-		/*
-		 * Testing that we cannot schedule a build for the parent (abstract
-		 * project)
-		 */
-		QueueTaskFuture<InheritanceBuild> queue = parentProject
-				.scheduleBuild2(0);
-		assertNull("It is possible to build an abstract job, which " +
-				"should not be possible", queue);
-		printInfo("Scheduling a build for the first child job and checking that the results"
-				+ " show that the value of parameter1 is 0...");
-		/* Testing that the parameter used in the build is the parent parameter */
-		buildAndLookForString(childProject1, "The value is 0");
-		printInfo("Scheduling a build for the second child job and checking that the results"
-				+ " show that the value of parameter1 is 5...");
-		/* Testing that the parameter used in the build is overwritten */
-		buildAndLookForString(childProject2, "The value is 5");
-	}
-
-	public void testShutdown() throws IOException, InterruptedException,
-			ExecutionException, RestartNotSupportedException {
-		printInfo("testShutdown()");
-		
-		if (!canRunTests()) {
-			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
-			return;
-		}
-		
-		if (SystemUtils.IS_OS_WINDOWS) {
-			printInfo("Exiting because windows does not support jenkins restart call...");
-			return;
-		}
-		InputStream is1 = new FileInputStream(new File(parentJob));
-		parentProject.updateByXml((Source) new StreamSource(is1));
-		is1.close();
-		/* Child job with no overwriting, thus parameter = 0 */
-		printInfo("Creating a child job...");
-		InputStream is2 = new FileInputStream(new File(childJob3));
-		childProject3.updateByXml((Source) new StreamSource(is2));
-		is2.close();
-		printInfo("Scheduling a first build for the child job...");
-		/* Testing that the parameter used in the build is the parent parameter */
-		InheritanceBuild ib1 = childProject3.scheduleBuild2(0).get();
-		printInfo("Scheduling another build and restarting jenkins in while doing it...");
-		childProject3.scheduleBuild2(0);
-		
-		printInfo("Checking that the last build is the first one (the second one was lost)...");
-		assertEquals("The build was completed and saved, which should not happen", 
-				childProject3.getBuilds().getLastBuild(), ib1);
-		/*
-		 * TODO: check safe restart without entering a loop printInfo(
-		 * "Scheduling a build and safe-restarting jenkins in while doing it..."
-		 * ); QueueTaskFuture<InheritanceBuild> ib2 =
-		 * childProject3.scheduleBuild2(0); j.safeRestart(); printInfo(
-		 * "Checking that the last build is the one before the safe restart");
-		 * InheritanceBuild finalIb = ib2.get();
-		 * assertEquals(childProject3.getBuilds().getLastBuild(), finalIb);
-		 */
-	}
-
+	
+	/**
+	 * Creates two projects, changes one, verifies the change, updates the other
+	 * with the XML of the former and verifies whether the change was loaded
+	 * correctly.
+	 * 
+	 * @throws IOException
+	 * @throws ServletException
+	 */
 	public void testXmlLoad() throws IOException, ServletException {
-		/* Testing all the general xml options available here. */
+		// Testing all the general xml options available here.
 		printInfo("testXmlLoad()");
 		
 		if (!canRunTests()) {
@@ -427,21 +343,240 @@ public class TestInheritanceMain extends HudsonTestCase {
 			return;
 		}
 		
-		assertFalse("The default abstract property for an abstract project " +
-				"should be false, and it is not", parentProject.isAbstract);
-		parentProject.isAbstract = true;
-		assertTrue("The abstract property of a project was not correctly set"
-				, parentProject.isAbstract);
-		printInfo("Getting the configuration of a project...");
-		XmlFile xml = parentProject.getConfigFile();
-		printInfo("Saving the configuration...");
-		parentProject.save();
-		assertFalse("The default abstract property for an abstract project " +
-				"should be false, and it is not", childProject1.isAbstract);
-		printInfo("Loading the configuration...");
-		InputStream is = new FileInputStream(xml.getFile());
-		childProject1.updateByXml((Source) new StreamSource(is));
-		assertTrue("The xml file from the parent project was not correctly loaded"
-				, childProject1.isAbstract);
+		//Creating two projects; one with and one without a param
+		XmlProject A = new XmlProject("A");
+		XmlProject B = new XmlProject("B");
+				
+		//Attach one parameter to the first project
+		A.setParameter("param", "val");
+		
+		//Save the settings of project A to disk
+		printInfo("Saving the configuration of project A...");
+		A.project.save();
+		B.project.save();
+		
+		//Check if a config file is present
+		XmlFile xml = A.project.getConfigFile();
+		assertNotNull("Config file is null for project A", xml);
+		assertTrue("No config file present for project A", xml.getFile().exists());
+		
+		//Check if both have no versioning set
+		assertEquals("A has != 0 versions", A.project.getVersions().size(), 0);
+		assertEquals("B has != 0 versions", B.project.getVersions().size(), 0);
+		
+		//Verify that A has a parameter, and B has not
+		assertEquals("A has != 1 parameter", A.project.getParameters().size(), 1);
+		assertEquals("B has != 0 parameters", B.project.getParameters().size(), 0);
+		
+		//Load the XML into project B
+		printInfo("Loading XML from A into B...");
+		B.project.updateByXml((Source) new StreamSource(A.project.getConfigFile().getFile()));
+		
+		//Now, A should still have 0 versions, but B should have one
+		assertEquals("A has != 0 versions", A.project.getVersions().size(), 0);
+		assertEquals("B has != 1 versions", B.project.getVersions().size(), 1);
+		
+		//Verify that A has a parameter, and B has one, too
+		assertEquals("Project A has != 1 parameter", A.project.getParameters().size(), 1);
+		
+		List<ParameterDefinition> defs = B.project.getParameters();
+		assertEquals("Project B has != 1 parameters", defs.size(), 1);
+		for (ParameterDefinition def : defs) {
+			assertEquals(
+					"Project B has a parameter whose name is not name 'param'",
+					def.getName(), "param"
+			);
+		}
+	}
+	
+	
+	/**
+	 * Tests if adding duplicated, circular or diamon parent references is
+	 * properly detected.
+	 * 
+	 * @throws IOException
+	 */
+	public void testParentDuplication() throws IOException {
+		printInfo("testParentDuplication()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
+		XmlProject A = new XmlProject("A");
+		XmlProject B = new XmlProject("B");
+		XmlProject C = new XmlProject("C");
+		XmlProject D = new XmlProject("D");
+		
+		assertEquals("B should inherit anything yet", B.project.getRelationships().size(), 0);
+		
+		//Add one reference to A and verify
+		B.addParent("A", null);
+		assertEquals("A should have 0 parents", A.project.getParentReferences().size(), 0);
+		assertEquals("A should have 1 children", A.project.getChildrenProjects().size(), 1);
+		assertEquals("A should have 1 connections", A.project.getRelationships().size(), 1);
+		assertEquals("B should have 1 parents", B.project.getParentReferences().size(), 1);
+		assertEquals("B should have 0 children", B.project.getChildrenProjects().size(), 0);
+		assertEquals("B should have 1 connections", B.project.getRelationships().size(), 1);
+		//Cycle test
+		assertFalse("A should not have a cyclic dependency", A.project.hasCyclicDependency());
+		assertFalse("B should not have a cyclic dependency", B.project.hasCyclicDependency());
+		
+		//Add another, duplicate reference (which is not counted for child conns)
+		B.addParent("A", null);
+		assertEquals("A should have 0 parents", A.project.getParentReferences().size(), 0);
+		assertEquals("A should have 2 children", A.project.getChildrenProjects().size(), 2);
+		assertEquals("A should have 1 connections", A.project.getRelationships().size(), 1);
+		assertEquals("B should have 2 parents", B.project.getParentReferences().size(), 2);
+		assertEquals("B should have 0 children", B.project.getChildrenProjects().size(), 0);
+		assertEquals("B should have 1 connections", B.project.getRelationships().size(), 1);
+		//Cycle test
+		assertFalse("A should not have a cyclic dependency", A.project.hasCyclicDependency());
+		assertTrue("B should have a cyclic dependency", B.project.hasCyclicDependency());
+		
+		//Clean up the references and verify the ground-state
+		while (B.dropParent("A")) {}
+		assertEquals("B should have 0 connections", B.project.getRelationships().size(), 0);
+		assertFalse("A should not have a cyclic dependency", A.project.hasCyclicDependency());
+		assertFalse("B should not have a cyclic dependency", B.project.hasCyclicDependency());
+		
+		
+		// Create a cycle between A,B,C
+		A.addParent("B", null);
+		B.addParent("C", null);
+		C.addParent("A", null);
+		assertEquals("A should have 1 parents", A.project.getParentReferences().size(), 1);
+		assertEquals("A should have 1 children", A.project.getChildrenProjects().size(), 1);
+		assertEquals("A should have 2 connections", A.project.getRelationships().size(), 2);
+		assertEquals("B should have 1 parents", B.project.getParentReferences().size(), 1);
+		assertEquals("B should have 1 children", B.project.getChildrenProjects().size(), 1);
+		assertEquals("B should have 2 connections", B.project.getRelationships().size(), 2);
+		assertEquals("C should have 1 parents", C.project.getParentReferences().size(), 1);
+		assertEquals("C should have 1 children", C.project.getChildrenProjects().size(), 1);
+		assertEquals("C should have 2 connections", C.project.getRelationships().size(), 2);
+		//Cycle test
+		assertTrue("A should have a cyclic dependency", A.project.hasCyclicDependency());
+		assertTrue("B should have a cyclic dependency", B.project.hasCyclicDependency());
+		assertTrue("C should have a cyclic dependency", C.project.hasCyclicDependency());
+		
+		//Clean up
+		A.dropParent("B"); B.dropParent("C"); C.dropParent("A");
+		
+		
+		//Create diamond dependency: A->B,C ; B->D; C->D
+		A.addParent("B", null);
+		A.addParent("C", null);
+		B.addParent("D", null);
+		C.addParent("D", null);
+		
+		//Cycle test
+		assertTrue("A should have a cyclic dependency", A.project.hasCyclicDependency());
+		assertFalse("B should not have a cyclic dependency", B.project.hasCyclicDependency());
+		assertFalse("C should not have a cyclic dependency", C.project.hasCyclicDependency());
+		assertFalse("D should not have a cyclic dependency", D.project.hasCyclicDependency());
+	}
+
+	
+	public void testParameterInheritance() throws IOException {
+		printInfo("testParameterInheritance()");
+		
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
+		XmlProject A = new XmlProject("A");
+		XmlProject B = new XmlProject("B");
+		
+		B.addParent("A", null);
+		
+		assertEquals("A has != 0 parameters", A.project.getParameters().size(), 0);
+		assertEquals("B has != 0 parameters", B.project.getParameters().size(), 0);
+		
+		A.setParameter("P", "A");
+		assertEquals("A has != 1 parameters", A.project.getParameters().size(), 1);
+		assertEquals("B has != 0 parameters", B.project.getParameters().size(), 0);
+		assertEquals("B has != 1 inherited parameters", B.project.getParameters(IMode.INHERIT_FORCED).size(), 1);
+		
+		//Build one instance of B and check if it got parameter "P" = "A"
+		buildAndAssertValue(B, "P", "A");
+		
+		//Now, add an override of "P" into "B" and build again
+		B.setParameter("P", "B");
+		buildAndAssertValue(B, "P", "B");
+		
+		//Alter the parameter in A to be "extend" instead of "overwrite"
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.EXTENSIBLE, false, false, false, false
+		));
+		B.setParameter(new InheritableStringParameterDefinition(
+				"P", "B", IModes.OVERWRITABLE, false, false, false, false
+		));
+		//Build and check value
+		buildAndAssertValue(B, "P", "AB");
+		
+		//Test the reverse; overwrite followed by extend
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, false, false, false, false
+		));
+		B.setParameter(new InheritableStringParameterDefinition(
+				"P", "B", IModes.EXTENSIBLE, false, false, false, false
+		));
+		buildAndAssertValue(B, "P", "B");
+		
+		//Test fixed mode
+		B.setParameter(new InheritableStringParameterDefinition(
+				"P", "B", IModes.FIXED, false, false, false, false
+		));
+		buildAndAssertValue(B, "P", "B");
+		
+		//Also fix 'A', this should lead to a failed build
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.FIXED, false, false, false, false
+		));
+		//The build must even fail to queue in this case
+		QueueTaskFuture<InheritanceBuild> qtf = B.project.scheduleBuild2(0);
+		assertNull("Building 'B' with 2 fixed parameters should have failed to schedule!", qtf);
+		
+		
+		//Test if value assignment causes an actual build failure
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, false, true, false, false
+		));
+		B.setParameter(new InheritableStringParameterDefinition(
+				"P", "", IModes.OVERWRITABLE, false, true, false, false
+		));
+		InheritanceBuild build = buildAndAssertValue(B, "P", "", false);
+		assertTrue(
+				"Build for 'B' should have failed due to an empty value for 'P'",
+				build.getResult().isWorseOrEqualTo(Result.FAILURE)
+		);
+	}
+	
+	
+	// === HELPER METHODS ===
+	
+	public InheritanceBuild buildAndAssertValue(XmlProject p, String param, String value) throws IOException {
+		return this.buildAndAssertValue(p, param, value, true);
+	}
+	
+	public InheritanceBuild buildAndAssertValue(XmlProject p, String param, String value, boolean assertSuccess) throws IOException {
+		try {
+			InheritanceBuild build = (assertSuccess)
+					? this.buildAndAssertSuccess(p.project)
+					: p.project.scheduleBuild2(0).get();
+			assertNotNull(build);
+			ParametersAction pa = build.getAction(ParametersAction.class);
+			assertNotNull("Build has no parameters", pa);
+			
+			ParameterValue pv = pa.getParameter(param);
+			assertNotNull("Build has no parameter P", pv);
+			assertTrue("Parameter is not a StringParameterValue", pv instanceof StringParameterValue);
+			assertEquals("Parameter does not have correct value", ((StringParameterValue)pv).value, value);
+			return build;
+		} catch (Exception e) {
+			throw new IOException(e);
+		}
 	}
 }

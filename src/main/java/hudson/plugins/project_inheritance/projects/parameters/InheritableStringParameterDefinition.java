@@ -22,6 +22,7 @@ package hudson.plugins.project_inheritance.projects.parameters;
 
 import hudson.Extension;
 import hudson.model.ParameterValue;
+import hudson.model.AbstractProject;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.StringParameterDefinition;
@@ -606,6 +607,35 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		super.setDefaultValue(defaultValue);
 	}
 	
+	/**
+	 * Returns the default value for this parameter.
+	 * <p>
+	 * It will always return the locally defined value, but not a derived one
+	 * you'd get via {@link #createValue(String)} or
+	 * {@link #createValue(StaplerRequest)}.
+	 * <p>
+	 * There are at least 3 different ways a job can be scheduled:
+	 * <ol>
+	 * 	<li>Spawned via an HTTP/CLI request with parameters assigned</li>
+	 * 	<li>Spawned via a parameterised trigger</li>
+	 * 	<li>Spawned via direct call to
+	 * 		{@link AbstractProject#scheduleBuild(hudson.model.Cause)} or other
+	 * 		methods.</li>.
+	 * </ol>
+	 * The first two pass through {@link #createValue(String)} or
+	 * {@link #createValue(StaplerRequest)}. Unfortunately, the last one
+	 * calls this method here directly.
+	 * <p>
+	 * As such, an InheritanceProject <b><i>does not call</b></i> its super
+	 * implementation. For performance reasons, we do not use reflection here,
+	 * as it is easier to simply not call the super class.
+	 * <p>
+	 * Always be aware of this locality of the value when using this method here.
+	 * 
+	 * @see InheritanceProject#scheduleBuild2(int, hudson.model.Cause, java.util.Collection)
+	 * 
+	 * @return the local default value for this parameter definition.
+	 */
 	@Override
 	public StringParameterValue getDefaultParameterValue() {
 		return super.getDefaultParameterValue();
