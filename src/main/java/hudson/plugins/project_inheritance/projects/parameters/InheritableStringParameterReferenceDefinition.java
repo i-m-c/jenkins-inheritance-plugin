@@ -56,6 +56,18 @@ public class InheritableStringParameterReferenceDefinition extends
 		super(other);
 	}
 	
+	/**
+	 * This method returns the {@link InheritableStringParameterDefinition}
+	 * that is the parent of this reference, but is not a reference itself.
+	 * <p>
+	 * As such, this method is useless if you want to compute the final value
+	 * of the variable, but it is essential to find the value of the flags that
+	 * can only be defined on a true parameter, like {@link #getMustBeAssigned()}.
+	 * 
+	 * @return the actual {@link InheritableStringParameterDefinition} that this
+	 * reference ultimately points to. Skips all other
+	 * {@link InheritableStringParameterReferenceDefinition} in between them.
+	 */
 	public InheritableStringParameterDefinition getParent() {
 		InheritanceParametersDefinitionProperty ipdp = this.getRootProperty();
 		if (ipdp == null) {
@@ -70,10 +82,13 @@ public class InheritableStringParameterReferenceDefinition extends
 		while (iter.hasPrevious()) {
 			ScopeEntry entry = iter.previous();
 			//Refuse to return ourselves or siblings
-			if (entry.param == null || entry.owner == selfOwner ||entry.param == this) {
+			if (entry.param == null || entry.owner == selfOwner || entry.param == this) {
 				continue;
 			}
 			if (!(entry.param instanceof InheritableStringParameterDefinition)) {
+				continue;
+			}
+			if (entry.param instanceof InheritableStringParameterReferenceDefinition) {
 				continue;
 			}
 			if (entry.param.getName().equals(this.getName())) {
@@ -92,9 +107,12 @@ public class InheritableStringParameterReferenceDefinition extends
 		
 		StringParameterValue spv = ((StringParameterValue) defaultValue);
 		String value = spv.value;
-		return new InheritableStringParameterReferenceDefinition(
-				this.getName(), value
-		);
+		InheritableStringParameterReferenceDefinition isprd =
+				new InheritableStringParameterReferenceDefinition(
+						this.getName(), value
+				);
+		isprd.setRootProperty(this.getRootProperty());
+		return isprd;
 	}
 	
 	

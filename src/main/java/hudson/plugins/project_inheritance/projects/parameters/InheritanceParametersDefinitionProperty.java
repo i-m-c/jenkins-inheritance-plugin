@@ -514,7 +514,11 @@ public class InheritanceParametersDefinitionProperty extends
 	 * contact to each other. Thus, you can't use their methods that need to
 	 * access the other parameters. This especially applies to instances of
 	 * {@link InheritableStringParameterReferenceDefinition}!
-	 * 
+	 * <p>
+	 * To correct this, simply copy the definitions with
+	 * {@link ParameterDefinition#copyWithDefaultValue(ParameterValue)} and then
+	 * set the reference to 'this' property via:
+	 * {@link InheritableStringParameterDefinition#setRootProperty(InheritanceParametersDefinitionProperty)}.
 	 * 
 	 * @return a list of {@link ScopeEntry} instances, sorted by order of
 	 * derivation by inheritance.
@@ -544,6 +548,7 @@ public class InheritanceParametersDefinitionProperty extends
 					IMode.LOCAL_ONLY
 			);
 			if (parPDP == null) { continue; }
+			
 			for (ParameterDefinition pd : parPDP.getParameterDefinitions()) {
 				lst.add(new ScopeEntry(par.getFullName(), pd));
 			}
@@ -562,6 +567,7 @@ public class InheritanceParametersDefinitionProperty extends
 		return this.scopeCache;
 	}
 	
+	
 	public List<ScopeEntry> getScopedParameterDefinition(String name) {
 		List<ScopeEntry> all = getAllScopedParameterDefinitions();
 		List<ScopeEntry> out = new LinkedList<ScopeEntry>();
@@ -572,7 +578,6 @@ public class InheritanceParametersDefinitionProperty extends
 		}
 		return out;
 	}
-	
 	
 	/**
 	 * We need to override this method do prevent Jenkins from trying to
