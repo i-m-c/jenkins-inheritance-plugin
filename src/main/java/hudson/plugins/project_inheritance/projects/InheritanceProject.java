@@ -1829,6 +1829,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			//to clear the local buffers
 			clearBuffers(this);
 			
+			//Finally, triggering generation of new projects
+			ProjectCreationEngine.instance.notifyProjectChange(this);
+			
 			//At the end, we mark the forms as successfully submitted
 			FormApply.success(".").generateResponse(req, rsp, null);
 		} catch (JSONException e) {

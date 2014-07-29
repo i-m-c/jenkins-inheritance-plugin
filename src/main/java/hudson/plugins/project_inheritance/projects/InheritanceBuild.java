@@ -25,21 +25,22 @@ import hudson.model.Build;
 import hudson.model.BuildListener;
 import hudson.model.ParameterValue;
 import hudson.model.Result;
-import hudson.model.TopLevelItem;
 import hudson.model.Job;
 import hudson.model.Node;
 import hudson.model.ParametersAction;
 import hudson.model.Run;
+import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterValue;
 import hudson.plugins.project_inheritance.util.PathMapping;
 import hudson.plugins.project_inheritance.util.Resolver;
-import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.slaves.WorkspaceList;
 import hudson.slaves.WorkspaceList.Lease;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -55,6 +56,7 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	public InheritanceBuild(InheritanceProject project, File buildDir) throws IOException {
 		super(project, buildDir);
 	}
+	
 	
 	public synchronized void save() throws IOException {
 		super.save();
@@ -94,6 +96,30 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 		InheritanceProject.unsetVersioningMap();
 	}
 	
+	public static FilePath getWorkspacePathFor(
+			Node n, InheritanceProject project, Map<String, String> values) {
+		String path = project.getParameterizedWorkspace();
+		if (path == null || path.isEmpty()) {
+			return null;
+		}
+		
+		//Resolve the path's variables
+		String resolv = Resolver.resolveSingle(values, path);
+		if (resolv == null) { return null; }
+		
+		resolv = resolv.trim();
+		if (resolv.isEmpty()) { return null; }
+		
+		//Check if the path looks absolute; if not put it under the node
+		if (PathMapping.isAbsolute(resolv) == false) {
+			FilePath root = n.getWorkspaceFor(project);
+			if (root != null) {
+				root = root.getParent();
+				resolv = PathMapping.join(root.getRemote(), resolv);
+			}
+		}
+		return new FilePath(n.getChannel(), resolv);
+	}
 	
 	/**
 	 * This method schedules the execution of this build object.
@@ -121,53 +147,41 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 		protected Result doRun(BuildListener listener) throws Exception {
 			/* Please note: The version MUST have been set up by the
 			 * run() method above! Otherwise, you will only get stable/latest
-			 * versions
+			 * versions!
 			 */
 			Run<?,?> run = this.getBuild();
 			if (!(run instanceof InheritanceBuild)) {
 				listener.fatalError(
 						"InheritanceBuildExecution was not started by an"
-						+ " InheritanceBuiild. Versioning and Inheritance"
+						+ " InheritanceBuild. Versioning and Inheritance"
 						+ " can't be trusted."
 				);
 				throw new RunnerAbortedException();
 			}
-			InheritanceBuild build = (InheritanceBuild) run;
 			
-			//Fetch the versions that are desired and save them into the
-			//current thread
-			build.setVersions();
-			try {
-				/* Check if all the parameters were set right; and somebody did not
-				 * forget to set a parameter correctly.
-				 */
-				List<ParametersAction> actions =
-						build.getActions(ParametersAction.class);
-				
-				for (ParametersAction pa : actions) {
-					for (ParameterValue pv : pa.getParameters()) {
-						if (!(pv instanceof InheritableStringParameterValue)) {
-							continue;
-						}
-						InheritableStringParameterValue ispv =
-								(InheritableStringParameterValue) pv;
-						//Check if a value should've been set, but was not
-						if (!ispv.getMustHaveValueSet()) { continue; }
-						if (ispv.value == null || ispv.value.isEmpty()) {
-							//We detected an invalid value
-							listener.fatalError(String.format(
-									"Parameter '%s' has no value, but was required to be set. Aborting!",
-									ispv.getName()
-							));
-							throw new RunnerAbortedException();
-						}
-					}
+			/* Check if all the parameters were set right; and somebody did not
+			 * forget to set a parameter correctly.
+			 */
+			for (ParameterValue pv : this.getParameterValues()) {
+				if (!(pv instanceof InheritableStringParameterValue)) {
+					continue;
 				}
-				//Call the regular build response
-				return super.doRun(listener);
-			} finally {
-				build.unsetVersions();
+				InheritableStringParameterValue ispv =
+						(InheritableStringParameterValue) pv;
+				//Check if a value should've been set, but was not
+				if (!ispv.getMustHaveValueSet()) { continue; }
+				if (ispv.value == null || ispv.value.isEmpty()) {
+					//We detected an invalid value
+					listener.fatalError(String.format(
+							"Parameter '%s' has no value, but was required to be set. Aborting!",
+							ispv.getName()
+							));
+					throw new RunnerAbortedException();
+				}
 			}
+			
+			//Call the regular build response
+			return super.doRun(listener);
 		}
 		
 		/**
@@ -188,6 +202,22 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 		 */
 		@Override
 		protected Lease decideWorkspace(Node n, WorkspaceList wsl) throws InterruptedException, IOException {
+			//Check if a parameter itself sets the workspace path
+			for (ParameterValue pv : this.getParameterValues()) {
+				if (!(pv instanceof StringParameterValue)) {
+					continue;
+				}
+				StringParameterValue spv = (StringParameterValue) pv;
+				if (spv.getName().equalsIgnoreCase("WORKSPACE_REUSE_PATH")) {
+					//Fetch the workspace (do not care about locking)
+					return Lease.createDummyLease(
+							new FilePath(n.getChannel(), spv.value)
+					);
+				}
+			}
+			
+			//Otherwise, derive the workspace path "normally" with locking
+			
 			Job<?, ?> job = this.getProject();
 			if (job == null && !(job instanceof InheritanceProject)) {
 				//Invalid job; fall-back
@@ -195,39 +225,32 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			}
 			InheritanceProject ip = (InheritanceProject) job;
 			
-			String path = ip.getParameterizedWorkspace();
-			if (path == null || path.isEmpty()) {
-				return super.decideWorkspace(n, wsl);
-			}
-			
-			//Resolve the path's variables
-			String resolv = Resolver.resolveSingle(
-					this.getBuild().getEnvironment(this.getListener()), path
+			FilePath ws = InheritanceBuild.getWorkspacePathFor(
+					n, ip,
+					this.getBuild().getEnvironment(this.getListener())
 			);
-			if (resolv == null) {
+			if (ws == null) {
 				return super.decideWorkspace(n, wsl);
-			}
-			resolv = resolv.trim();
-			if (resolv.isEmpty()) {
-				return super.decideWorkspace(n, wsl);
-			}
-			
-			//Check if the path looks absolute; if not put it under the node
-			if (PathMapping.isAbsolute(resolv) == false) {
-				FilePath ws = n.getWorkspaceFor((TopLevelItem)getProject());
-				if (ws != null) {
-					FilePath root = ws.getParent();
-					if (root != null) {
-						resolv = PathMapping.join(root.getRemote(), resolv);
-					}
-				}
 			}
 			
 			//We have the path; create a variable Lease
-			return wsl.allocate(
-					new FilePath(n.getChannel(), resolv),
-					getBuild()
-			);
+			return wsl.allocate(ws, getBuild());
+		}
+		
+		
+		protected Collection<ParameterValue> getParameterValues() {
+			Map<String, ParameterValue> map = new HashMap<String, ParameterValue>();
+			Run<?,?> run = this.getBuild();
+			List<ParametersAction> actions =
+					run.getActions(ParametersAction.class);
+			
+			for (ParametersAction pa : actions) {
+				for (ParameterValue pv : pa.getParameters()) {
+					map.put(pv.getName(), pv);
+				}
+			}
+			
+			return map.values();
 		}
 	}
 }

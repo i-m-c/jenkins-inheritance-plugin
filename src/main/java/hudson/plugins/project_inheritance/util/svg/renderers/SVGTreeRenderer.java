@@ -24,7 +24,6 @@ import hudson.plugins.project_inheritance.util.svg.Graph;
 import hudson.plugins.project_inheritance.util.svg.SVGNode;
 import hudson.plugins.project_inheritance.util.svg.prefabs.SVGClassBox;
 import hudson.plugins.project_inheritance.util.svg.primitives.SVGArrow;
-import hudson.plugins.project_inheritance.util.svg.primitives.SVGLine;
 import hudson.plugins.project_inheritance.util.svg.primitives.SVGPrimitive;
 import hudson.plugins.project_inheritance.util.svg.properties.ArrowProperty;
 import hudson.plugins.project_inheritance.util.svg.properties.ColorProperty;
