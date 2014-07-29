@@ -20,6 +20,18 @@
 
 package hudson.plugins.project_inheritance.util;
 
+import java.lang.reflect.Field;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.TreeMap;
+
+import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.converters.reflection.FieldDictionary;
+import com.thoughtworks.xstream.converters.reflection.FieldKey;
+import com.thoughtworks.xstream.converters.reflection.FieldKeySorter;
+import com.thoughtworks.xstream.converters.reflection.Sun14ReflectionProvider;
+
+
 public class Helpers {
 
 	public static boolean bothNullOrEqual(Object a, Object b) {
@@ -32,4 +44,29 @@ public class Helpers {
 		}
 	}
 	
+	private static XStream sortStream = null;
+	
+	public static XStream getSortedXSteam() {
+		if (sortStream != null) { return sortStream; }
+		FieldKeySorter sorter = new FieldKeySorter() {
+			@SuppressWarnings("rawtypes")
+			public Map sort(Class type, Map keyedByFieldKey) {
+				Map<FieldKey, Field> out = new TreeMap<FieldKey, Field>(
+					new Comparator<FieldKey>() {
+						public int compare(FieldKey o1, FieldKey o2) {
+							return o1.getFieldName().compareTo(o2.getFieldName());
+						}
+					}
+				);
+				for (Object key : keyedByFieldKey.keySet()) {
+					out.put((FieldKey)key, (Field)keyedByFieldKey.get(key));
+				}
+				return out;
+			}
+		};
+		sortStream = new XStream(new Sun14ReflectionProvider(
+				new FieldDictionary(sorter)
+		));
+		return sortStream;
+	}
 }

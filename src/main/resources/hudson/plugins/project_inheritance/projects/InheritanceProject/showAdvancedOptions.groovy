@@ -32,7 +32,13 @@ l.layout(title: my.displayName) {
 		l.tasks() {
 			l.task(
 					icon: "images/24x24/setting.png",
-					title: _("Get XML configuration"),
+					title: _("Get full XML configuration"),
+					href: "getConfigAsXML?depth=1"
+			)
+			
+			l.task(
+					icon: "images/24x24/setting.png",
+					title: _("Get XML configuration of local project only"),
 					href: "getConfigAsXML"
 			)
 			
