@@ -173,6 +173,15 @@ public class InheritableStringParameterReferenceDefinition extends
 		return parent.getDescription();
 	}
 	
+	@Override
+	public boolean getIsHidden() {
+		InheritableStringParameterDefinition parent = this.getParent();
+		if (parent == null) {
+			//Return a dummy-value
+			return super.getIsHidden();
+		}
+		return parent.getIsHidden();
+	}
 
 	@Extension
 	public static class DescriptorImpl extends InheritableStringParameterDefinition.DescriptorImpl {

@@ -38,7 +38,6 @@ import org.apache.commons.lang.SystemUtils;
 import org.jvnet.hudson.test.HudsonTestCase;
 
 public class TestInheritanceMain extends HudsonTestCase {
-
 	/* Sample projects needed for testing */
 	String parentJob;
 	String childJob1;
