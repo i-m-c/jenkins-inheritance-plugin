@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
+ * Copyright (c) 2014 Contributor.  All rights reserved.
  * 
  * This file is part of the Inheritance plug-in for Jenkins.
  * 
@@ -26,8 +26,12 @@ import hudson.model.Build;
 import hudson.model.Describable;
 import hudson.model.Queue;
 import hudson.model.Saveable;
+import hudson.model.AbstractBuild.AbstractRunner;
+import hudson.model.AbstractProject;
 import hudson.model.Descriptor;
+import hudson.model.Hudson;
 import hudson.model.Project;
+import hudson.model.listeners.RunListener;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
@@ -65,8 +69,6 @@ import org.kohsuke.stapler.StaplerRequest;
  * @param <T> the target type of the field this helper is written for.
  */
 public abstract class InheritanceGovernor<T> {
-	public static final Pattern runUriRegExp = Pattern.compile(".*/job/[^/]+/[0-9]+/.*");
-	
 	public final String fieldName;
 	public final SELECTOR orderMode;
 	public final InheritanceProject caller;
@@ -421,7 +423,7 @@ public abstract class InheritanceGovernor<T> {
 		 * 3.) The project is called in the context of a build
 		 * 4.) The queue queries properties of the project 
 		 */
-		
+
 		//Check forced inheritance or transience
 		if (forcedInherit || root.getIsTransient()) {
 			return true;
@@ -431,26 +433,34 @@ public abstract class InheritanceGovernor<T> {
 		StaplerRequest req = Stapler.getCurrentRequest();
 		if (req != null) {
 			String uri = req.getRequestURI();
-			//Check if we request the build page
-			if (uri.endsWith("/build")) {
-				return true;
-			}
-			//Check if we were requested by page for a run
-			if (runUriRegExp.matcher(uri).matches()) {
-				return true;
-			}
+			if (inheritanceRequiredByRequestURI(uri)) {
+                return true;
+            }
 		}
 		
 		//Check via expensive stack reflection
 		if (Reflection.calledFromClass(
-				Build.class, BuildCommand.class,
-				Queue.class, BuildTrigger.class,
-				Trigger.class, BuildStep.class
-			) ||
-			Reflection.calledFromMethod(
-					InheritanceProject.class,
-					"doBuild", "scheduleBuild2", "doBuildWithParameters"
-			)
+						Build.class, BuildCommand.class,
+						Queue.class, BuildTrigger.class,
+						Trigger.class, BuildStep.class		
+				) ||
+				Reflection.calledFromMethod(
+						InheritanceProject.class,
+						"doBuild", "scheduleBuild2", "doBuildWithParameters", "buildDependencyGraph"
+				) ||
+				//for scmtriggr / polling
+				Reflection.calledFromMethod(
+						AbstractProject.class,
+						"poll"
+				) ||
+				Reflection.calledFromMethod(
+						RunListener.class,
+						"onCompleted"
+				) ||
+				Reflection.calledFromMethod(
+						AbstractRunner.class,
+						"post2"
+				)
 		) {
 			return true;
 		}
@@ -458,6 +468,17 @@ public abstract class InheritanceGovernor<T> {
 		//In all other cases, we don't require (or want) inheritance
 		return false;
 	}
+	
+    private static boolean inheritanceRequiredByRequestURI(String uri) {
+        List<RequestInheritanceChecker> list = Hudson.getInstance().getExtensionList(
+                RequestInheritanceChecker.class);
+        for (RequestInheritanceChecker requestInheritanceChecker : list) {
+            if (requestInheritanceChecker.isInheritanceRequired(uri)) {
+                return true;
+            }
+        }
+        return false;
+    }
 	
 	/**
 	 * This method uses reflection to tell whether the current state means
