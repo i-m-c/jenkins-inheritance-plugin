@@ -1558,6 +1558,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 		
 		//Checking if we have a parameter set which overrides everything 
+		Map<String, Long> vMap = new HashMap<String, Long>(); 
 		for (Action a : actions) {
 			if (!(a instanceof ParametersAction)) {
 				continue;
@@ -1571,8 +1572,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				continue;
 			}
 			StringParameterValue spv = (StringParameterValue) pv;
-			Map<String, Long> vMap = 
-					InheritanceParametersDefinitionProperty
+			vMap = InheritanceParametersDefinitionProperty
 					.decodeVersioningMap(spv.value);
 			if (vMap == null) { continue; }
 			
@@ -1582,11 +1582,20 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//If we need to create a new versioning action; we do this now
 		//Do note that this will retrieve versions previously stored in the thread!
+		//There is a special use case where the versions can be passed through the
+		//InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME so 
+		//we need to create a Versioning Action based on that in this case
 		if (!hasVersioningAction) {
 			LinkedList<Action> newActions = new LinkedList<Action>(actions);
-			newActions.add(
-					new VersioningAction(this.getAllVersionsFromCurrentState())
-			);
+			if (!vMap.isEmpty()) {
+				newActions.add(
+						new VersioningAction(vMap)
+				);
+			} else {
+				newActions.add(
+						new VersioningAction(this.getAllVersionsFromCurrentState())
+				);
+			}
 			actions = newActions;
 		}
 		

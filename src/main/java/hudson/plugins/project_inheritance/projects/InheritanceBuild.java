@@ -30,9 +30,9 @@ import hudson.model.Node;
 import hudson.model.ParametersAction;
 import hudson.model.Run;
 import hudson.model.StringParameterValue;
-import hudson.model.TopLevelItem;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterValue;
+import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.util.PathMapping;
 import hudson.plugins.project_inheritance.util.Resolver;
 import hudson.slaves.WorkspaceList;
@@ -44,9 +44,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import jenkins.model.Jenkins;
-import jenkins.slaves.WorkspaceLocator;
 
 
 public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild> {
@@ -86,7 +83,26 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	}
 	
 	private void setVersions() {
-		Map<String, Long> versions = getProjectVersions();
+		Map<String, Long> versions = null;
+
+		/*
+		 * we try to find the versions inside the special parameter VERSION_PARAM_NAME
+		 * by looking in the build parameters
+		 */
+		String versionParamName = getBuildVariables().get(InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME);
+		if ( versionParamName != null) {
+			versions = InheritanceParametersDefinitionProperty.decodeVersioningMap(
+					versionParamName
+			);
+		}		
+		/*
+		 * If we didn't find the parameter VERSION_PARAM_NAME in the parametersAction,
+		 * we fetch it from getProjectVersions
+		 */
+		if (null == versions) {
+			versions = getProjectVersions();
+		}
+		
 		if (versions != null) {
 			//Set the normal versioning (will not register values in thread)
 			InheritanceProject.setVersioningMap(versions);
