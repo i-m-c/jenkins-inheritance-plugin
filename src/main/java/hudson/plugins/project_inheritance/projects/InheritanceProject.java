@@ -684,6 +684,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	@Override
 	public void updateByXml(Source source) throws IOException {
+		//Check if the job is a transient job; in which case this must fail
+		if (this.getIsTransient()) {
+			String msg = String.format(
+					"Updating %s by XML upload is not allowed: Transient project",
+					this.getName()
+			);
+			log.warning(msg);
+			throw new IOException(msg);
+		}
+		
 		//Instruct the parent to update us
 		super.updateByXml(source);
 		//Then, save a new version
