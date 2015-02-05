@@ -416,6 +416,15 @@ public abstract class InheritanceGovernor<T> {
 			//an NPE which means no inheritance should be queried
 			return false;
 		}
+
+		StaplerRequest req = Stapler.getCurrentRequest();
+		if (req != null) {
+			String uri = req.getRequestURI();
+			//Check if we request the configure page. We don't want to see merged parameters in this case. 
+			if (uri.endsWith("/configure")) { 
+				return false;
+			}
+		}
 		
 		return true;
 	}
