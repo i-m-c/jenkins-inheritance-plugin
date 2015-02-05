@@ -10,10 +10,12 @@ import hudson.model.Result;
 import hudson.model.TaskListener;
 import hudson.model.TopLevelItem;
 import hudson.model.Computer;
+import hudson.model.Label;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.StringParameterValue;
+import hudson.model.labels.LabelAtom;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
@@ -49,6 +51,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
@@ -831,6 +835,61 @@ public class TestInheritanceMain extends HudsonTestCase {
 		assertTrue("Workspace did not end with 'foobar'", remote.endsWith(expect));
 	}
 	
+	
+	public void testLabelCaching() throws IOException, InterruptedException {
+		printInfo("testLabelCaching()");
+		if (!canRunTests()) {
+			//printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			//return;
+		}
+		
+		//Fetch the jenkins instance; which is a valid build host
+		Jenkins j = Jenkins.getInstance();
+		//Set its label to a test value
+		j.setLabelString("test:foo");
+		
+		//Create a simple job
+		XmlProject A = new XmlProject("A");
+		//Assign the test:foo label
+		A.project.setAssignedLabel(new LabelAtom("test:foo"));
+		
+		//Build the job; should work
+		try {
+			QueueTaskFuture<InheritanceBuild> future = A.project.scheduleBuild2(0);
+			InheritanceBuild b = future.get(5, TimeUnit.SECONDS);
+			this.assertBuildStatusSuccess(b);
+			
+			//Then, change the label on the Jenkins instance
+			j.setLabelString("test:bar");
+			//Refresh the node information, to force label re-association
+			j.setNodes(j.getNodes());
+			//Nuke the buffers, to force label regeneration
+			InheritanceProject.clearBuffers(null);
+			
+			//Build the job again. It must not be able to start, as the labels are wrong
+			future = A.project.scheduleBuild2(0);
+			Thread.sleep(5*1000);
+			assertFalse(
+					"Job A should not have run, as no host with a correct label is online",
+					future.isDone()
+			);
+			
+			//Now, change the label and wait for at most 15 seconds for the
+			//label cache to clear and the job to finish
+			j.setLabelString("test:foo");
+			//Refresh the node information, to force label re-association
+			j.setNodes(j.getNodes());
+			
+			b = future.get(15, TimeUnit.SECONDS);
+			this.assertBuildStatusSuccess(b);
+		} catch (Exception ex) {
+			fail(String.format(
+					"Got exception during execution of project 'A':\n%s",
+					ex.getMessage()
+			));
+		}
+		
+	}
 	
 	// === HELPER METHODS ===
 	

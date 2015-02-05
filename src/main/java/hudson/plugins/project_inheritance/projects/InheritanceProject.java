@@ -52,6 +52,7 @@ import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Project;
 import hudson.model.Queue;
 import hudson.model.StringParameterValue;
+import hudson.model.labels.LabelAtom;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.model.queue.SubTask;
 import hudson.model.queue.SubTaskContributor;
@@ -127,6 +128,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.Vector;
+import java.util.Map.Entry;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -3640,7 +3642,10 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Check if there's a cached value
 		Object cached = onChangeBuffer.get(this, "maintenanceAssignedLabel");
 		if (cached != null && cached instanceof Label) {
-			return (Label) cached;
+			Label lbl = (Label) cached;
+			//Use the Jenkins cache to get an up-to-date version of that label
+			//Jenkins will automatically flush cached labels when they change
+			return Jenkins.getInstance().getLabel(lbl.getName());
 		}
 		
 		//Generate a new label, forcing inheritance
@@ -3688,30 +3693,28 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		//Generate the label on this node
+		//Generate the label on this node and the optional "magic" label restriction
 		Label lbl = gov.retrieveFullyDerivedField(this, mode);
-		
-		//Checking if the node-label-for-testing needs to be added
 		Label magic = ProjectCreationEngine.instance.getMagicNodeLabelForTestingValue();
-		//Check if no magic label is set
-		if (magic == null || magic.isEmpty()) {
-			return lbl;
-		}
-		if (lbl != null) {
-			String labelExpr = lbl.getExpression();
-			String magicExpr = magic.getExpression();
-			if (labelExpr.contains(magicExpr)) {
-				//The label is already referencing the magic; no appending needed
-				return lbl;
+		
+		//Check if the magic label needs to be applied (only when building)
+		if (magic != null && !magic.isEmpty() && InheritanceGovernor.inheritanceLookupRequired(this)) {
+			if (lbl != null) {
+				String labelExpr = lbl.getName();
+				String magicExpr = magic.getName();
+				if (!labelExpr.contains(magicExpr)) {
+					//We need to add the magic to the label
+					lbl = lbl.and(magic.not());
+				}
+			} else {
+				//No label present, just use magic value as-is
+				lbl = magic.not();
 			}
 		}
-		//Otherwise, we need to add the magic label; but only when building
-		if (InheritanceGovernor.inheritanceLookupRequired(this)) {
-			return (lbl == null) ? magic.not() : lbl.and(magic.not());
-		}
 		
-		//No appending of the magic value is necessary
-		return lbl;
+		//Use the Jenkins cache to get an up-to-date version of that label
+		//Jenkins will automatically flush cached labels when they change
+		return (lbl == null) ? null : Jenkins.getInstance().getLabel(lbl.getName());
 	}
 	
 	public Label getRawAssignedLabel() {
