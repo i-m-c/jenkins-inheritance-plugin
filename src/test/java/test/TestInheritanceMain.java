@@ -14,14 +14,22 @@ import hudson.model.queue.QueueTaskFuture;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationClass;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationMating;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
 import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference.ProjectReferenceDescriptor;
+import hudson.plugins.project_inheritance.projects.references.filters.MatingReferenceFilter;
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
 import hudson.remoting.VirtualChannel;
+import hudson.search.Search.Item;
 import hudson.slaves.SlaveComputer;
+import hudson.util.ListBoxModel;
+import hudson.util.ListBoxModel.Option;
 import hudson.util.VersionNumber;
 
 import java.io.File;
@@ -32,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Logger;
@@ -267,13 +276,13 @@ public class TestInheritanceMain extends HudsonTestCase {
 			for (AbstractProjectReference ref : p.getParentReferences()) {
 				assertEquals(
 						"References not updated properly when renaming",
-						ref.getName(), "parent-renamed"
+						"parent-renamed", ref.getName()
 				);
 			}
 			for (AbstractProjectReference ref : p.getCompatibleProjects()) {
 				assertEquals(
 						"References not updated properly when renaming",
-						ref.getName(), "parent-renamed"
+						"parent-renamed", ref.getName()
 				);
 			}
 		}
@@ -284,9 +293,9 @@ public class TestInheritanceMain extends HudsonTestCase {
 		);
 		
 		printInfo("Testing ID & versioning properties...");
-		assertEquals(parent.project.getVersionIDs().size(), 0);
+		assertEquals(0, parent.project.getVersionIDs().size());
 		assertNull(parent.project.getLatestVersion());
-		assertEquals(parent.project.getAllInheritedVersionsList().size(), 0);
+		assertEquals(0, parent.project.getAllInheritedVersionsList().size());
 		
 		
 		printInfo("Checking SVG details...");
@@ -307,7 +316,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 				parent.project.getCompatibleProjects().isEmpty());
 		assertEquals(
 				"The list of parameters should have one parameter",
-				parent.project.getParameterDerivationList().size(), 1);
+				1, parent.project.getParameterDerivationList().size());
 		assertNull(
 				"Labels have been assigned, but shouldn't have been",
 				parent.project.getAssignedLabelString()
@@ -315,15 +324,15 @@ public class TestInheritanceMain extends HudsonTestCase {
 		
 		assertEquals(
 				"The quiet period should be 5",
-				parent.project.getQuietPeriod(), 5
+				5, parent.project.getQuietPeriod()
 		);
 		assertEquals(
 				"The overrides collection should be empty",
-				parent.project.getOverrides().size(), 0);
+				0, parent.project.getOverrides().size());
 		
 		assertEquals(
 				"There should not be reference issues",
-				parent.project.getProjectReferenceIssues().size(), 0
+				0, parent.project.getProjectReferenceIssues().size()
 		);
 	}
 	
@@ -362,30 +371,30 @@ public class TestInheritanceMain extends HudsonTestCase {
 		assertTrue("No config file present for project A", xml.getFile().exists());
 		
 		//Check if both have no versioning set
-		assertEquals("A has != 0 versions", A.project.getVersions().size(), 0);
-		assertEquals("B has != 0 versions", B.project.getVersions().size(), 0);
+		assertEquals("A has != 0 versions", 0, A.project.getVersions().size());
+		assertEquals("B has != 0 versions", 0, B.project.getVersions().size());
 		
 		//Verify that A has a parameter, and B has not
-		assertEquals("A has != 1 parameter", A.project.getParameters().size(), 1);
-		assertEquals("B has != 0 parameters", B.project.getParameters().size(), 0);
+		assertEquals("A has != 1 parameter", 1, A.project.getParameters().size());
+		assertEquals("B has != 0 parameters", 0, B.project.getParameters().size());
 		
 		//Load the XML into project B
 		printInfo("Loading XML from A into B...");
 		B.project.updateByXml((Source) new StreamSource(A.project.getConfigFile().getFile()));
 		
 		//Now, A should still have 0 versions, but B should have one
-		assertEquals("A has != 0 versions", A.project.getVersions().size(), 0);
-		assertEquals("B has != 1 versions", B.project.getVersions().size(), 1);
+		assertEquals("A has != 0 versions", 0, A.project.getVersions().size());
+		assertEquals("B has != 1 versions", 1, B.project.getVersions().size());
 		
 		//Verify that A has a parameter, and B has one, too
-		assertEquals("Project A has != 1 parameter", A.project.getParameters().size(), 1);
+		assertEquals("Project A has != 1 parameter", 1, A.project.getParameters().size());
 		
 		List<ParameterDefinition> defs = B.project.getParameters();
-		assertEquals("Project B has != 1 parameters", defs.size(), 1);
+		assertEquals("Project B has != 1 parameters", 1, defs.size());
 		for (ParameterDefinition def : defs) {
 			assertEquals(
-					"Project B has a parameter whose name is not name 'param'",
-					def.getName(), "param"
+					"Project B has a parameter with an invalid name",
+					"param", def.getName()
 			);
 		}
 	}
@@ -410,35 +419,35 @@ public class TestInheritanceMain extends HudsonTestCase {
 		XmlProject C = new XmlProject("C");
 		XmlProject D = new XmlProject("D");
 		
-		assertEquals("B should inherit anything yet", B.project.getRelationships().size(), 0);
+		assertEquals("B should inherit anything yet", 0, B.project.getRelationships().size());
 		
 		//Add one reference to A and verify
 		B.addParent("A", null);
-		assertEquals("A should have 0 parents", A.project.getParentReferences().size(), 0);
-		assertEquals("A should have 1 children", A.project.getChildrenProjects().size(), 1);
-		assertEquals("A should have 1 connections", A.project.getRelationships().size(), 1);
-		assertEquals("B should have 1 parents", B.project.getParentReferences().size(), 1);
-		assertEquals("B should have 0 children", B.project.getChildrenProjects().size(), 0);
-		assertEquals("B should have 1 connections", B.project.getRelationships().size(), 1);
+		assertEquals("A should have 0 parents", 0, A.project.getParentReferences().size());
+		assertEquals("A should have 1 children", 1, A.project.getChildrenProjects().size());
+		assertEquals("A should have 1 connections", 1, A.project.getRelationships().size());
+		assertEquals("B should have 1 parents", 1, B.project.getParentReferences().size());
+		assertEquals("B should have 0 children", 0, B.project.getChildrenProjects().size());
+		assertEquals("B should have 1 connections", 1, B.project.getRelationships().size());
 		//Cycle test
 		assertFalse("A should not have a cyclic dependency", A.project.hasCyclicDependency());
 		assertFalse("B should not have a cyclic dependency", B.project.hasCyclicDependency());
 		
 		//Add another, duplicate reference (which is not counted for child conns)
 		B.addParent("A", null);
-		assertEquals("A should have 0 parents", A.project.getParentReferences().size(), 0);
-		assertEquals("A should have 2 children", A.project.getChildrenProjects().size(), 2);
-		assertEquals("A should have 1 connections", A.project.getRelationships().size(), 1);
-		assertEquals("B should have 2 parents", B.project.getParentReferences().size(), 2);
-		assertEquals("B should have 0 children", B.project.getChildrenProjects().size(), 0);
-		assertEquals("B should have 1 connections", B.project.getRelationships().size(), 1);
+		assertEquals("A should have 0 parents", 0, A.project.getParentReferences().size());
+		assertEquals("A should have 2 children", 2, A.project.getChildrenProjects().size());
+		assertEquals("A should have 1 connections", 1, A.project.getRelationships().size());
+		assertEquals("B should have 2 parents", 2, B.project.getParentReferences().size());
+		assertEquals("B should have 0 children", 0, B.project.getChildrenProjects().size());
+		assertEquals("B should have 1 connections", 1, B.project.getRelationships().size());
 		//Cycle test
 		assertFalse("A should not have a cyclic dependency", A.project.hasCyclicDependency());
 		assertTrue("B should have a cyclic dependency", B.project.hasCyclicDependency());
 		
 		//Clean up the references and verify the ground-state
 		while (B.dropParent("A")) {}
-		assertEquals("B should have 0 connections", B.project.getRelationships().size(), 0);
+		assertEquals("B should have 0 connections", 0, B.project.getRelationships().size());
 		assertFalse("A should not have a cyclic dependency", A.project.hasCyclicDependency());
 		assertFalse("B should not have a cyclic dependency", B.project.hasCyclicDependency());
 		
@@ -447,15 +456,15 @@ public class TestInheritanceMain extends HudsonTestCase {
 		A.addParent("B", null);
 		B.addParent("C", null);
 		C.addParent("A", null);
-		assertEquals("A should have 1 parents", A.project.getParentReferences().size(), 1);
-		assertEquals("A should have 1 children", A.project.getChildrenProjects().size(), 1);
-		assertEquals("A should have 2 connections", A.project.getRelationships().size(), 2);
-		assertEquals("B should have 1 parents", B.project.getParentReferences().size(), 1);
-		assertEquals("B should have 1 children", B.project.getChildrenProjects().size(), 1);
-		assertEquals("B should have 2 connections", B.project.getRelationships().size(), 2);
-		assertEquals("C should have 1 parents", C.project.getParentReferences().size(), 1);
-		assertEquals("C should have 1 children", C.project.getChildrenProjects().size(), 1);
-		assertEquals("C should have 2 connections", C.project.getRelationships().size(), 2);
+		assertEquals("A should have 1 parents", 1, A.project.getParentReferences().size());
+		assertEquals("A should have 1 children", 1, A.project.getChildrenProjects().size());
+		assertEquals("A should have 2 connections", 2, A.project.getRelationships().size());
+		assertEquals("B should have 1 parents", 1, B.project.getParentReferences().size());
+		assertEquals("B should have 1 children", 1, B.project.getChildrenProjects().size());
+		assertEquals("B should have 2 connections", 2, B.project.getRelationships().size());
+		assertEquals("C should have 1 parents", 1, C.project.getParentReferences().size());
+		assertEquals("C should have 1 children", 1, C.project.getChildrenProjects().size());
+		assertEquals("C should have 2 connections", 2, C.project.getRelationships().size());
 		//Cycle test
 		assertTrue("A should have a cyclic dependency", A.project.hasCyclicDependency());
 		assertTrue("B should have a cyclic dependency", B.project.hasCyclicDependency());
@@ -491,13 +500,13 @@ public class TestInheritanceMain extends HudsonTestCase {
 		
 		B.addParent("A", null);
 		
-		assertEquals("A has != 0 parameters", A.project.getParameters().size(), 0);
-		assertEquals("B has != 0 parameters", B.project.getParameters().size(), 0);
+		assertEquals("A has != 0 parameters", 0, A.project.getParameters().size());
+		assertEquals("B has != 0 parameters", 0, B.project.getParameters().size());
 		
 		A.setParameter("P", "A");
-		assertEquals("A has != 1 parameters", A.project.getParameters().size(), 1);
-		assertEquals("B has != 0 parameters", B.project.getParameters().size(), 0);
-		assertEquals("B has != 1 inherited parameters", B.project.getParameters(IMode.INHERIT_FORCED).size(), 1);
+		assertEquals("A has != 1 parameters", 1, A.project.getParameters().size());
+		assertEquals("B has != 0 parameters", 0, B.project.getParameters().size());
+		assertEquals("B has != 1 inherited parameters", 1, B.project.getParameters(IMode.INHERIT_FORCED).size());
 		
 		//Build one instance of B and check if it got parameter "P" = "A"
 		buildAndAssertValue(B, "P", "A");
@@ -682,6 +691,96 @@ public class TestInheritanceMain extends HudsonTestCase {
 		assertNull("Building 'B' (with a missing default value) should have failed to schedule!", qtf);
 	}
 	
+	
+	public void testCompoundCreation() throws IOException {
+		printInfo("testCompoundCreation()");
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			//return;
+		}
+		
+		XmlProject left = new XmlProject("LeftJob");
+		XmlProject right = new XmlProject("RightJob");
+		XmlProject util = new XmlProject("UtilityJob");
+		
+		//Create three classes; two for mating, one as an "outsider"
+		ProjectCreationEngine pce = ProjectCreationEngine.instance;
+		List<CreationClass> classes = pce.getCreationClasses();
+		classes.add(new CreationClass("Left", ""));
+		classes.add(new CreationClass("Right", ""));
+		classes.add(new CreationClass("Utility", ""));
+		
+		//Add a suitable mating
+		List<CreationMating> mates = pce.getMatings();
+		mates.add(new CreationMating("Left", "Right", ""));
+		
+		//Add the 3 classes to the 3 projects
+		left.project.setCreationClass("Left");
+		right.project.setCreationClass("Right");
+		util.project.setCreationClass("Utility");
+		
+		//Add a mating between left & right
+		List<AbstractProjectReference> lMates = left.project.getRawCompatibleProjects();
+		AbstractProjectReference rightRef = new SimpleProjectReference("RightJob");
+		lMates.add(rightRef);
+		
+		/* Check if the project reference's descriptor would evaluate the
+		 * options in the select-box correctly. It should list 2 entries:
+		 *   - FOOBARDEFAULT (the 'old' value selected in the box)
+		 *   - RightJob (the only really permissible value
+		 */
+		ProjectReferenceDescriptor desc = rightRef.getDescriptor();
+		ListBoxModel m = desc.internalFillNameItems(
+				"FOOBARDEFAULT", new MatingReferenceFilter(left.project)
+		);
+		assertEquals(
+				"APR.doFillNameItems() should've only returned 2 values",
+				2, m.size()
+		);
+		for (Option o : m) {
+			assertTrue(
+					"APR.doFillNameItems() contains invalid value: " + o.name,
+					o.name.equals("FOOBARDEFAULT") || o.name.equals("RightJob")
+			);
+		}
+		
+		//Add an invalid mating between left & utility
+		lMates = right.project.getRawCompatibleProjects();
+		lMates.add(new SimpleProjectReference("UtilityJob"));
+		
+		//Add an invalid mating between utility & left
+		lMates = util.project.getRawCompatibleProjects();
+		lMates.add(new SimpleProjectReference("LeftJob"));
+		
+		//Add an invalid mating between left & left
+		lMates = left.project.getRawCompatibleProjects();
+		lMates.add(new SimpleProjectReference("LeftJob"));
+		
+		//Add an invalid mating between right & left
+		lMates = right.project.getRawCompatibleProjects();
+		lMates.add(new SimpleProjectReference("LeftJob"));
+		
+		//Run the project creation engine and decode the map
+		pce.setEnableCreation(true);
+		Map<String, String> report = pce.triggerCreateProjects();
+		assertNotNull("Automatic generation of jobs did not return a valid report-map", report);
+		assertEquals("PCE report did not contain enough creation attempts",  5, report.size());
+		
+		assertTrue("PCE report did not contain the 'LeftJob_RightJob' job", report.containsKey("LeftJob_RightJob"));
+		
+		TopLevelItem it = Jenkins.getInstance().getItem("LeftJob_RightJob");
+		assertTrue("PCE should have created the 'LeftJob_RightJob' job", it != null);
+		
+		//Loop over the result, check if such a job was created, and if it's valied
+		for (String pName : report.keySet()) {
+			it = Jenkins.getInstance().getItem(pName);
+			if (it == null) { continue; }
+			assertEquals("PCE created invalid job", "LeftJob_RightJob", it.getFullName());
+		}
+		
+		
+	}
+	
 	// === HELPER METHODS ===
 	
 	public InheritanceBuild buildAndAssertValue(XmlProject p, String param, String value) throws IOException {
@@ -700,7 +799,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 			ParameterValue pv = pa.getParameter(param);
 			assertNotNull("Build has no parameter P", pv);
 			assertTrue("Parameter is not a StringParameterValue", pv instanceof StringParameterValue);
-			assertEquals("Parameter does not have correct value", ((StringParameterValue)pv).value, value);
+			assertEquals("Parameter does not have correct value", value, ((StringParameterValue)pv).value);
 			return build;
 		} catch (Exception e) {
 			throw new IOException(e);

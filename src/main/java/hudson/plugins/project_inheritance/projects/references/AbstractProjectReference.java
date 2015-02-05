@@ -26,6 +26,7 @@ import hudson.model.Descriptor;
 import hudson.model.ParameterDefinition;
 import hudson.model.Project;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.references.filters.IProjectReferenceFilter;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 
@@ -34,6 +35,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,7 +44,12 @@ import jenkins.model.Jenkins;
 
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.export.ExportedBean;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 
 @ExportedBean(defaultVisibility=3)
 public abstract class AbstractProjectReference implements Describable<AbstractProjectReference> {
@@ -234,6 +241,11 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	public abstract static class ProjectReferenceDescriptor extends
 			Descriptor<AbstractProjectReference> {
 		
+		protected final Cache<String, IProjectReferenceFilter> filters = CacheBuilder.newBuilder()
+				.concurrencyLevel(4)
+				.expireAfterAccess(30, TimeUnit.SECONDS)
+				.build();
+		
 		protected ProjectReferenceDescriptor(Class<? extends AbstractProjectReference> klazz) {
 			super(klazz);
 		}
@@ -245,7 +257,10 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 		 * descriptor is written as the static nested class of the describable
 		 * class.
 		 */
-		protected ProjectReferenceDescriptor() { }
+		protected ProjectReferenceDescriptor() {
+			super();
+		}
+		
 		
 		public String getValuePage() {
 			return getViewPage(clazz, "index.jelly");
@@ -288,13 +303,18 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 			return FormValidation.ok();
 		}
 		
-		public ListBoxModel doFillNameItems(@QueryParameter String name) {
+		public ListBoxModel internalFillNameItems(String name, IProjectReferenceFilter filter) {
 			TreeSet<String> projNames = new TreeSet<String>();
 			for (InheritanceProject ip : InheritanceProject.getProjectsMap().values()) {
 				//We ensure that both are compatible
-				if (this.projectIsCompatible(ip)) {
-					projNames.add(ip.getName());
+				if (!this.projectIsCompatible(ip)) {
+					continue;
 				}
+				//And that the current set-up does not filter out that job
+				if (filter != null && !filter.isApplicable(ip)) {
+					continue;
+				}
+				projNames.add(ip.getName());
 			}
 			//Adding the previous definition; if any is already present
 			if (name != null && !name.isEmpty()) {
@@ -308,6 +328,14 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 			return model;
 		}
 		
+		public ListBoxModel doFillNameItems(@QueryParameter String name, @QueryParameter String filterKey) {
+			//Fetch the filter associated with the given filterKey
+			IProjectReferenceFilter filter =
+					(filterKey != null && !filterKey.isEmpty())
+							? filters.getIfPresent(filterKey) : null;
+			return this.internalFillNameItems(name, filter);
+		}
+		
 		@SuppressWarnings("rawtypes")
 		public boolean projectIsCompatible(Project p) {
 			if (!(p instanceof InheritanceProject)) {
@@ -318,6 +346,11 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 				return false;
 			}
 			return true;
+		}
+	
+		public void addReferenceFilter(String key, IProjectReferenceFilter filter) {
+			if (key == null || key.isEmpty() || filter == null) { return; }
+			this.filters.put(key, filter);
 		}
 	}
 }

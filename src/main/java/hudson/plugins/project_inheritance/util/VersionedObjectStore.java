@@ -652,13 +652,16 @@ public class VersionedObjectStore implements Serializable {
 	 * @return
 	 */
 	public VersionsNotification getUserNotificationFor(Long version) {
+		if (version == null || this.getAllVersions().isEmpty()) {
+			return new VersionsNotification(true, false, false, false, null);
+		}
 		Version selected = this.getVersion(version);
 		Version latest = this.getLatestVersion();
 		Version latestStable = this.getLatestStable();
 		
 		//Check for the booleans needed by the version notification
-		boolean isNewest = (selected == latest);
-		boolean isStable = (selected.getStability());
+		boolean isNewest = (selected != null && selected == latest);
+		boolean isStable = (selected != null && selected.getStability());
 		
 		boolean stablesAfter = false;
 		boolean stablesBefore = false;
