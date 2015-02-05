@@ -75,6 +75,7 @@ import hudson.plugins.project_inheritance.projects.references.ProjectReference.P
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
 import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
 import hudson.plugins.project_inheritance.util.Helpers;
+import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.plugins.project_inheritance.util.TimedBuffer;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore;
@@ -145,6 +146,7 @@ import jenkins.model.BuildDiscarder;
 import jenkins.model.Jenkins;
 import jenkins.scm.SCMCheckoutStrategy;
 import jenkins.util.TimeDuration;
+import junit.framework.TestCase;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONException;
 import net.sf.json.JSONObject;
@@ -3520,6 +3522,25 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	public String getRawParameterizedWorkspace() {
 		return this.parameterizedWorkspace;
+	}
+	
+	/**
+	 * Sets the parameterized workspace variable. Will only work, if called
+	 * <b>directly</b> by a "TestCase" class. Will throw an exception otherwise.
+	 * 
+	 * @deprecated Must only be used from within {@link TestCase} classes.
+	 *
+	 * @param workspace the new value for the parameterized workspace
+	 */
+	@Deprecated
+	public void setRawParameterizedWorkspace(String workspace) {
+		if (Reflection.calledFromClass(2, TestCase.class)) {
+			this.parameterizedWorkspace = workspace;
+		} else {
+			throw new IllegalAccessError(
+					"Should not be called outside by something other than a TestCase class"
+			);
+		}
 	}
 	
 	

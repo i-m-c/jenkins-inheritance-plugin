@@ -1,9 +1,13 @@
 package test;
 
 import static org.junit.Assert.assertNotEquals;
+import hudson.EnvVars;
+import hudson.FilePath;
 import hudson.XmlFile;
+import hudson.console.ConsoleNote;
 import hudson.model.ParameterValue;
 import hudson.model.Result;
+import hudson.model.TaskListener;
 import hudson.model.TopLevelItem;
 import hudson.model.Computer;
 import hudson.model.ParameterDefinition;
@@ -35,6 +39,8 @@ import hudson.util.VersionNumber;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,6 +60,8 @@ import junit.framework.TestCase;
 
 import org.apache.commons.lang.SystemUtils;
 import org.jvnet.hudson.test.HudsonTestCase;
+
+import utils.DummyListener;
 
 public class TestInheritanceMain extends HudsonTestCase {
 	private static final Logger log = Logger.getLogger(
@@ -696,7 +704,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 		printInfo("testCompoundCreation()");
 		if (!canRunTests()) {
 			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
-			//return;
+			return;
 		}
 		
 		XmlProject left = new XmlProject("LeftJob");
@@ -780,6 +788,49 @@ public class TestInheritanceMain extends HudsonTestCase {
 		
 		
 	}
+	
+	
+	@SuppressWarnings("deprecation")
+	public void testWorkspacePathAllocation() throws IOException, InterruptedException {
+		printInfo("testWorkspacePathAllocation()");
+		if (!canRunTests()) {
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
+		}
+		
+		//Fetch the jenkins instance; which is a valid build host
+		Jenkins j = Jenkins.getInstance();
+		
+		//Create a dummy project with a strange name
+		XmlProject job = new XmlProject("foobar");
+		
+		//Get a default environment map for this job and jenkins node
+		DummyListener listen = new DummyListener();
+		EnvVars vars = job.project.getEnvironment(j, listen);
+		
+		//Checking the "raw" workspace allocation
+		this.subTestWorkspacePathAllocation(j, job, vars, "foobar");
+		
+		//Adding a parameterized workspace variable, creating "foobar-1" as the basename
+		job.project.setRawParameterizedWorkspace("${JOB_NAME}-1");
+		this.subTestWorkspacePathAllocation(j, job, vars, "foobar-1");
+		
+		//Adding a customized workspace, set to "zort"
+		job.project.setCustomWorkspace("zort");
+		this.subTestWorkspacePathAllocation(j, job, vars, "zort");
+	}
+	
+	public void subTestWorkspacePathAllocation(Jenkins j, XmlProject job, EnvVars vars, String expect) {
+		//Checking the "raw" workspace allocation
+		FilePath ws = InheritanceBuild.getWorkspacePathFor(j, job.project, vars);
+		assertNotNull("Could not fetch a valid workspace", ws);
+		
+		String remote = ws.getRemote();
+		assertNotNull("Could not fetch a valid workspace", remote);
+		assertFalse("Could not fetch a valid workspace", remote.isEmpty());
+		assertTrue("Workspace did not end with 'foobar'", remote.endsWith(expect));
+	}
+	
 	
 	// === HELPER METHODS ===
 	
