@@ -8,4 +8,5 @@ work
 .classpath
 /bin
 *.orig
+*.rej
 *~
