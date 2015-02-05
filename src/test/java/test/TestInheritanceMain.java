@@ -16,6 +16,7 @@ import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
 import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
@@ -31,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Logger;
 
@@ -479,7 +481,6 @@ public class TestInheritanceMain extends HudsonTestCase {
 	
 	public void testParameterInheritance() throws IOException {
 		printInfo("testParameterInheritance()");
-		
 		if (!canRunTests()) {
 			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
 			return;
@@ -505,6 +506,18 @@ public class TestInheritanceMain extends HudsonTestCase {
 		B.setParameter("P", "B");
 		buildAndAssertValue(B, "P", "B");
 		
+		
+		// Test parameter mode correctness
+		this.subTestParameterMode(A, B);
+		
+		// Test parameter assign-check
+		this.subTestParameterFlagAssignCheck(A, B);
+		
+		// Test parameter default-check
+		this.subTestParameterFlagDefaultCheck(A, B);
+	}
+	
+	public void subTestParameterMode(XmlProject A, XmlProject B) throws IOException {
 		//Alter the parameter in A to be "extend" instead of "overwrite"
 		A.setParameter(new InheritableStringParameterDefinition(
 				"P", "A", IModes.EXTENSIBLE, false, false, false, false
@@ -537,22 +550,137 @@ public class TestInheritanceMain extends HudsonTestCase {
 		//The build must even fail to queue in this case
 		QueueTaskFuture<InheritanceBuild> qtf = B.project.scheduleBuild2(0);
 		assertNull("Building 'B' with 2 fixed parameters should have failed to schedule!", qtf);
+	}
+	
+	public void subTestParameterFlagAssignCheck(XmlProject A, XmlProject B) throws IOException {
+		//Check for positive case, with to real parameters
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, false, true, false, false
+		));
+		B.setParameter(new InheritableStringParameterDefinition(
+				"P", "B", IModes.OVERWRITABLE, false, true, false, false
+		));
+		Entry<Boolean, String> sanity = B.project.getParameterSanity();
+		assertTrue("Project B should have passed the parameter sanity check", sanity.getKey());
 		
+		InheritanceBuild build = buildAndAssertValue(B, "P", "B", false);
+		assertTrue(
+				"Build for 'B' should have succeeded",
+				build.getResult().isBetterOrEqualTo(Result.SUCCESS)
+		);
 		
-		//Test if value assignment causes an actual build failure
+		//Check for negative case, with to real parameters
 		A.setParameter(new InheritableStringParameterDefinition(
 				"P", "A", IModes.OVERWRITABLE, false, true, false, false
 		));
 		B.setParameter(new InheritableStringParameterDefinition(
 				"P", "", IModes.OVERWRITABLE, false, true, false, false
 		));
-		InheritanceBuild build = buildAndAssertValue(B, "P", "", false);
+		sanity = B.project.getParameterSanity();
+		assertTrue("Project B should have passed the parameter sanity check", sanity.getKey());
+		
+		build = buildAndAssertValue(B, "P", "", false);
+		assertTrue(
+				"Build for 'B' should have failed due to an empty value for 'P'",
+				build.getResult().isWorseOrEqualTo(Result.FAILURE)
+		);
+		
+		
+		//Check for positive case, with one reference
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, false, true, false, false
+		));
+		B.setParameter(new InheritableStringParameterReferenceDefinition(
+				"P", "B"
+		));
+		sanity = B.project.getParameterSanity();
+		assertTrue("Project B should have passed the parameter sanity check", sanity.getKey());
+		
+		build = buildAndAssertValue(B, "P", "B", false);
+		assertTrue(
+				"Build for 'B' should have succeeded",
+				build.getResult().isBetterOrEqualTo(Result.SUCCESS)
+		);
+		
+		//Check for negative case, with to real parameters
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, false, true, false, false
+		));
+		B.setParameter(new InheritableStringParameterReferenceDefinition(
+				"P", ""
+		));
+		sanity = B.project.getParameterSanity();
+		assertTrue("Project B should have passed the parameter sanity check", sanity.getKey());
+		
+		build = buildAndAssertValue(B, "P", "", false);
 		assertTrue(
 				"Build for 'B' should have failed due to an empty value for 'P'",
 				build.getResult().isWorseOrEqualTo(Result.FAILURE)
 		);
 	}
 	
+	public void subTestParameterFlagDefaultCheck(XmlProject A, XmlProject B) throws IOException {
+		//Check for positive case, with two real parameters
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, true, false, false, false
+		));
+		B.setParameter(new InheritableStringParameterDefinition(
+				"P", "B", IModes.OVERWRITABLE, true, false, false, false
+		));
+		Entry<Boolean, String> sanity = B.project.getParameterSanity();
+		assertTrue("Project B should have passed the parameter sanity check", sanity.getKey());
+		
+		InheritanceBuild build = buildAndAssertValue(B, "P", "B", false);
+		assertTrue(
+				"Build for 'B' should have succeeded",
+				build.getResult().isBetterOrEqualTo(Result.SUCCESS)
+		);
+		
+		//Check for negative case, with two real parameters
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, true, false, false, false
+		));
+		B.setParameter(new InheritableStringParameterDefinition(
+				"P", "", IModes.OVERWRITABLE, true, false, false, false
+		));
+		sanity = B.project.getParameterSanity();
+		assertFalse("Project B should have failed the parameter sanity check", sanity.getKey());
+		
+		//The build must fail to queue in this case
+		QueueTaskFuture<InheritanceBuild> qtf = B.project.scheduleBuild2(0);
+		assertNull("Building 'B' (with a missing default value) should have failed to schedule!", qtf);
+		
+		
+		//Check for positive case, with one reference
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, true, false, false, false
+		));
+		B.setParameter(new InheritableStringParameterReferenceDefinition(
+				"P", "B"
+		));
+		sanity = B.project.getParameterSanity();
+		assertTrue("Project B should have passed the parameter sanity check", sanity.getKey());
+		
+		build = buildAndAssertValue(B, "P", "B", false);
+		assertTrue(
+				"Build for 'B' should have succeeded",
+				build.getResult().isBetterOrEqualTo(Result.SUCCESS)
+		);
+		
+		//Check for negative case, with to real parameters
+		A.setParameter(new InheritableStringParameterDefinition(
+				"P", "A", IModes.OVERWRITABLE, true, false, false, false
+		));
+		B.setParameter(new InheritableStringParameterReferenceDefinition(
+				"P", ""
+		));
+		sanity = B.project.getParameterSanity();
+		assertFalse("Project B should have failed the parameter sanity check", sanity.getKey());
+		
+		//The build must fail to queue in this case
+		qtf = B.project.scheduleBuild2(0);
+		assertNull("Building 'B' (with a missing default value) should have failed to schedule!", qtf);
+	}
 	
 	// === HELPER METHODS ===
 	

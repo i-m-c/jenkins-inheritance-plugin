@@ -4642,72 +4642,62 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				);
 			}
 			
-			//Checking additional restrictions on ISPDs
+			//Check additional restrictions on ISPDs
 			if (pd instanceof InheritableStringParameterDefinition) {
 				InheritableStringParameterDefinition ispd =
 						(InheritableStringParameterDefinition) pd;
-				//We ignore references, as they can never invalidate flags
-				//Otherwise, we check whether they unset values
-				if (!(pd instanceof InheritableStringParameterReferenceDefinition)) {
-					//Checking if the "force-default-value" flag is set by the new one
-					if (ispd.getMustHaveDefaultValue()) {
-						s.hasToHaveDefaultSet = true;
-					}
-					//Checking if the assignment flag was set by the new one
-					if (ispd.getMustBeAssigned()) {
-						s.hasToBeAssigned = true;
-					}
-					//Then, checking if the "force-default-value" flag was unset
-					if (s.hasToHaveDefaultSet && !ispd.getMustHaveDefaultValue()) {
-						return new AbstractMap.SimpleEntry<Boolean, String>(
-								false, "Parameter '" + pd.getName() +
-								"' may not unset the flag that ensures that a" +
-								" default value is set."
-								);
-					}
-					//Checking if the "must-be-assigned" flag was unset
-					if (s.hasToBeAssigned && !ispd.getMustBeAssigned()) {
-						return new AbstractMap.SimpleEntry<Boolean, String>(
-								false, "Parameter '" + pd.getName() +
-								"' may not unset the flag that ensures that a" +
-								" final value is set before execution."
-								);
-					}
-				}
-				
-				//Checking if overwriting causes a previous default to be lost
+				//Check if overwriting causes a previous default to be lost
 				String defVal = ispd.getDefaultValue();
 				boolean defValNewlySet = !(defVal == null || defVal.isEmpty());
 				
-				try {
-					switch(s.previousMode) {
-						case OVERWRITABLE:
-							//An overwrite always causes the default to be discarded
+				switch(s.previousMode) {
+					case OVERWRITABLE:
+						//An overwrite always causes the default to be discarded
+						s.hadDefaultSet = defValNewlySet;
+						break;
+					case EXTENSIBLE:
+						//An extension does not overwrite an already set default
+						if (!s.hadDefaultSet) {
 							s.hadDefaultSet = defValNewlySet;
-							break;
-						case EXTENSIBLE:
-							//An extension does not overwrite an already set default
-							if (!s.hadDefaultSet) {
-								s.hadDefaultSet = defValNewlySet;
-							}
-							break;
-						case FIXED:
-							//FIXED parameters are ignored
-							break;
-						default:
-							log.warning(
-									"Detected invalid inheritance mode: " +
-									s.previousMode.toString() + " on " +
-									this.getName() + "->" + pd.getName()
-							);
-							break;
-					}
-				} finally {
-					//In any case, we overwrite the sanity details with the new values
-					s.previousMode = ispd.getInheritanceModeAsVar();
-					s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
-					s.hasToBeAssigned = ispd.getMustBeAssigned();
+						}
+						break;
+					case FIXED:
+						//FIXED parameters are ignored
+						break;
+					default:
+						log.warning(
+								"Detected invalid inheritance mode: " +
+								s.previousMode.toString() + " on " +
+								this.getName() + "->" + pd.getName()
+						);
+						break;
 				}
+				
+				//Ignore references, as they can never invalidate or change flags
+				if (pd instanceof InheritableStringParameterReferenceDefinition) {
+					continue;
+				}
+				
+				//Check if the "force-default-value" flag was unset
+				if (s.hasToHaveDefaultSet && !ispd.getMustHaveDefaultValue()) {
+					return new AbstractMap.SimpleEntry<Boolean, String>(
+							false, "Parameter '" + pd.getName() +
+							"' may not unset the flag that ensures that a" +
+							" default value is set."
+							);
+				}
+				//Check if the "must-be-assigned" flag was unset
+				if (s.hasToBeAssigned && !ispd.getMustBeAssigned()) {
+					return new AbstractMap.SimpleEntry<Boolean, String>(
+							false, "Parameter '" + pd.getName() +
+							"' may not unset the flag that ensures that a" +
+							" final value is set before execution."
+							);
+				}
+				//Overwrite the flags, now that their sanity is ensured
+				s.previousMode = ispd.getInheritanceModeAsVar();
+				s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
+				s.hasToBeAssigned = ispd.getMustBeAssigned();
 			}
 		}
 		
