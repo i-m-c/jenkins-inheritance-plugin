@@ -3629,23 +3629,28 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * entire server from progressing with builds.
 	 * <br/>
 	 * Thus, this method must take the minimum possible amount of time, which
-	 * means that reflection is to expensive, as well as generating the label
-	 * from scratch.
+	 * means that reflection is too expensive.
 	 * <p>
 	 * This has the downside of this method ignoring versioning completely,
 	 * which might affect the result of this call through changing the
 	 * inheritance.
 	 * This is an accepted break, compared to the potential slowdown of
-	 * {@link Queue#maintain()}.
+	 * {@link Queue#maintain()} under high queue load situations.
 	 */
 	public Label getAssignedLabel() {
 		//Check if there's a cached value
 		Object cached = onChangeBuffer.get(this, "maintenanceAssignedLabel");
 		if (cached != null && cached instanceof Label) {
 			Label lbl = (Label) cached;
-			//Use the Jenkins cache to get an up-to-date version of that label
-			//Jenkins will automatically flush cached labels when they change
-			return Jenkins.getInstance().getLabel(lbl.getName());
+			/* Use the Jenkins cache to get an up-to-date version of that label
+			 * Jenkins will automatically flush cached labels when they change
+			 * 
+			 * See getAssignedLabel(IMode) to see why the "" quoting
+			 * is needed.
+			 */
+			return Jenkins.getInstance().getLabel(
+					String.format("\"%s\"", lbl.getName())
+			);
 		}
 		
 		//Generate a new label, forcing inheritance
@@ -3658,6 +3663,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		if (lbl != null) {
 			onChangeBuffer.set(this, "maintenanceAssignedLabel", lbl);
 		}
+		//The returned label is guaranteed to be fresh
 		return lbl;
 	}
 	
@@ -3712,9 +3718,28 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		}
 		
-		//Use the Jenkins cache to get an up-to-date version of that label
-		//Jenkins will automatically flush cached labels when they change
-		return (lbl == null) ? null : Jenkins.getInstance().getLabel(lbl.getName());
+		if (lbl == null) { return null; }
+		
+		/* The labels stored in versioning are essentially cached; which means
+		 * that their "applicable nodes" list is out-of-date.
+		 * 
+		 * As such, we will use Jenkins' caching mechanism to update the labels,
+		 * as it will "know" when to refresh labels and when not.
+		 * Unfortunately, Jenkins is braindead and "unquotes" the strings
+		 * aggressively, by just stripping out the outermost and innermost
+		 * quote sign; EVEN if the quotes do not belong to each other.
+		 * 
+		 * E.g.:
+		 * 		"os:linux"&&"role:foobar"
+		 * will be turned into:
+		 * 		os:linux"&&"role:foobar
+		 * 
+		 * We "solve" this by adding a pointless quote around the label's
+		 * string representation
+		 */
+		return Jenkins.getInstance().getLabel(
+				String.format("\"%s\"", lbl.getName())
+		);
 	}
 	
 	public Label getRawAssignedLabel() {
