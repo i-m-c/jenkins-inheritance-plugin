@@ -54,17 +54,15 @@ f.section(title: _("ConfigureCompounds")) {
 	
 	//List of projects to mate with
 	f.entry() {
-		f.block() {
-			f.hetero_list(
-					items: my.compatibleProjects,
-					name: "compatibleProjects",
-					hasHeader: "true",
-					descriptors: AbstractProjectReference.all(
-							ParameterizedProjectReference.class
-					),
-					addCaption: _("AddCompound")
-			)
-		}
+		f.hetero_list(
+				items: my.compatibleProjects,
+				name: "compatibleProjects",
+				hasHeader: "true",
+				descriptors: AbstractProjectReference.all(
+						ParameterizedProjectReference.class
+				),
+				addCaption: _("AddCompound")
+		)
 	}
 	//Unset the read-only state, to not pollute others and let newly added fields
 	//be read-writeable

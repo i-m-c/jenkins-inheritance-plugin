@@ -24,6 +24,7 @@ import static javax.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 import static javax.servlet.http.HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
 import hudson.BulkChange;
 import hudson.Extension;
+import hudson.Functions;
 import hudson.Util;
 import hudson.model.Action;
 import hudson.model.DependencyGraph;
@@ -77,6 +78,7 @@ import hudson.plugins.project_inheritance.util.Helpers;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.plugins.project_inheritance.util.TimedBuffer;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore;
+import hudson.plugins.project_inheritance.util.VersionsNotification;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore.Version;
 import hudson.plugins.project_inheritance.util.svg.Graph;
 import hudson.plugins.project_inheritance.util.svg.SVGNode;
@@ -320,89 +322,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		LOCAL_ONLY, INHERIT_FORCED, AUTO;
 	}
 	
-	/**
-	 * A simple enum for the possible notifications a user can get on an inheritance
-	 * project configuration page.
-	 */
-	public static class VersionsNotification {
-		boolean isNewest;
-		boolean isStable;
-		boolean stablesBefore;
-		boolean stablesAfter;
-		private boolean highlightWarning = false;
-		private String notificationMessage;
-		public final List<Version> versions;
-
-		public VersionsNotification(boolean isNewest,
-									boolean isStable,
-									boolean stablesBefore,
-									boolean stablesAfter,
-									List<Version> versions) {
-			this.isNewest = isNewest;
-			this.isStable = isStable;
-			this.stablesBefore = stablesBefore;
-			this.stablesAfter = stablesAfter;
-			this.versions = versions;
-			if (false == isNewest &&
-					true == isStable &&
-						true == stablesBefore &&
-							true == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_OLDER_STABLE_VERSION();
-				highlightWarning = true;
-			} else if (false == isNewest &&
-						false == isStable &&
-							true == stablesBefore &&
-								true == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_UNSTABLE_VERSION_BUT_STABLE_AVAILABLE();
-				highlightWarning = true;
-			} else if (false == isNewest &&
-						false == isStable &&
-							false == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_UNSTABLE_VERSION_BUT_MORE_UNSTABLE_AVAILABLE();
-				highlightWarning = true;
-			} else if (false == isNewest &&
-						true== isStable &&
-							true == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_LATEST_STABLE_VERSION();
-			} else if (true == isNewest &&
-						false == isStable &&
-							false == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_IMPLICIT_STABLE_VERSION();
-			} else if (true == isNewest &&
-						true == isStable &&
-							false == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_LATEST_STABLE_AND_LAST_VERSION();
-			}
-		}
-
-		public boolean isNewest() {
-			return isNewest;
-		}
-
-		public boolean isStable() {
-			return isStable;
-		}
-
-		public boolean isStablesAfter() {
-			return stablesAfter;
-		}
-		
-		public String getNotificationMessage() {
-			return notificationMessage;
-		}
-		
-		public List<Version> getVersions() {
-			return versions;
-		}
-
-		public boolean isHighlightWarning() {
-			return highlightWarning;
-		}
-	}
 	
 	// === PRIVATE/PROTECTED STATIC FIELDS ===
 	
@@ -440,6 +359,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			Jenkins.ADMINISTER,
 			PermissionScope.ITEM
 	);
+	
 	
 	// === PRIVATE/PROTECTED MEMBER FIELDS ===
 	
@@ -1353,109 +1273,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 
 	/**
-	 * @return True or False, depending if all versions of the project are unstable,
-	 * meaning no version has been marked as stable
+	 * Returns the versioning notification based on the current user desired version.
+	 * @see VersionedObjectStore#getUserNotificationFor(Long)
 	 */
-	public boolean areAllVersionsUnstable() {
-		VersionsNotification notifyOnCurrentVersionStatus = notifyOnCurrentVersionStatus();
-		if ((notifyOnCurrentVersionStatus.isNewest &&
-				!notifyOnCurrentVersionStatus.isStable &&
-				!notifyOnCurrentVersionStatus.stablesBefore &&
-				!notifyOnCurrentVersionStatus.stablesAfter) ||
-			!notifyOnCurrentVersionStatus.isNewest &&
-				!notifyOnCurrentVersionStatus.isStable &&
-				!notifyOnCurrentVersionStatus.stablesBefore &&
-				!notifyOnCurrentVersionStatus.stablesAfter) {
-			return true;
-		}
-		return false;
-	}
-
-	/**
-	 * This method notifies the user on what type of version is he currently
-	 * editing:
-	 * 1. user is editing an unstable version (Warning)
-	 * 2. user is editing the last stable version which is not the last version (Warning)
-	 * 3. user is editing the last stable version which is the last version (Info)
-	 * 4. user is editing some stable version which is not the latest stable version (Warning)
-	 * @return
-	 */
-	public VersionsNotification notifyOnCurrentVersionStatus() {
-		VersionsNotification versionsNotification = null;
-		LinkedList<Version> versions = new LinkedList<Version>();
-		
-		Long latestVersionId = getLatestVersion();
-		Long latestStableVersionId = getStableVersion();
-		Long userSelectedVersionId = getUserDesiredVersion();
-		Version stableVersion = versionStore.getVersion(latestStableVersionId);
-
-		/*	user 
-		 *		didn't select the latest stable version
-		 *	and
-		 *		latest version is marked as stable
-		 */
-		if (userSelectedVersionId != latestStableVersionId && stableVersion.getStability()) {
-			Version userDesiredVersion = versionStore.getVersion(userSelectedVersionId);
-			versions.add(versionStore.getVersion(latestStableVersionId));
-			//at this point of check user selected an older stable version
-			if (userDesiredVersion.getStability()) {
-				versionsNotification = new VersionsNotification(
-						//VersionsNotification.Type.EDITING_OLDER_STABLE_VERSION,
-						false, true, true, true,
-						versions);
-			} else { //at this point of check user selected an older unstable version
-				versionsNotification = new VersionsNotification(
-						//VersionsNotification.Type.EDITING_UNSTABLE_VERSION_BUT_STABLE_AVAILABLE,
-						false, false, true, true,
-						versions);
-			}
-		} else if (userSelectedVersionId != latestStableVersionId && !stableVersion.getStability()) {
-			/*	there are no stable versions
-			 *		and 
-			 *			this is the case where the user choose an old version
-			 *			from all the unstable versions
-			 */
-			versions = this.versionStore.getAllVersionsSince(userSelectedVersionId);
-			versionsNotification = new VersionsNotification(
-					//VersionsNotification.Type.EDITING_UNSTABLE_VERSION_BUT_MORE_UNSTABLE_AVAILABLE,
-					false, false, false, false,
-					versions);
-		} else {
-			/*
-			 * at this point
-			 * user selected latest stable version
-			 * 		but
-			 * 			not the latest version
-			 */
-			if (latestVersionId != latestStableVersionId) {
-				versions = this.versionStore.getAllVersionsSince(userSelectedVersionId);
-				versionsNotification = new VersionsNotification(
-						//VersionsNotification.Type.EDITING_LATEST_STABLE_VERSION,
-						false, true, true, false,
-						versions);
-			} else {
-				//this.versionStore.getLatestStable() in case no version is stable
-				//returns as default the latest version, even if not marked as stable
-				//by user, so we treat this special case letting the user know
-				//there is no marked as stable version, but the last one is considered
-				//as stable
-				if (this.versionStore != null) {
-					Version v = this.versionStore.getLatestStable();
-					if (null == v || !v.getStability()) {
-						versionsNotification = new VersionsNotification(
-								//VersionsNotification.Type.EDITING_IMPLICIT_STABLE_VERSION,
-								true, false, false, false,
-								versions);
-					} else {
-						versionsNotification = new VersionsNotification(
-								//VersionsNotification.Type.EDITING_LATEST_STABLE_AND_LAST_VERSION,
-								true, true, false, false,
-								versions);
-					}
-				}
-			}
-		}
-		return versionsNotification;
+	public VersionsNotification getCurrentVersionNotification() {
+		return versionStore.getUserNotificationFor(getUserDesiredVersion());
 	}
 	
 	// === DIFF COMPUTATION METHODS ===
@@ -4759,18 +4581,50 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 	}
 	
-	public static List<JobPropertyDescriptor> getJobPropertyDescriptors(Class<? extends Job> clazz) {
-		List<JobPropertyDescriptor> propertyDescriptors =
-				JobPropertyDescriptor.getPropertyDescriptors(clazz);
-		List<JobPropertyDescriptor> filteredPropertyDescriptors =
-				new LinkedList<JobPropertyDescriptor>();
-		for (JobPropertyDescriptor jobPropertyDescriptor : propertyDescriptors) {
-			if (jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.class) ||
-					jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.DescriptorImpl.class)) {
-				filteredPropertyDescriptors.add(jobPropertyDescriptor);
+	
+	public static List<JobPropertyDescriptor> getJobPropertyDescriptors(
+			Class<? extends Job> clazz,
+			boolean filterIsExcluding, String... filters) {
+		List<JobPropertyDescriptor> out = new ArrayList<JobPropertyDescriptor>();
+		
+		//JobPropertyDescriptor.getPropertyDescriptors(clazz);
+		List<JobPropertyDescriptor> allDesc = Functions.getJobPropertyDescriptors(clazz);
+		
+		for (JobPropertyDescriptor desc : allDesc) {
+			String dName = desc.getClass().getName();
+			if (filters.length > 0) {
+				boolean matched = false;
+				if (filters != null) {
+					for (String filter : filters) {
+						if (dName.contains(filter)) {
+							matched = true;
+							break;
+						}
+					}
+				}
+				if (filterIsExcluding && matched) {
+					continue;
+				} else if (!filterIsExcluding && !matched) {
+					continue;
+				}
 			}
+			//The class has survived the filter
+			out.add(desc);
 		}
-		return filteredPropertyDescriptors;
+		
+		//At last, we make sure to sort the fields by full name; to ensure
+		//that properties from the same package/plugin are next to each other
+		Collections.sort(out, new Comparator<JobPropertyDescriptor>() {
+			@Override
+			public int compare(JobPropertyDescriptor o1,
+					JobPropertyDescriptor o2) {
+				String c1 = o1.getClass().getName();
+				String c2 = o2.getClass().getName();
+				return c1.compareTo(c2);
+			}
+		});
+		
+		return out;
 	}
 	
 	
@@ -4890,8 +4744,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			
 			InheritanceProject ip = this.getConfiguredProject();
 			if (ip != null) {
-				for (Long version : ip.getVersionIDs()) {
-					verBox.add(version.toString());
+				for (Version v : ip.getVersions()) {
+					verBox.add(v.toString(), v.id.toString());
 				}
 			} else {
 				log.warning("Could not fetch or resolve project name");

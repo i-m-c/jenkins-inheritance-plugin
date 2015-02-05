@@ -19,6 +19,7 @@
  */
 
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.util.VersionsNotification;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
@@ -31,6 +32,17 @@ script(
 )
 
 f.section(title: _("Version Control")) {
+	//Print a warning message that outlines what kind of version you've loaded
+	note = my.getCurrentVersionNotification()
+	tr() { td(colspan: 3) {
+		color = (note.isWarning) ? "darkred" : "darkgreen"
+		span(style: "font-size:125%; font-weight:bold; color:" + color) {
+			msg = note.getNotificationMessage();
+			span(style: "margin-right:1em", msg)
+		}
+	}}
+	
+	//The actual version selection box
 	f.entry(
 			field: "userDesiredVersion",
 			title: _("Select version to display")
@@ -40,7 +52,12 @@ f.section(title: _("Version Control")) {
 		)
 		f.description(
 			"This dropdown box allows you to select an older version" +
-			"to view. If you then save this version, it is in effect a \"revert\"."
+			" to view. If you then save this version, it is in effect a \"revert\"."
 		)
+	}
+	
+	//Add an invisible versioning message box; this is filled with a value during form submission
+	f.invisibleEntry() {
+		f.textbox(name: "versionMessageString")
 	}
 }

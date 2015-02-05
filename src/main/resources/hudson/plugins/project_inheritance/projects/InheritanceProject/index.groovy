@@ -22,7 +22,7 @@ import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.TriggerInheritance;
-import hudson.plugins.project_inheritance.projects.InheritanceProject.VersionsNotification;
+import hudson.plugins.project_inheritance.util.VersionsNotification;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
