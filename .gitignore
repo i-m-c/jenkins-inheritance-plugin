@@ -7,3 +7,5 @@ work
 .settings
 .classpath
 /bin
+*.orig
+*~
