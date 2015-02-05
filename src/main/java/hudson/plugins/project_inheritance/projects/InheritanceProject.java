@@ -42,7 +42,6 @@ import hudson.model.Cause.UserIdCause;
 import hudson.model.CauseAction;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
-import hudson.model.Queue.WaitingItem;
 import hudson.model.Hudson;
 import hudson.model.Job;
 import hudson.model.Label;
@@ -51,8 +50,8 @@ import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Project;
 import hudson.model.Queue;
+import hudson.model.Queue.WaitingItem;
 import hudson.model.StringParameterValue;
-import hudson.model.labels.LabelAtom;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.model.queue.SubTask;
 import hudson.model.queue.SubTaskContributor;
@@ -63,8 +62,8 @@ import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngin
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationClass;
 import hudson.plugins.project_inheritance.projects.inheritance.InheritanceGovernor;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.rebuild.InheritanceRebuildAction;
@@ -80,8 +79,8 @@ import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.plugins.project_inheritance.util.TimedBuffer;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore;
-import hudson.plugins.project_inheritance.util.VersionsNotification;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore.Version;
+import hudson.plugins.project_inheritance.util.VersionsNotification;
 import hudson.plugins.project_inheritance.util.svg.Graph;
 import hudson.plugins.project_inheritance.util.svg.SVGNode;
 import hudson.plugins.project_inheritance.util.svg.renderers.SVGTreeRenderer;
@@ -128,7 +127,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.Vector;
-import java.util.Map.Entry;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -3769,9 +3767,51 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 */
 	@Exported @Override
 	public boolean isConcurrentBuild() {
-		return this.isConcurrentBuild(false);
+		//Check if we're called from a configure page; if so, do not inherit
+		//In all other cases, do full inheritance
+		StaplerRequest req = Stapler.getCurrentRequest();
+		if (req != null && req.getRequestURI().endsWith("/configure")) {
+			return this.isConcurrentBuildFast(false);
+		}
+		return this.isConcurrentBuildFast(true);
 	}
 	
+	/**
+	 * This method behaves similar to {@link #isConcurrentBuild(IMode)}, but
+	 * will not even bother with versioning and skip reflection at all, if no
+	 * inheritance is needed.
+	 * 
+	 * @return
+	 */
+	public boolean isConcurrentBuildFast(boolean inherit) {
+		if (!inherit) {
+			return super.isConcurrentBuild();
+		}
+		boolean isConc = super.isConcurrentBuild();
+		if (isConc) { return true; }
+		//Otherwise, check the parents' current config
+		for (AbstractProjectReference apr: this.getParentReferences()) {
+			if (apr == null || apr.getProject() == null) {
+				continue;
+			}
+			if (apr.getProject().isConcurrentBuildFast(inherit)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	/**
+	 * This method learns the actual value of concurrency, but is too slow
+	 * to be executed thousands of times per second, as the Jenkins default
+	 * scheduler often does.
+	 * <p>
+	 * For faster, non-reflected access, use {@link #isConcurrentBuildFast(boolean)},
+	 * if you can live without versioning.
+	 * 
+	 * @param mode
+	 * @return
+	 */
 	public boolean isConcurrentBuild(IMode mode) {
 		InheritanceGovernor<Boolean> gov =
 				new InheritanceGovernor<Boolean>(
@@ -3856,26 +3896,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		// Otherwise, we allow things to proceed
 		return true;
-	}
-	
-	public boolean isConcurrentBuild(boolean forcedInherit) {
-		//Checking if we should not return an inherited value
-		//FIXME: FIX THIS!
-		//if (!inheritanceLookupRequired(forcedInherit)) {
-		//	return super.isConcurrentBuild();
-		//}
-		boolean isConc = super.isConcurrentBuild();
-		if (isConc) { return true; }
-		//Otherwise, check the parents
-		for (AbstractProjectReference apr: this.getParentReferences()) {
-			if (apr == null || apr.getProject() == null) {
-				continue;
-			}
-			if (apr.getProject().isConcurrentBuild(true)) {
-				return true;
-			}
-		}
-		return false;
 	}
 	
 	

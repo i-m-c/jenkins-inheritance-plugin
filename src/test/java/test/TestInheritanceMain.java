@@ -4,13 +4,10 @@ import static org.junit.Assert.assertNotEquals;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.XmlFile;
-import hudson.console.ConsoleNote;
 import hudson.model.ParameterValue;
 import hudson.model.Result;
-import hudson.model.TaskListener;
 import hudson.model.TopLevelItem;
 import hudson.model.Computer;
-import hudson.model.Label;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
@@ -29,20 +26,17 @@ import hudson.plugins.project_inheritance.projects.parameters.InheritableStringP
 import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference.ProjectReferenceDescriptor;
-import hudson.plugins.project_inheritance.projects.references.filters.MatingReferenceFilter;
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
+import hudson.plugins.project_inheritance.projects.references.filters.MatingReferenceFilter;
 import hudson.remoting.VirtualChannel;
-import hudson.search.Search.Item;
 import hudson.slaves.SlaveComputer;
+import hudson.util.VersionNumber;
 import hudson.util.ListBoxModel;
 import hudson.util.ListBoxModel.Option;
-import hudson.util.VersionNumber;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.io.PrintWriter;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,7 +45,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -73,7 +66,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 	);
 	
 	
-	private static class XmlProject {
+	protected static class XmlProject {
 		public final InheritanceProject project;
 		public final String xmlFile;
 		
@@ -222,7 +215,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 			return;
 		}
 		printInfo("setUp()");
-		setPluginManager(null);
+		//setPluginManager(null);
 		super.setUp();
 	}
 
@@ -839,8 +832,8 @@ public class TestInheritanceMain extends HudsonTestCase {
 	public void testLabelCaching() throws IOException, InterruptedException {
 		printInfo("testLabelCaching()");
 		if (!canRunTests()) {
-			//printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
-			//return;
+			printInfo("Test is skipped, due to incompatibility with OS/Jenkins");
+			return;
 		}
 		
 		//Fetch the jenkins instance; which is a valid build host
@@ -890,6 +883,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 		}
 		
 	}
+	
 	
 	// === HELPER METHODS ===
 	
