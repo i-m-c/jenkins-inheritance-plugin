@@ -423,7 +423,16 @@ public abstract class InheritanceGovernor<T> {
 			//Check if we request the configure page. We don't want to see merged parameters in this case. 
 			if (uri.endsWith("/configure")) { 
 				return false;
-			}
+			}else if (uri.endsWith("/configSubmit")) {
+                                return false;
+                        }else if (uri.endsWith("/child-job-creation-config")) {
+                                return false;
+                        }else if (uri.endsWith("/submitChildJobCreation")) {
+                                return false;
+                        }
+
+
+
 		}
 		
 		return true;
