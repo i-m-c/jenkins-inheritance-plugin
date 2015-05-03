@@ -23,7 +23,9 @@ import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngin
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
+st = namespace("jelly:stapler")
 
+adjunctPrefix = "hudson.plugins.project_inheritance.projects.InheritanceProject.adjunct"
 
 l.layout(
 		title: my.displayName + " Versioning Config",
@@ -36,6 +38,9 @@ l.layout(
 				rel: "stylesheet", type: "text/css",
 				href: resURL + "/plugin/project-inheritance/styles/table-monospace.css"
 		)
+		
+		//Load additional JS/CSS for the diffing functionality
+		st.adjunct(includes: adjunctPrefix + ".selectDiff")
 	}
 	
 	// Include the standard side-panel for this project
@@ -50,7 +55,7 @@ l.layout(
 			instance = my
 			
 			f.entry() {
-				table(class: "pane sortable bigtable fixed") {
+				table(class: "pane sortable bigtable fixed vTable") {
 					tr() {
 						th(initialSortDir: "down", class: "pane-header small", _("Version"))
 						th(initialSortDir: "down", class: "pane-header small", _("Stable?"))
@@ -59,7 +64,7 @@ l.layout(
 						th(initialSortDir: "down", class: "pane-header auto", _("Description"))
 					}
 					for (e in my.getVersions()) {
-						tr() {
+						tr(onclick:"selectForDiff(event)") {
 							// Version number
 							td(class: "pane") {
 								a(href: "configure?version=" + e.id, e.id)
@@ -98,6 +103,10 @@ l.layout(
 							if (ProjectCreationEngine.instance.getEnableApplyButton()) {
 								f.apply()
 							}
+							input(type: "button", class: "yui-button",
+									value: _("Compute Diff"),
+									onclick: "executeDiff('vTable')"
+							)
 						}
 					}
 				}

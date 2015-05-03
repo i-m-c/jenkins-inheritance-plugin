@@ -40,4 +40,15 @@ var computeDiff = function(job, mode) {
 			break;
 	}
 	xhr.send(null);
+	
+	//Fetch the current URL; adjust it and spawn an alert box
+	ext = "?left=" + lSel + "&right=" + rSel;
+	url = "./" + ext
+	
+	//Try modifying the URL history
+	try {
+		window.history.replaceState(null, "", ext);
+	} catch (e) {
+		//Do nothing
+	}
 }

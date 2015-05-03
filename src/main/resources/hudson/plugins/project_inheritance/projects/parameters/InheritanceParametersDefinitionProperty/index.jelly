@@ -45,7 +45,7 @@ THE SOFTWARE.
 		<l:main-panel>
 			<div class="behavior-loading">${%LOADING}</div>
 			<h1>${it.owner.pronoun} ${it.owner.displayName}</h1>
-			<p>${%description}</p>
+			<!-- <p>${%description}</p> -->
 			<j:set var="delay" value="${request.getParameter('delay')}" />
 			<f:form method="post" action="build${empty(delay)?'':'?delay='+delay}" name="parameters"
 					tableClass="parameters"

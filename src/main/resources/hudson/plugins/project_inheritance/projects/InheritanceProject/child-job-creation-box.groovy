@@ -18,24 +18,27 @@
  * License along with this library.	If not, see <http://www.gnu.org/licenses/>.
  */
 
+import org.kohsuke.stapler.Stapler;
+
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
-
+import hudson.plugins.project_inheritance.projects.references.filters.MatingReferenceFilter;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
-/* Create the class that allows us to communicate with sub-scripts.
- * Do note that classes are put into a global scope; whereas variables are not
- * 
- * This is for example used to set whether the user is allowed to alter
- * pre-existing fields or not.
+
+
+/* Fetch the current stapler request and add a parameter, that signifies that
+ * certain fields should be rendered differently than normal.
  */
-class Constants {
-	static READ_ONLY = false;
+request = Stapler.getCurrentRequest();
+if (request != null) {
+	request.setAttribute("FIELDS_READ_ONLY", !(ProjectCreationEngine.instance.currentUserMayRename()))
+	request.setAttribute("REFERENCE_FILTER", new MatingReferenceFilter(my))
 }
 
 f.section(title: _("ConfigureCompounds")) {
@@ -49,24 +52,16 @@ f.section(title: _("ConfigureCompounds")) {
 		" additional parameters, if any."
 	)
 	
-	//Set the read-only scope (if need be)
-	Constants.READ_ONLY= !(ProjectCreationEngine.instance.currentUserMayRename())
-	
 	//List of projects to mate with
 	f.entry() {
-		f.block() {
-			f.hetero_list(
-					items: my.compatibleProjects,
-					name: "compatibleProjects",
-					hasHeader: "true",
-					descriptors: AbstractProjectReference.all(
-							ParameterizedProjectReference.class
-					),
-					addCaption: _("AddCompound")
-			)
-		}
+		f.hetero_list(
+				items: my.compatibleProjects,
+				name: "compatibleProjects",
+				hasHeader: "true",
+				descriptors: AbstractProjectReference.all(
+						ParameterizedProjectReference.class
+				),
+				addCaption: _("AddCompound")
+		)
 	}
-	//Unset the read-only state, to not pollute others and let newly added fields
-	//be read-writeable
-	Constants.READ_ONLY = false
 }

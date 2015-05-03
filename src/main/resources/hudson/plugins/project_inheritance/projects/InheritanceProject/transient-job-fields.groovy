@@ -42,9 +42,12 @@ if (my.getIsTransient()) {
 			src: resURL + "/plugin/project-inheritance/scripts/markAllReadOnly.js"
 	)
 }
-else{
+else { // Non-transients
 	h1("Configuration of " + my.pronoun + " " + my.displayName)
-	include(my, "notifications-on-versions")
+	
+	ct.colored_block(backCol: "Khaki", borderCol: "navy") {
+		include(my, "configure-version-selection")
+	}
 }
 
 // Printing a humongous warning if the project has a cyclic dependency

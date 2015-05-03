@@ -32,6 +32,7 @@ import hudson.model.Run;
 import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterValue;
+import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.util.PathMapping;
 import hudson.plugins.project_inheritance.util.Resolver;
 import hudson.slaves.WorkspaceList;
@@ -82,7 +83,26 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	}
 	
 	private void setVersions() {
-		Map<String, Long> versions = getProjectVersions();
+		Map<String, Long> versions = null;
+
+		/*
+		 * we try to find the versions inside the special parameter VERSION_PARAM_NAME
+		 * by looking in the build parameters
+		 */
+		String versionParamName = getBuildVariables().get(InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME);
+		if ( versionParamName != null) {
+			versions = InheritanceParametersDefinitionProperty.decodeVersioningMap(
+					versionParamName
+			);
+		}		
+		/*
+		 * If we didn't find the parameter VERSION_PARAM_NAME in the parametersAction,
+		 * we fetch it from getProjectVersions
+		 */
+		if (null == versions) {
+			versions = getProjectVersions();
+		}
+		
 		if (versions != null) {
 			//Set the normal versioning (will not register values in thread)
 			InheritanceProject.setVersioningMap(versions);
@@ -98,27 +118,37 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	
 	public static FilePath getWorkspacePathFor(
 			Node n, InheritanceProject project, Map<String, String> values) {
+		if (n == null || project == null) { return null; }
+		
+		//Check if a custom workspace is demanded
+		String customWorkspace = project.getCustomWorkspace();
+		if (customWorkspace != null) {
+			FilePath root = n.getRootPath();
+			return new FilePath(root, customWorkspace);
+		}
+		
 		String path = project.getParameterizedWorkspace();
-		if (path == null || path.isEmpty()) {
-			return null;
-		}
-		
-		//Resolve the path's variables
-		String resolv = Resolver.resolveSingle(values, path);
-		if (resolv == null) { return null; }
-		
-		resolv = resolv.trim();
-		if (resolv.isEmpty()) { return null; }
-		
-		//Check if the path looks absolute; if not put it under the node
-		if (PathMapping.isAbsolute(resolv) == false) {
-			FilePath root = n.getWorkspaceFor(project);
-			if (root != null) {
-				root = root.getParent();
-				resolv = PathMapping.join(root.getRemote(), resolv);
+		if (path != null && ! path.isEmpty()) {
+			//Resolve the path's variables
+			String resolv = Resolver.resolveSingle(values, path);
+			if (resolv == null) { return null; }
+			
+			resolv = resolv.trim();
+			if (resolv.isEmpty()) { return null; }
+			
+			//Check if the path looks absolute; if not put it under the node
+			if (PathMapping.isAbsolute(resolv) == false) {
+				FilePath root = n.getWorkspaceFor(project);
+				if (root != null) {
+					root = root.getParent();
+					resolv = PathMapping.join(root.getRemote(), resolv);
+				}
 			}
+			return new FilePath(n.getChannel(), resolv);
 		}
-		return new FilePath(n.getChannel(), resolv);
+		
+		//Use the workspace locator extensions, if no parameterized WS is present
+		return n.getWorkspaceFor(project);
 	}
 	
 	/**
@@ -216,8 +246,7 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 				}
 			}
 			
-			//Otherwise, derive the workspace path "normally" with locking
-			
+			//Check if we deal with an inheritance job
 			Job<?, ?> job = this.getProject();
 			if (job == null && !(job instanceof InheritanceProject)) {
 				//Invalid job; fall-back
@@ -225,6 +254,14 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			}
 			InheritanceProject ip = (InheritanceProject) job;
 			
+			//Check if a custom workspace is demanded
+			String customWorkspace = ip.getCustomWorkspace();
+			if (customWorkspace != null) {
+				//The parent knows what to do
+				return super.decideWorkspace(n, wsl);
+			}
+			
+			//Calling the static workspace path finder
 			FilePath ws = InheritanceBuild.getWorkspacePathFor(
 					n, ip,
 					this.getBuild().getEnvironment(this.getListener())

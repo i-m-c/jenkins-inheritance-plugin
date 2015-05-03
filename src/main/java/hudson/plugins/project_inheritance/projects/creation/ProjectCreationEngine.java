@@ -679,43 +679,83 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		
 		@SuppressWarnings("unchecked")
 		public void run() {
-			//Generating the name for the new project
+			ProjectCreationEngine pce = ProjectCreationEngine.instance;
 			LinkedList<String> parNames = new LinkedList<String>();
+			List<String> classes = new LinkedList<String>();
+			
+			//Fetch the name & class of each parent
 			for (InheritanceProject ip : this.parents) {
 				if (ip == null) { continue; }
-				parNames.add(ip.getName());
+				String pName = ip.getName();
+				String cName = ip.getCreationClass();
+				if (pName == null || cName == null || cName.isEmpty()) { continue; }
+				parNames.add(pName);
+				classes.add(cName);
 			}
+			
+			//Generate the full name of the child to be created
 			String pName = generateNameFor(variance, parNames);
 			
-			//Fetching the map of already existing projects
+			
+			//Check if the mating that is supposed to be created is allowed
+			if (classes.size() < 2 || classes.contains(null)) {
+				this.reportMap.put(pName, "At least one parent is not a member of a class");
+				return;
+			}
+			
+			String leftClass = classes.get(0);
+			String rightClass = classes.get(1);
+			boolean isValidMate = false;
+			for (CreationMating mate : pce.getMatings()) {
+				if (!mate.firstClass.equals(leftClass)) {
+					continue;
+				}
+				if (!mate.secondClass.equals(rightClass)) {
+					continue;
+				}
+				isValidMate = true;
+				break;
+			}
+			if (!isValidMate) {
+				this.reportMap.put(pName, String.format(
+						"Parents have incompatible classes: %s<->%s",
+						leftClass, rightClass
+				));
+				return;
+			}
+			
+			//Fetch the map of already existing projects
 			Map<String, TopLevelItem> itemMap =
 					Jenkins.getInstance().getItemMap();
 			
 			SecurityContext oldAuthContext = null;
 			
+			//Everything following this must be serialised via the global lock
+			//as it sets and accesses certain global fields
+			
 			lock.lock();
 			try {
-				//Applying the ACLs from the auth object given to us
+				//Apply the ACLs from the auth object given to us
 				if (auth != null) {
 					oldAuthContext = ACL.impersonate(this.auth);
 				}
-				//Checking if the job to be generated already exists
+				//Check if the job to be generated already exists
 				if (itemMap.containsKey(pName)) {
 					reportMap.put(pName, "Job already exists");
 					return;
 				}
 				
-				//Checking if we've tried to create such a project already
+				//Check if we've tried to create such a project already
 				if (reportMap.containsKey(pName)) { return; }
 				
-				//Making sure that the IP Descriptor knows that we want to create
+				//Make sure that the IP Descriptor knows that we want to create
 				//the job as transient
 				InheritanceProject.DESCRIPTOR.addProjectToBeCreatedTransient(pName);
 				
 				TopLevelItem item = null;
 				InheritanceProject ip = null;
 			
-				//Then we use that constructor to create a suitable transient job
+				//Use that constructor to create a suitable transient job
 				item = Jenkins.getInstance().createProject(
 						InheritanceProject.DESCRIPTOR, pName 
 				);
@@ -730,7 +770,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				ip = (InheritanceProject) item;
 				
 				
-				//Adding the references generated above
+				//Add the references generated above
 				int i = 0;
 				for (InheritanceProject par : this.parents) {
 					if (par == null) { continue; }
@@ -739,12 +779,12 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 					);
 				}
 				
-				//Setting the variance, if any
+				//Set the variance, if any
 				if (variance != null && !variance.isEmpty()) {
 					ip.setVarianceLabel(variance);
 				}
 				
-				//Then, we check whether the newly created job is sane and buildable
+				//Check whether the newly created job is sane and buildable
 				boolean isSane = false;
 				String insanityMessage = null;
 				
@@ -763,7 +803,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 					isSane = true;
 				}
 				
-				//Loading the additional properties
+				//Load the additional properties
 				if (ip != null) {
 					ip.onLoad(ip.getParent(), ip.getName());
 				}
@@ -797,8 +837,14 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		}
 	}
 	
-	protected synchronized Map<String, String> triggerCreateProjects() {
-		//Clearing the old creation state
+	/**
+	 * Triggers creation of automatically generated projects; if enabled.
+	 * 
+	 * @return a map containing the results of the generation with entries:
+	 *         (project-name, human-readable-result)
+	 */
+	public synchronized Map<String, String> triggerCreateProjects() {
+		//Clear the old creation state report
 		ConcurrentHashMap<String, String> reportMap =
 				new ConcurrentHashMap<String, String>();
 		
@@ -808,7 +854,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		
 		long startTime = System.currentTimeMillis();
 		
-		//Creating a fixed thread-pool to create/load projects for us
+		//Create a fixed thread-pool to create/load projects for us
 		//It uses max(1, n-1) threads; where n is the number of CPU cores
 		int numExecs = Runtime.getRuntime().availableProcessors();
 		if (numExecs > 1) { numExecs -= 1; }
@@ -816,13 +862,13 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		
 		LinkedList<Future<Boolean>> futures = new LinkedList<Future<Boolean>>();
 		
-		//First, we fetch the map of all project names and their actual objects
+		//Fetch the map of all project names and their actual objects
 		Map<String, InheritanceProject> pMap =
 				InheritanceProject.getProjectsMap();
 		
-		//We iterate through that mapping to get compatible classes
+		//Iterate through that mapping to get compatible classes
 		for (InheritanceProject firstP : pMap.values()) {
-			// Iterating over the compatible matings
+			//Get & iterate over the compatible matings defined on that project
 			List<AbstractProjectReference> refs = firstP.getCompatibleProjects();
 			for (AbstractProjectReference ref : refs) {
 				InheritanceProject secondP = ref.getProject();
@@ -837,6 +883,10 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				InheritanceProject[] parents = {
 					firstP, secondP
 				};
+				
+				//Now, starting the asynchronous task of creating this new job
+				//DO NOTE: It will check if the creation is valid at all, and
+				//         refuse to create something if it's not valid.
 				ProjectDerivationRunner pdr = new ProjectDerivationRunner(
 						parents, variance, reportMap, ACL.SYSTEM
 				);
@@ -1140,6 +1190,12 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		return lastCreationState;
 	}
 	
+	
+	// === PROPERTY SETTERS - USE WITH CARE ===
+	
+	public void setEnableCreation(boolean enabled) {
+		this.enableCreation = enabled;
+	}
 	
 
 	// === PROJECT CREATION ===
