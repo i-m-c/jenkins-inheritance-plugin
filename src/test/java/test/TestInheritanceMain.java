@@ -122,7 +122,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 		public void addParent(String pName, String variance, ParameterDefinition... defs) {
 			AbstractProjectReference ref;
 			if (defs != null && defs.length > 0) {
-				ref = new ParameterizedProjectReference(pName, variance, Arrays.asList(defs));
+				ref = new ParameterizedProjectReference(pName, variance,null,  Arrays.asList(defs));
 			} else {
 				ref = new SimpleProjectReference(pName);
 			}
