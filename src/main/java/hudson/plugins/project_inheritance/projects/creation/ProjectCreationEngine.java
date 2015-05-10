@@ -404,6 +404,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	protected boolean enableApplyButton = true;
 	protected String magicNodeLabelForTesting = null;
 	protected boolean unescapeEqualsCharInParams = false; 
+	protected boolean forceNewVersion = false;
 	
 	protected RenameRestriction renameRestriction = RenameRestriction.ALLOW_ALL;
 	
@@ -556,6 +557,12 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				this.unescapeEqualsCharInParams = json.getBoolean("unescapeEqualsCharInParams");
 			} catch (JSONException ex) {
 				this.unescapeEqualsCharInParams = false;
+			}
+			
+			try {
+				this.forceNewVersion = json.getBoolean("forceNewVersion");
+			} catch (JSONException ex) {
+				this.forceNewVersion = false;
 			}
 			
 			try {
@@ -1082,6 +1089,10 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	
 	public boolean getUnescapeEqualsCharInParams() {
 		return this.unescapeEqualsCharInParams;
+	}
+	
+	public boolean getForceNewVersion(){
+		return this.forceNewVersion;
 	}
 	
 	public boolean getEnableCreation() {

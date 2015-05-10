@@ -57,6 +57,18 @@ l.main_panel() {
 			) {
 				f.select(field: "triggerInheritance")
 			}
+			f.entry(
+					title: _("Force new version"), 
+					description: 
+						"If enabled forces saving new version every time project is saved even if no changes since last version were detected. "
+						+ "Configuration changes to some plugins (most notably Promoted builds plugin) are stored outside the "
+						+ " owning project's configuration. This renders inheritance plugin unable "
+						+ " to detect version changes (as the project itself did not change) so it will not "
+						+ " create new version of project configuration. This option provides means to create a new version "
+						+ " every time project configuratino is saved, even if there were no changes." 
+			) {
+				f.checkbox(field: "forceNewVersion")
+			}
 		}
 		
 		f.section(title: _("Creation Options")) {
