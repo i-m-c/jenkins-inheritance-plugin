@@ -373,6 +373,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	protected transient String variance = null;
 	
 	/**
+	 * This field is only valid for transient jobs.
+	 * It carries the additional, optional assigned label as assigned by the
+	 * {@link ProjectCreationEngine} during its creation.
+	 */
+	protected transient String assignedLabelString = null;
+	
+	/**
 	 * This {@link VersionedObjectStore} is used to version all configurable
 	 * properties of this class.
 	 * <p>
@@ -912,6 +919,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.variance =
 					(variance == null || variance.isEmpty())
 					? null : variance;
+		}
+	}
+	public void setAssignedLabelString(String assignedLabelString) {
+		if (this.isTransient) {
+			this.assignedLabelString =
+					(assignedLabelString == null || assignedLabelString.isEmpty())
+					? null : assignedLabelString;
 		}
 	}
 	
@@ -1950,7 +1964,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//Now, we check if this version is the same as the last one
 		Version prev = this.versionStore.getVersion(v.id - 1);
-		if (prev != null && this.versionStore.areIdentical(prev, v)) {
+		//If the new version creation is forced, we save it even if it is the same as the previous one. 
+		if (!ProjectCreationEngine.instance.getForceNewVersion() &&  prev != null && this.versionStore.areIdentical(prev, v)) {
 			//Drop the version, if possible
 			this.versionStore.undoVersion(v);
 		}
@@ -3669,9 +3684,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					String.format("\"%s\"", lbl.getName())
 			);
 		}
-		
-		//Generate a new label, forcing inheritance
-		Label lbl = this.getAssignedLabel(IMode.INHERIT_FORCED);
+		Label lbl = null;
+		if (this.isTransient && assignedLabelString!=null && !assignedLabelString.isEmpty()){
+			lbl = Jenkins.getInstance().getLabel(
+					String.format("\"%s\"", assignedLabelString)
+			);
+		}else{
+			//Generate a new label, forcing inheritance
+			lbl = this.getAssignedLabel(IMode.INHERIT_FORCED);
+		}
 		if (lbl == null) {
 			lbl = super.getAssignedLabel();
 		}
@@ -3760,15 +3781,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public Label getRawAssignedLabel() {
-		if (this.isTransient) {
-			//Transient projects do not have a label, they merely inherit
-			return null;
-		}
 		return super.getAssignedLabel();
 	}
 	
 	@Override
 	public String getAssignedLabelString() {
+		if (this.isTransient && assignedLabelString!=null && !assignedLabelString.isEmpty()){
+			return assignedLabelString;
+		}
 		if (InheritanceGovernor.inheritanceLookupRequired(this) == false) {
 			return super.getAssignedLabelString();
 		}

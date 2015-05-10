@@ -54,6 +54,20 @@ f.entry(field: "variance", title: _("Variance")) {
 	)
 }
 
+
+f.entry(field: "assignedLabelString", title: _("Label Expression")) {
+	if (isReadOnly) {
+		f.textbox(default: "", readonly:"readonly")
+	} else {
+		f.textbox(default: "")
+	}
+	f.description(
+			"Restricts where this compound can be run. "
+			+"If you are configuring existing compound you need to delete it and recreate for the change to take effect."
+	)
+}
+
+
 f.advanced(align: "left") {
 	f.block() {
 		f.nested() {

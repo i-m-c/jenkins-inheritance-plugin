@@ -404,6 +404,8 @@ public abstract class InheritanceGovernor<T> {
 	}
 	
 	public static boolean inheritanceLookupRequired(InheritanceProject root, boolean forcedInherit) {
+		//Default to yes, unless there is a compelling reason to not have inheritance lookup. 
+
 		//In a cyclic dependency, any form of inheritance would be ill-advised
 		try {
 			if (root.hasCyclicDependency()) {
@@ -414,49 +416,26 @@ public abstract class InheritanceGovernor<T> {
 			//an NPE which means no inheritance should be queried
 			return false;
 		}
-		/* Otherwise, an exploration is only required when one of the following
-		 * holds:
-		 * 1.) The user wants to force inheritance
-		 * 2.) The project is transient and has no real own configuration
-		 * 3.) The project is called in the context of a build
-		 * 4.) The queue queries properties of the project 
-		 */
-		
-		//Check forced inheritance or transience
-		if (forcedInherit || root.getIsTransient()) {
-			return true;
-		}
-		
-		//Checking the Stapler Request, because it is fast
+
 		StaplerRequest req = Stapler.getCurrentRequest();
 		if (req != null) {
 			String uri = req.getRequestURI();
-			//Check if we request the build page
-			if (uri.endsWith("/build")) {
-				return true;
-			}
-			//Check if we were requested by page for a run
-			if (runUriRegExp.matcher(uri).matches()) {
-				return true;
-			}
+			//Check if we request the configure page. We don't want to see merged parameters in this case. 
+			if (uri.endsWith("/configure")) { 
+				return false;
+			}else if (uri.endsWith("/configSubmit")) {
+                                return false;
+                        }else if (uri.endsWith("/child-job-creation-config")) {
+                                return false;
+                        }else if (uri.endsWith("/submitChildJobCreation")) {
+                                return false;
+                        }
+
+
+
 		}
 		
-		//Check via expensive stack reflection
-		if (Reflection.calledFromClass(
-				Build.class, BuildCommand.class,
-				Queue.class, BuildTrigger.class,
-				Trigger.class, BuildStep.class
-			) ||
-			Reflection.calledFromMethod(
-					InheritanceProject.class,
-					"doBuild", "scheduleBuild2", "doBuildWithParameters"
-			)
-		) {
-			return true;
-		}
-		
-		//In all other cases, we don't require (or want) inheritance
-		return false;
+		return true;
 	}
 	
 	/**

@@ -46,9 +46,10 @@ public class ParameterizedProjectReference extends SimpleProjectReference {
 
 	protected List<ParameterDefinition> parameters;
 	protected String variance = null;
+	protected String assignedLabelString = null;
 	
 	@DataBoundConstructor
-	public ParameterizedProjectReference(String name, String variance,
+	public ParameterizedProjectReference(String name, String variance, String assignedLabelString, 
 			List<ParameterDefinition> parameters) {
 		super(name);
 		InheritanceProject project = this.getProject();
@@ -70,6 +71,7 @@ public class ParameterizedProjectReference extends SimpleProjectReference {
 		}
 		
 		this.variance = variance;
+		this.assignedLabelString = assignedLabelString;
 	}
 	
 	
@@ -89,6 +91,13 @@ public class ParameterizedProjectReference extends SimpleProjectReference {
 		return this.variance;
 	}
 	
+	public String getAssignedLabelString(){
+		if (this.assignedLabelString == null || this.assignedLabelString.isEmpty()) {
+			return null;
+		}
+		return this.assignedLabelString;
+	
+	}
 	
 	// === DESCRIPTOR DEFINITION ===
 	
