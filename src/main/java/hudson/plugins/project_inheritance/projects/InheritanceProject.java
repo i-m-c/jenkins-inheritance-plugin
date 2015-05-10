@@ -1950,7 +1950,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//Now, we check if this version is the same as the last one
 		Version prev = this.versionStore.getVersion(v.id - 1);
-		if (prev != null && this.versionStore.areIdentical(prev, v)) {
+		//If the new version creation is forced, we save it even if it is the same as the previous one. 
+		if (!ProjectCreationEngine.instance.getForceNewVersion() &&  prev != null && this.versionStore.areIdentical(prev, v)) {
 			//Drop the version, if possible
 			this.versionStore.undoVersion(v);
 		}
