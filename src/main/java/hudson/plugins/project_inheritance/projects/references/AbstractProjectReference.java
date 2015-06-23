@@ -123,7 +123,7 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	public void switchProject(InheritanceProject project) {
 		//Do note that the project referenced may not change through this
 		if (project != null) {
-			this.name = project.getName();
+			this.name = project.getFullName();
 			this.project = project;
 		}
 	}
@@ -279,7 +279,7 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 			
 			//Now, we can check if adding the parent name to the project would
 			//cause a cyclic dependency
-			if (currProj.hasCyclicDependency(parentProj.getName())) {
+			if (currProj.hasCyclicDependency(parentProj.getFullName())) {
 				return FormValidation.error(
 					"Adding this project would cause a cyclic/diamond dependency."
 				);
@@ -293,7 +293,7 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 			for (InheritanceProject ip : InheritanceProject.getProjectsMap().values()) {
 				//We ensure that both are compatible
 				if (this.projectIsCompatible(ip)) {
-					projNames.add(ip.getName());
+					projNames.add(ip.getFullName());
 				}
 			}
 			//Adding the previous definition; if any is already present

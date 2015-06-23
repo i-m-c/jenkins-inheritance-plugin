@@ -541,7 +541,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 
 	public int compareTo(Project o) {
-		return this.name.compareTo(o.getName());
+		return this.name.compareTo(o.getFullName());
 	}
 	
 	@Override
@@ -587,7 +587,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			// We ensure that we may only inherit from actually inheritable,
 			// non-transient projects
 			if (p instanceof InheritanceProject) {
-				pMap.put(p.getName(), (InheritanceProject) p);
+				pMap.put(p.getFullName(), (InheritanceProject) p);
 			}
 		}
 		
@@ -596,7 +596,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public static InheritanceProject getProjectByName(String name) {
-		TopLevelItem item = Jenkins.getInstance().getItem(name);
+		System.out.println("Intentando encontrar... " + name);
+		Item item = Jenkins.getInstance().getItemByFullName(name);
+		System.out.println("Es del tipo... " + item);
 		if (item instanceof InheritanceProject) {
 			return (InheritanceProject) item;
 		}
