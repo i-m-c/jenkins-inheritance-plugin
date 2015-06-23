@@ -36,7 +36,7 @@ THE SOFTWARE.
 		xmlns:p="/lib/hudson/project"
 >
 	<f:invisibleEntry>
-		<f:readOnlyTextbox name="projectName" default="${it.name}"/>
+		<f:readOnlyTextbox name="projectName" default="${it.fullName}"/>
 	</f:invisibleEntry>
 	<f:entry title="${%Name}" help="/help/parameter/name.html">
 		<f:select field="name" />
