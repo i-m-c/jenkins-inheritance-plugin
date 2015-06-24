@@ -24,6 +24,7 @@ import static javax.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 import static javax.servlet.http.HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
 import hudson.BulkChange;
 import hudson.Extension;
+import hudson.Functions;
 import hudson.Util;
 import hudson.model.Action;
 import hudson.model.DependencyGraph;
@@ -41,7 +42,6 @@ import hudson.model.Cause.UserIdCause;
 import hudson.model.CauseAction;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
-import hudson.model.Queue.WaitingItem;
 import hudson.model.Hudson;
 import hudson.model.Job;
 import hudson.model.Label;
@@ -50,6 +50,7 @@ import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Project;
 import hudson.model.Queue;
+import hudson.model.Queue.WaitingItem;
 import hudson.model.StringParameterValue;
 import hudson.model.queue.QueueTaskFuture;
 import hudson.model.queue.SubTask;
@@ -61,8 +62,8 @@ import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngin
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationClass;
 import hudson.plugins.project_inheritance.projects.inheritance.InheritanceGovernor;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.rebuild.InheritanceRebuildAction;
@@ -74,10 +75,12 @@ import hudson.plugins.project_inheritance.projects.references.ProjectReference.P
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
 import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
 import hudson.plugins.project_inheritance.util.Helpers;
+import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
 import hudson.plugins.project_inheritance.util.TimedBuffer;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore;
 import hudson.plugins.project_inheritance.util.VersionedObjectStore.Version;
+import hudson.plugins.project_inheritance.util.VersionsNotification;
 import hudson.plugins.project_inheritance.util.svg.Graph;
 import hudson.plugins.project_inheritance.util.svg.SVGNode;
 import hudson.plugins.project_inheritance.util.svg.renderers.SVGTreeRenderer;
@@ -143,6 +146,7 @@ import jenkins.model.BuildDiscarder;
 import jenkins.model.Jenkins;
 import jenkins.scm.SCMCheckoutStrategy;
 import jenkins.util.TimeDuration;
+import junit.framework.TestCase;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONException;
 import net.sf.json.JSONObject;
@@ -334,89 +338,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		LOCAL_ONLY, INHERIT_FORCED, AUTO;
 	}
 	
-	/**
-	 * A simple enum for the possible notifications a user can get on an inheritance
-	 * project configuration page.
-	 */
-	public static class VersionsNotification {
-		boolean isNewest;
-		boolean isStable;
-		boolean stablesBefore;
-		boolean stablesAfter;
-		private boolean highlightWarning = false;
-		private String notificationMessage;
-		public final List<Version> versions;
-
-		public VersionsNotification(boolean isNewest,
-									boolean isStable,
-									boolean stablesBefore,
-									boolean stablesAfter,
-									List<Version> versions) {
-			this.isNewest = isNewest;
-			this.isStable = isStable;
-			this.stablesBefore = stablesBefore;
-			this.stablesAfter = stablesAfter;
-			this.versions = versions;
-			if (false == isNewest &&
-					true == isStable &&
-						true == stablesBefore &&
-							true == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_OLDER_STABLE_VERSION();
-				highlightWarning = true;
-			} else if (false == isNewest &&
-						false == isStable &&
-							true == stablesBefore &&
-								true == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_UNSTABLE_VERSION_BUT_STABLE_AVAILABLE();
-				highlightWarning = true;
-			} else if (false == isNewest &&
-						false == isStable &&
-							false == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_UNSTABLE_VERSION_BUT_MORE_UNSTABLE_AVAILABLE();
-				highlightWarning = true;
-			} else if (false == isNewest &&
-						true== isStable &&
-							true == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_LATEST_STABLE_VERSION();
-			} else if (true == isNewest &&
-						false == isStable &&
-							false == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_IMPLICIT_STABLE_VERSION();
-			} else if (true == isNewest &&
-						true == isStable &&
-							false == stablesBefore &&
-								false == stablesAfter) {
-				notificationMessage = Messages.InheritanceProject_VersionsNotification_EDITING_LATEST_STABLE_AND_LAST_VERSION();
-			}
-		}
-
-		public boolean isNewest() {
-			return isNewest;
-		}
-
-		public boolean isStable() {
-			return isStable;
-		}
-
-		public boolean isStablesAfter() {
-			return stablesAfter;
-		}
-		
-		public String getNotificationMessage() {
-			return notificationMessage;
-		}
-		
-		public List<Version> getVersions() {
-			return versions;
-		}
-
-		public boolean isHighlightWarning() {
-			return highlightWarning;
-		}
-	}
 	
 	// === PRIVATE/PROTECTED STATIC FIELDS ===
 	
@@ -454,6 +375,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			Jenkins.ADMINISTER,
 			PermissionScope.ITEM
 	);
+	
 	
 	// === PRIVATE/PROTECTED MEMBER FIELDS ===
 	
@@ -776,6 +698,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	@Override
 	public void updateByXml(Source source) throws IOException {
+		//Check if the job is a transient job; in which case this must fail
+		if (this.getIsTransient()) {
+			String msg = String.format(
+					"Updating %s by XML upload is not allowed: Transient project",
+					this.getName()
+			);
+			log.warning(msg);
+			throw new IOException(msg);
+		}
+		
 		//Instruct the parent to update us
 		super.updateByXml(source);
 		//Then, save a new version
@@ -1367,109 +1299,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 
 	/**
-	 * @return True or False, depending if all versions of the project are unstable,
-	 * meaning no version has been marked as stable
+	 * Returns the versioning notification based on the current user desired version.
+	 * @see VersionedObjectStore#getUserNotificationFor(Long)
 	 */
-	public boolean areAllVersionsUnstable() {
-		VersionsNotification notifyOnCurrentVersionStatus = notifyOnCurrentVersionStatus();
-		if ((notifyOnCurrentVersionStatus.isNewest &&
-				!notifyOnCurrentVersionStatus.isStable &&
-				!notifyOnCurrentVersionStatus.stablesBefore &&
-				!notifyOnCurrentVersionStatus.stablesAfter) ||
-			!notifyOnCurrentVersionStatus.isNewest &&
-				!notifyOnCurrentVersionStatus.isStable &&
-				!notifyOnCurrentVersionStatus.stablesBefore &&
-				!notifyOnCurrentVersionStatus.stablesAfter) {
-			return true;
-		}
-		return false;
-	}
-
-	/**
-	 * This method notifies the user on what type of version is he currently
-	 * editing:
-	 * 1. user is editing an unstable version (Warning)
-	 * 2. user is editing the last stable version which is not the last version (Warning)
-	 * 3. user is editing the last stable version which is the last version (Info)
-	 * 4. user is editing some stable version which is not the latest stable version (Warning)
-	 * @return
-	 */
-	public VersionsNotification notifyOnCurrentVersionStatus() {
-		VersionsNotification versionsNotification = null;
-		LinkedList<Version> versions = new LinkedList<Version>();
-		
-		Long latestVersionId = getLatestVersion();
-		Long latestStableVersionId = getStableVersion();
-		Long userSelectedVersionId = getUserDesiredVersion();
-		Version stableVersion = versionStore.getVersion(latestStableVersionId);
-
-		/*	user 
-		 *		didn't select the latest stable version
-		 *	and
-		 *		latest version is marked as stable
-		 */
-		if (userSelectedVersionId != latestStableVersionId && stableVersion.getStability()) {
-			Version userDesiredVersion = versionStore.getVersion(userSelectedVersionId);
-			versions.add(versionStore.getVersion(latestStableVersionId));
-			//at this point of check user selected an older stable version
-			if (userDesiredVersion.getStability()) {
-				versionsNotification = new VersionsNotification(
-						//VersionsNotification.Type.EDITING_OLDER_STABLE_VERSION,
-						false, true, true, true,
-						versions);
-			} else { //at this point of check user selected an older unstable version
-				versionsNotification = new VersionsNotification(
-						//VersionsNotification.Type.EDITING_UNSTABLE_VERSION_BUT_STABLE_AVAILABLE,
-						false, false, true, true,
-						versions);
-			}
-		} else if (userSelectedVersionId != latestStableVersionId && !stableVersion.getStability()) {
-			/*	there are no stable versions
-			 *		and 
-			 *			this is the case where the user choose an old version
-			 *			from all the unstable versions
-			 */
-			versions = this.versionStore.getAllVersionsSince(userSelectedVersionId);
-			versionsNotification = new VersionsNotification(
-					//VersionsNotification.Type.EDITING_UNSTABLE_VERSION_BUT_MORE_UNSTABLE_AVAILABLE,
-					false, false, false, false,
-					versions);
-		} else {
-			/*
-			 * at this point
-			 * user selected latest stable version
-			 * 		but
-			 * 			not the latest version
-			 */
-			if (latestVersionId != latestStableVersionId) {
-				versions = this.versionStore.getAllVersionsSince(userSelectedVersionId);
-				versionsNotification = new VersionsNotification(
-						//VersionsNotification.Type.EDITING_LATEST_STABLE_VERSION,
-						false, true, true, false,
-						versions);
-			} else {
-				//this.versionStore.getLatestStable() in case no version is stable
-				//returns as default the latest version, even if not marked as stable
-				//by user, so we treat this special case letting the user know
-				//there is no marked as stable version, but the last one is considered
-				//as stable
-				if (this.versionStore != null) {
-					Version v = this.versionStore.getLatestStable();
-					if (null == v || !v.getStability()) {
-						versionsNotification = new VersionsNotification(
-								//VersionsNotification.Type.EDITING_IMPLICIT_STABLE_VERSION,
-								true, false, false, false,
-								versions);
-					} else {
-						versionsNotification = new VersionsNotification(
-								//VersionsNotification.Type.EDITING_LATEST_STABLE_AND_LAST_VERSION,
-								true, true, false, false,
-								versions);
-					}
-				}
-			}
-		}
-		return versionsNotification;
+	public VersionsNotification getCurrentVersionNotification() {
+		return versionStore.getUserNotificationFor(getUserDesiredVersion());
 	}
 	
 	// === DIFF COMPUTATION METHODS ===
@@ -1748,6 +1582,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 		
 		//Checking if we have a parameter set which overrides everything 
+		Map<String, Long> vMap = new HashMap<String, Long>(); 
 		for (Action a : actions) {
 			if (!(a instanceof ParametersAction)) {
 				continue;
@@ -1761,8 +1596,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				continue;
 			}
 			StringParameterValue spv = (StringParameterValue) pv;
-			Map<String, Long> vMap = 
-					InheritanceParametersDefinitionProperty
+			vMap = InheritanceParametersDefinitionProperty
 					.decodeVersioningMap(spv.value);
 			if (vMap == null) { continue; }
 			
@@ -1772,11 +1606,20 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//If we need to create a new versioning action; we do this now
 		//Do note that this will retrieve versions previously stored in the thread!
+		//There is a special use case where the versions can be passed through the
+		//InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME so 
+		//we need to create a Versioning Action based on that in this case
 		if (!hasVersioningAction) {
 			LinkedList<Action> newActions = new LinkedList<Action>(actions);
-			newActions.add(
-					new VersioningAction(this.getAllVersionsFromCurrentState())
-			);
+			if (!vMap.isEmpty()) {
+				newActions.add(
+						new VersioningAction(vMap)
+				);
+			} else {
+				newActions.add(
+						new VersioningAction(this.getAllVersionsFromCurrentState())
+				);
+			}
 			actions = newActions;
 		}
 		
@@ -3714,6 +3557,25 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return this.parameterizedWorkspace;
 	}
 	
+	/**
+	 * Sets the parameterized workspace variable. Will only work, if called
+	 * <b>directly</b> by a "TestCase" class. Will throw an exception otherwise.
+	 * 
+	 * @deprecated Must only be used from within {@link TestCase} classes.
+	 *
+	 * @param workspace the new value for the parameterized workspace
+	 */
+	@Deprecated
+	public void setRawParameterizedWorkspace(String workspace) {
+		if (Reflection.calledFromClass(2, TestCase.class)) {
+			this.parameterizedWorkspace = workspace;
+		} else {
+			throw new IllegalAccessError(
+					"Should not be called outside by something other than a TestCase class"
+			);
+		}
+	}
+	
 	
 	
 	/**
@@ -3798,20 +3660,28 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * entire server from progressing with builds.
 	 * <br/>
 	 * Thus, this method must take the minimum possible amount of time, which
-	 * means that reflection is to expensive, as well as generating the label
-	 * from scratch.
+	 * means that reflection is too expensive.
 	 * <p>
 	 * This has the downside of this method ignoring versioning completely,
 	 * which might affect the result of this call through changing the
 	 * inheritance.
 	 * This is an accepted break, compared to the potential slowdown of
-	 * {@link Queue#maintain()}.
+	 * {@link Queue#maintain()} under high queue load situations.
 	 */
 	public Label getAssignedLabel() {
 		//Check if there's a cached value
 		Object cached = onChangeBuffer.get(this, "maintenanceAssignedLabel");
 		if (cached != null && cached instanceof Label) {
-			return (Label) cached;
+			Label lbl = (Label) cached;
+			/* Use the Jenkins cache to get an up-to-date version of that label
+			 * Jenkins will automatically flush cached labels when they change
+			 * 
+			 * See getAssignedLabel(IMode) to see why the "" quoting
+			 * is needed.
+			 */
+			return Jenkins.getInstance().getLabel(
+					String.format("\"%s\"", lbl.getName())
+			);
 		}
 		
 		//Generate a new label, forcing inheritance
@@ -3824,6 +3694,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		if (lbl != null) {
 			onChangeBuffer.set(this, "maintenanceAssignedLabel", lbl);
 		}
+		//The returned label is guaranteed to be fresh
 		return lbl;
 	}
 	
@@ -3859,30 +3730,47 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		//Generate the label on this node
+		//Generate the label on this node and the optional "magic" label restriction
 		Label lbl = gov.retrieveFullyDerivedField(this, mode);
-		
-		//Checking if the node-label-for-testing needs to be added
 		Label magic = ProjectCreationEngine.instance.getMagicNodeLabelForTestingValue();
-		//Check if no magic label is set
-		if (magic == null || magic.isEmpty()) {
-			return lbl;
-		}
-		if (lbl != null) {
-			String labelExpr = lbl.getExpression();
-			String magicExpr = magic.getExpression();
-			if (labelExpr.contains(magicExpr)) {
-				//The label is already referencing the magic; no appending needed
-				return lbl;
+		
+		//Check if the magic label needs to be applied (only when building)
+		if (magic != null && !magic.isEmpty() && InheritanceGovernor.inheritanceLookupRequired(this)) {
+			if (lbl != null) {
+				String labelExpr = lbl.getName();
+				String magicExpr = magic.getName();
+				if (!labelExpr.contains(magicExpr)) {
+					//We need to add the magic to the label
+					lbl = lbl.and(magic.not());
+				}
+			} else {
+				//No label present, just use magic value as-is
+				lbl = magic.not();
 			}
 		}
-		//Otherwise, we need to add the magic label; but only when building
-		if (InheritanceGovernor.inheritanceLookupRequired(this)) {
-			return (lbl == null) ? magic.not() : lbl.and(magic.not());
-		}
 		
-		//No appending of the magic value is necessary
-		return lbl;
+		if (lbl == null) { return null; }
+		
+		/* The labels stored in versioning are essentially cached; which means
+		 * that their "applicable nodes" list is out-of-date.
+		 * 
+		 * As such, we will use Jenkins' caching mechanism to update the labels,
+		 * as it will "know" when to refresh labels and when not.
+		 * Unfortunately, Jenkins is braindead and "unquotes" the strings
+		 * aggressively, by just stripping out the outermost and innermost
+		 * quote sign; EVEN if the quotes do not belong to each other.
+		 * 
+		 * E.g.:
+		 * 		"os:linux"&&"role:foobar"
+		 * will be turned into:
+		 * 		os:linux"&&"role:foobar
+		 * 
+		 * We "solve" this by adding a pointless quote around the label's
+		 * string representation
+		 */
+		return Jenkins.getInstance().getLabel(
+				String.format("\"%s\"", lbl.getName())
+		);
 	}
 	
 	public Label getRawAssignedLabel() {
@@ -3912,9 +3800,51 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 */
 	@Exported @Override
 	public boolean isConcurrentBuild() {
-		return this.isConcurrentBuild(false);
+		//Check if we're called from a configure page; if so, do not inherit
+		//In all other cases, do full inheritance
+		StaplerRequest req = Stapler.getCurrentRequest();
+		if (req != null && req.getRequestURI().endsWith("/configure")) {
+			return this.isConcurrentBuildFast(false);
+		}
+		return this.isConcurrentBuildFast(true);
 	}
 	
+	/**
+	 * This method behaves similar to {@link #isConcurrentBuild(IMode)}, but
+	 * will not even bother with versioning and skip reflection at all, if no
+	 * inheritance is needed.
+	 * 
+	 * @return
+	 */
+	public boolean isConcurrentBuildFast(boolean inherit) {
+		if (!inherit) {
+			return super.isConcurrentBuild();
+		}
+		boolean isConc = super.isConcurrentBuild();
+		if (isConc) { return true; }
+		//Otherwise, check the parents' current config
+		for (AbstractProjectReference apr: this.getParentReferences()) {
+			if (apr == null || apr.getProject() == null) {
+				continue;
+			}
+			if (apr.getProject().isConcurrentBuildFast(inherit)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	/**
+	 * This method learns the actual value of concurrency, but is too slow
+	 * to be executed thousands of times per second, as the Jenkins default
+	 * scheduler often does.
+	 * <p>
+	 * For faster, non-reflected access, use {@link #isConcurrentBuildFast(boolean)},
+	 * if you can live without versioning.
+	 * 
+	 * @param mode
+	 * @return
+	 */
 	public boolean isConcurrentBuild(IMode mode) {
 		InheritanceGovernor<Boolean> gov =
 				new InheritanceGovernor<Boolean>(
@@ -3999,26 +3929,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		// Otherwise, we allow things to proceed
 		return true;
-	}
-	
-	public boolean isConcurrentBuild(boolean forcedInherit) {
-		//Checking if we should not return an inherited value
-		//FIXME: FIX THIS!
-		//if (!inheritanceLookupRequired(forcedInherit)) {
-		//	return super.isConcurrentBuild();
-		//}
-		boolean isConc = super.isConcurrentBuild();
-		if (isConc) { return true; }
-		//Otherwise, check the parents
-		for (AbstractProjectReference apr: this.getParentReferences()) {
-			if (apr == null || apr.getProject() == null) {
-				continue;
-			}
-			if (apr.getProject().isConcurrentBuild(true)) {
-				return true;
-			}
-		}
-		return false;
 	}
 	
 	
@@ -4658,72 +4568,62 @@ System.out.println("Finding parent... " + parent);
 				);
 			}
 			
-			//Checking additional restrictions on ISPDs
+			//Check additional restrictions on ISPDs
 			if (pd instanceof InheritableStringParameterDefinition) {
 				InheritableStringParameterDefinition ispd =
 						(InheritableStringParameterDefinition) pd;
-				//We ignore references, as they can never invalidate flags
-				//Otherwise, we check whether they unset values
-				if (!(pd instanceof InheritableStringParameterReferenceDefinition)) {
-					//Checking if the "force-default-value" flag is set by the new one
-					if (ispd.getMustHaveDefaultValue()) {
-						s.hasToHaveDefaultSet = true;
-					}
-					//Checking if the assignment flag was set by the new one
-					if (ispd.getMustBeAssigned()) {
-						s.hasToBeAssigned = true;
-					}
-					//Then, checking if the "force-default-value" flag was unset
-					if (s.hasToHaveDefaultSet && !ispd.getMustHaveDefaultValue()) {
-						return new AbstractMap.SimpleEntry<Boolean, String>(
-								false, "Parameter '" + pd.getName() +
-								"' may not unset the flag that ensures that a" +
-								" default value is set."
-								);
-					}
-					//Checking if the "must-be-assigned" flag was unset
-					if (s.hasToBeAssigned && !ispd.getMustBeAssigned()) {
-						return new AbstractMap.SimpleEntry<Boolean, String>(
-								false, "Parameter '" + pd.getName() +
-								"' may not unset the flag that ensures that a" +
-								" final value is set before execution."
-								);
-					}
-				}
-				
-				//Checking if overwriting causes a previous default to be lost
+				//Check if overwriting causes a previous default to be lost
 				String defVal = ispd.getDefaultValue();
 				boolean defValNewlySet = !(defVal == null || defVal.isEmpty());
 				
-				try {
-					switch(s.previousMode) {
-						case OVERWRITABLE:
-							//An overwrite always causes the default to be discarded
+				switch(s.previousMode) {
+					case OVERWRITABLE:
+						//An overwrite always causes the default to be discarded
+						s.hadDefaultSet = defValNewlySet;
+						break;
+					case EXTENSIBLE:
+						//An extension does not overwrite an already set default
+						if (!s.hadDefaultSet) {
 							s.hadDefaultSet = defValNewlySet;
-							break;
-						case EXTENSIBLE:
-							//An extension does not overwrite an already set default
-							if (!s.hadDefaultSet) {
-								s.hadDefaultSet = defValNewlySet;
-							}
-							break;
-						case FIXED:
-							//FIXED parameters are ignored
-							break;
-						default:
-							log.warning(
-									"Detected invalid inheritance mode: " +
-									s.previousMode.toString() + " on " +
-									this.getName() + "->" + pd.getName()
-							);
-							break;
-					}
-				} finally {
-					//In any case, we overwrite the sanity details with the new values
-					s.previousMode = ispd.getInheritanceModeAsVar();
-					s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
-					s.hasToBeAssigned = ispd.getMustBeAssigned();
+						}
+						break;
+					case FIXED:
+						//FIXED parameters are ignored
+						break;
+					default:
+						log.warning(
+								"Detected invalid inheritance mode: " +
+								s.previousMode.toString() + " on " +
+								this.getName() + "->" + pd.getName()
+						);
+						break;
 				}
+				
+				//Ignore references, as they can never invalidate or change flags
+				if (pd instanceof InheritableStringParameterReferenceDefinition) {
+					continue;
+				}
+				
+				//Check if the "force-default-value" flag was unset
+				if (s.hasToHaveDefaultSet && !ispd.getMustHaveDefaultValue()) {
+					return new AbstractMap.SimpleEntry<Boolean, String>(
+							false, "Parameter '" + pd.getName() +
+							"' may not unset the flag that ensures that a" +
+							" default value is set."
+							);
+				}
+				//Check if the "must-be-assigned" flag was unset
+				if (s.hasToBeAssigned && !ispd.getMustBeAssigned()) {
+					return new AbstractMap.SimpleEntry<Boolean, String>(
+							false, "Parameter '" + pd.getName() +
+							"' may not unset the flag that ensures that a" +
+							" final value is set before execution."
+							);
+				}
+				//Overwrite the flags, now that their sanity is ensured
+				s.previousMode = ispd.getInheritanceModeAsVar();
+				s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
+				s.hasToBeAssigned = ispd.getMustBeAssigned();
 			}
 		}
 		
@@ -4785,18 +4685,50 @@ System.out.println("Finding parent... " + parent);
 		}
 	}
 	
-	public static List<JobPropertyDescriptor> getJobPropertyDescriptors(Class<? extends Job> clazz) {
-		List<JobPropertyDescriptor> propertyDescriptors =
-				JobPropertyDescriptor.getPropertyDescriptors(clazz);
-		List<JobPropertyDescriptor> filteredPropertyDescriptors =
-				new LinkedList<JobPropertyDescriptor>();
-		for (JobPropertyDescriptor jobPropertyDescriptor : propertyDescriptors) {
-			if (jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.class) ||
-					jobPropertyDescriptor.getClass().equals(ParametersDefinitionProperty.DescriptorImpl.class)) {
-				filteredPropertyDescriptors.add(jobPropertyDescriptor);
+	
+	public static List<JobPropertyDescriptor> getJobPropertyDescriptors(
+			Class<? extends Job> clazz,
+			boolean filterIsExcluding, String... filters) {
+		List<JobPropertyDescriptor> out = new ArrayList<JobPropertyDescriptor>();
+		
+		//JobPropertyDescriptor.getPropertyDescriptors(clazz);
+		List<JobPropertyDescriptor> allDesc = Functions.getJobPropertyDescriptors(clazz);
+		
+		for (JobPropertyDescriptor desc : allDesc) {
+			String dName = desc.getClass().getName();
+			if (filters.length > 0) {
+				boolean matched = false;
+				if (filters != null) {
+					for (String filter : filters) {
+						if (dName.contains(filter)) {
+							matched = true;
+							break;
+						}
+					}
+				}
+				if (filterIsExcluding && matched) {
+					continue;
+				} else if (!filterIsExcluding && !matched) {
+					continue;
+				}
 			}
+			//The class has survived the filter
+			out.add(desc);
 		}
-		return filteredPropertyDescriptors;
+		
+		//At last, we make sure to sort the fields by full name; to ensure
+		//that properties from the same package/plugin are next to each other
+		Collections.sort(out, new Comparator<JobPropertyDescriptor>() {
+			@Override
+			public int compare(JobPropertyDescriptor o1,
+					JobPropertyDescriptor o2) {
+				String c1 = o1.getClass().getName();
+				String c2 = o2.getClass().getName();
+				return c1.compareTo(c2);
+			}
+		});
+		
+		return out;
 	}
 	
 	
@@ -4916,8 +4848,8 @@ System.out.println("Finding parent... " + parent);
 			
 			InheritanceProject ip = this.getConfiguredProject();
 			if (ip != null) {
-				for (Long version : ip.getVersionIDs()) {
-					verBox.add(version.toString());
+				for (Version v : ip.getVersions()) {
+					verBox.add(v.toString(), v.id.toString());
 				}
 			} else {
 				log.warning("Could not fetch or resolve project name");

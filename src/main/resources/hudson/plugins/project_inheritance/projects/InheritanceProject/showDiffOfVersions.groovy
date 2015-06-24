@@ -19,10 +19,14 @@
  */
 
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import org.kohsuke.stapler.Stapler;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
+st = namespace("jelly:stapler")
 
+
+adjunctPrefix = "hudson.plugins.project_inheritance.projects.InheritanceProject.adjunct"
 
 l.layout(
 		title: "${my.displayName} Version Differences",
@@ -33,26 +37,60 @@ l.layout(
 	include(my, "sidepanel")
 	
 	l.header() {
-		
 		//Necessary CSS classes for fixed font
 		link(
 				rel: "stylesheet", type: "text/css",
 				href: resURL + "/plugin/project-inheritance/styles/table-monospace.css"
 		)
 		
-		// JS function to alter the content of the diff-div field
-		script(
-				type:"text/javascript",
-				src: resURL + "/plugin/project-inheritance/scripts/computeDiff.js"
-		)
+		//Load additional JS/CSS for the comparison table
+		st.adjunct(includes: adjunctPrefix + ".computeDiff")
 	}
 	
 	//Main panel showing a table with the version selection and one for the diffs 
 	l.main_panel() {
-		//Grab the version informazion
+		//Grab all versions of the current job
 		versions = my.getVersions()
-		latest = my.getLatestVersion()
-		stable = my.getStableVersion()
+		
+		//Fetch the current stapler request (if any)
+		req = Stapler.getCurrentRequest()
+		//Check if there's a "left" and a "right" parameter
+		left = null;
+		right = null;
+		try {
+			left = Long.parseLong(req.getParameter("left"));
+			right = Long.parseLong(req.getParameter("right"));
+		} catch (NumberFormatException ex) {
+			left = null;
+			right = null;
+		}
+		
+		curr = null;
+		prev = null
+		if (left != null && right != null) {
+			prev = my.getVersionedObjectStore().getVersion(left)
+			curr = my.getVersionedObjectStore().getVersion(right)
+		}
+		
+		if (curr == null || prev == null) {
+			allStables = my.getStableVersions()
+			if (allStables.size() >= 2) {
+				iter = allStables.descendingIterator();
+				curr = iter.next()
+				prev = iter.next()
+			} else if (allStables.size() == 1) {
+				curr = versions.getLast()
+				prev = allStables.getLast()
+			} else if (versions.size() >= 2) {
+				//No stables at all, comparing the last two versions
+				iter = versions.descendingIterator();
+				curr = iter.next()
+				prev = iter.next()
+			} else {
+				curr = versions.getLast()
+				prev = curr
+			}
+		}
 		
 		// Render the version-selection table
 		table() {
@@ -65,25 +103,25 @@ l.layout(
 				td() {
 					select(id: "leftVersion", style: "width:100%;overflow:hidden;") {
 						for (ev in versions) { 
-							if(ev.id.equals(stable)) {
-								option(selected: "true", value: ev.id, ev.id) 
-							}
-							else{
-								option(value: ev.id, ev.id)
-								}
+							msg = ev.toString(24)
+							if (ev.id.equals(prev.id)) {
+								option(selected: "true", value: ev.id, msg)
+							} else {
+								option(value: ev.id, msg)
 							}
 						}
 					}
+				}
 				
 				// Selection box for the right version
 				td() {
 					select(id: "rightVersion", style: "width:100%;overflow:hidden;") {
 						for (ev in versions) {
-							if(ev.id.equals(latest)) {
-								option(selected: "true", value: ev.id, ev.id)
-							}
-							else{
-								option(value: ev.id, ev.id)
+							msg = ev.toString(24)
+							if (ev.id.equals(curr.id)) {
+								option(selected: "true", value: ev.id, msg)
+							} else {
+								option(value: ev.id, msg)
 							}
 						}
 					}
@@ -92,23 +130,33 @@ l.layout(
 		}
 		
 		// The buttons to compute the diff and display it in the text field below
-		button(
-				onclick: "JavaScript:computeDiff('" + my.getName() + "', 'unified')",
-				type: "button", _("Compute Unified Diff")
+		input(type: "button", class: "yui-button",
+				value: _("Compute Unified Diff"),
+				onclick: "computeDiff('" + my.getName() + "', 'unified')"
 		)
-		button(
-				onclick: "JavaScript:computeDiff('" + my.getName() + "', 'side')",
-				type: "button", _("Compute Side-by-Side Diff")
+		
+		/**
+		 * Disabled until we actually implement a side-by-side diff
+		input(type: "button", class: "yui-button",
+				value: _("Compute Side-by-Side Diff")
+				onclick: "JavaScript:computeDiff('" + my.getName() + "', 'side')"
 		)
-		button(
-				onclick: "JavaScript:computeDiff('" + my.getName() + "', 'raw')",
-				type: "button", _("Display Raw")
+		*/
+		
+		input(type: "button", class: "yui-button",
+			value: _("Display Raw"),
+			onclick: "computeDiff('" + my.getName() + "', 'raw')"
 		)
 		
 		// Empty whitespace
 		div(style: "margin-top:5em;")
 		
 		// Text field that will contain the diff
-		div(id: "diffBox", class: "diff", "The diff will show up here. :)") 
+		div(id: "diffBox", class: "diff", "The diff will show up here. :)")
+		
+		//At the end, executing the JS for computing the current diff
+		script(type:"text/javascript",
+				"computeDiff('" + my.getName() + "', 'unified')"
+		)
 	}
 }

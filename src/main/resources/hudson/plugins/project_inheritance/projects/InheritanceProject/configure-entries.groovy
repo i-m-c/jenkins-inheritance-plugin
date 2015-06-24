@@ -28,22 +28,11 @@ ct = namespace(lib.CustomTagLib)
 p = namespace("/lib/hudson/project")
 
 
-include(my, "transient-job-fields")
-
-//hudson = hudson.model.Hudson.getInstance()
-//cl = hudson.getPluginManager().uberClassLoader
-//IMode_INHERIT_FORCED = InheritanceProject.IMode.INHERIT_FORCED
-
-
-if (it.getIsTransient() == false) {
-	
-	ct.colored_block(backCol: "Khaki", borderCol: "navy") {
-		include(my, "configure-version-selection")
-	}
-	
+if (my.getIsTransient() == false) {
 	// Add the box with the sub-job definitions
 	ct.colored_block(backCol: "Bisque", borderCol: "navy") {
-		f.entry(field: "creationClass", title: _("CreationClass")) {
+		f.section(title: _("CreationClass")) {}
+		f.entry(field: "creationClass") {
 			f.select(default: "")
 			f.description(
 					"Select the type of this project. You can use this to" +

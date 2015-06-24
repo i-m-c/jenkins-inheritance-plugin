@@ -20,8 +20,10 @@
 
 package hudson.plugins.project_inheritance.util;
 
+import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map.Entry;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
@@ -64,6 +66,11 @@ public class TimedBuffer<O, K> {
 	}
 	
 	public Object get(O obj, K key) {
+		Entry<Object, Long> entry = this.getWithTimestamp(obj, key);
+		return (entry != null) ? entry.getKey() : null;
+	}
+	
+	public Entry<Object, Long> getWithTimestamp(O obj, K key) {
 		lock.readLock().lock();
 		try {
 			//Checking if we have this object hashed
@@ -80,7 +87,7 @@ public class TimedBuffer<O, K> {
 			if (timeout > 0 && tc.agedPast(timeout)) {
 				return null;
 			}
-			return tc.obj;
+			return new AbstractMap.SimpleEntry<Object, Long>(tc.obj, tc.cTime);
 		} finally {
 			lock.readLock().unlock();
 		}

@@ -45,14 +45,14 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 		//Load additional Javascript
 		st.adjunct(includes: adjunctPrefix + ".confirmChangesPopup")
 		//Prompt the user to enter a version message
-		if (my.areAllVersionsUnstable()) {
-			//buttonMsg = _("Warning! Your changes will get effective immediately if you press OK.\nPlease type in short description of what you changed:")
+		if (my.getCurrentVersionNotification().areAllVersionsUnstable()) {
 			buttonMsg = _("Warning! Your changes will get effective immediately if you press OK.\\nPlease type in short description of what you changed:")
 		} else {
 			buttonMsg = _("Please type in short description of what you changed:")
 		}
 		saveButtonFunction = "return confirmChangesAndEnterVersion(this, '" + buttonMsg + "')"
 		
+				
 		//Now, add the actual form (copied from the default config.jelly of "Job")
 		ct.form(
 				name: "config", action: "configSubmit", method: "post",
@@ -60,6 +60,10 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 		) {
 			descriptor = my.getDescriptor()
 			instance = my
+			
+			//Include the fields that are different between transients and normal projects
+			//For example: Warning messages, version selection, etc. pp.
+			include(my, "transient-job-fields")
 			
 			if (my.isNameEditable()) {
 				if (my.pronoun != null && !my.pronoun.isEmpty()) {
@@ -93,14 +97,14 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 				}
 			}
 			
-			f.descriptorList(
-					field: "properties", forceRowSet: "true",
-					descriptors: h.getJobPropertyDescriptors(my.getClass())
-			)
-			
-			//Add an invisible versioning message box; this is filled with a value during form submission
-			f.invisibleEntry() {
-				f.textbox(name: "versionMessageString")
+			ct.colored_block(backCol: "LightGoldenRodYellow ", borderCol: "navy") {
+				f.section(title: _("Properties")) {}
+				ct.blankEntry();
+				f.descriptorList(
+						field: "properties",
+						forceRowSet: "true",
+						descriptors: my.getJobPropertyDescriptors(my.getClass(), true)
+				)
 			}
 			
 			//Load the extended configuration

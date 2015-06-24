@@ -18,13 +18,29 @@
  * License along with this library.	If not, see <http://www.gnu.org/licenses/>.
  */
 
+import java.util.UUID;
+import org.kohsuke.stapler.Stapler;
+
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.filters.IProjectReferenceFilter;
 
 //Check if the parent scope has set the read-only flag
-try {
-	isReadOnly = Constants.READ_ONLY
-} catch (e) {
-	isReadOnly = false
+filterKey = "";
+isReadOnly = false;
+
+request = Stapler.getCurrentRequest();
+if (request != null) {
+	//Fetch the read-only flag from the request
+	o = request.getAttribute("FIELDS_READ_ONLY");
+	isReadOnly = (o != null && o instanceof Boolean) ? o : false;
+	
+	//Fetch the naming filter from the request (if any)
+	o = request.getAttribute("REFERENCE_FILTER");
+	filter = (o != null && o instanceof IProjectReferenceFilter) ? o : null;
+	if (filter != null) {
+		filterKey = UUID.randomUUID().toString();
+		descriptor.addReferenceFilter(filterKey, filter);
+	}
 }
 
 f = namespace(lib.FormTagLib);
@@ -36,6 +52,10 @@ helpRoot = "/plugin/project-inheritance/help/ProjectReference"
 
 f.invisibleEntry() {
 	f.readOnlyTextbox(default: my.fullName, name: "projectName")
+}
+
+f.invisibleEntry() {
+	f.readOnlyTextbox(default: filterKey, name: "filterKey")
 }
 
 f.entry(field: "name", title: _("Name")) {

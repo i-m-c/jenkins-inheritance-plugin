@@ -33,6 +33,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
@@ -118,6 +119,40 @@ public class VersionedObjectStore implements Serializable {
 			this.id = id;
 			this.stable = false;
 			this.timestamp = new Date().getTime();
+		}
+		
+		public String toString() {
+			return this.toString(80);
+		}
+		
+		public String toString(int truncateDescription) {
+			String shortDesc;
+			if (truncateDescription > 3) {
+				if (description == null || description.isEmpty()) {
+					shortDesc = null;
+				} else if (description.length() < truncateDescription) {
+					shortDesc = description;
+				} else {
+					shortDesc = description.substring(0, truncateDescription-3) + "...";
+				}
+			} else {
+				shortDesc = null;
+			}
+			
+			if (shortDesc == null) {
+				return String.format(
+						"%d %s",
+						this.id,
+						(this.stable) ? "(stable)" : ""
+				);
+			} else {
+				return String.format(
+						"%d %s - %s",
+						this.id,
+						(this.stable) ? "(stable)" : "",
+						shortDesc
+				);
+			}
 		}
 		
 		
@@ -603,5 +638,52 @@ public class VersionedObjectStore implements Serializable {
 		}
 		map.put(key, value);
 		return true;
+	}
+
+	/**
+	 * This method generates a notification to the user, depending on what type
+	 * of version currently being edited:
+	 * <ol>
+	 *   <li>user is editing an unstable version (Warning)</li>
+	 *   <li>user is editing the last stable version which is not the last version (Warning)</li>
+	 *   <li>user is editing the last stable version which is the last version (Info)</li>
+	 *   <li>user is editing some stable version which is not the latest stable version (Warning)</li>
+	 * </ol>
+	 * @return
+	 */
+	public VersionsNotification getUserNotificationFor(Long version) {
+		if (version == null || this.getAllVersions().isEmpty()) {
+			return new VersionsNotification(true, false, false, false, null);
+		}
+		Version selected = this.getVersion(version);
+		Version latest = this.getLatestVersion();
+		Version latestStable = this.getLatestStable();
+		
+		//Check for the booleans needed by the version notification
+		boolean isNewest = (selected != null && selected == latest);
+		boolean isStable = (selected != null && selected.getStability());
+		
+		boolean stablesAfter = false;
+		boolean stablesBefore = false;
+		NavigableSet<Version> descSet = this.store.navigableKeySet();
+		boolean hasPassedCurrent = false;
+		for (Version v : descSet) {
+			if (v == selected) { hasPassedCurrent = true; continue; }
+			if (v.getStability()) {
+				if (hasPassedCurrent) {
+					stablesAfter = true;
+					break;
+				} else {
+					stablesBefore = true;
+				}
+			}
+		}
+		
+		//Create the notification
+		VersionsNotification versionsNotification = new VersionsNotification(
+				isNewest, isStable, stablesBefore, stablesAfter,
+				(latestStable != null) ? latestStable : latest
+		);
+		return versionsNotification;
 	}
 }

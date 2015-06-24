@@ -214,7 +214,9 @@ public class Reflection {
 		
 		//Then, checking for each stack element, whether a stack-class matches
 		int cnt = 0;
+		int skip = 1;
 		for (StackTraceElement ste : stackTrace) {
+			if (skip > 0) { skip--; continue; }
 			if (cnt++ >= maxDepth) { break; }
 			if (clSet.contains(ste.getClassName())) {
 				return true;
@@ -264,7 +266,7 @@ public class Reflection {
 		}
 		
 		//Fetching all class names currently present in the stack trace.
-		Set<Class<?>> stackCls = getClasses(maxDepth, stackTrace);
+		Set<Class<?>> stackCls = getClasses(maxDepth, 1, stackTrace);
 		if (stackCls == null || stackCls.isEmpty()) {
 			return false;
 		}
@@ -286,13 +288,17 @@ public class Reflection {
 	 * contained therein.
 	 * 
 	 * @param maxDepth the maximum stack depth to explore
+	 * @param skip how many top-frame stack entries to skip; skipped entries
+	 * do <b>not</b> count for maxDepth calculation.
 	 * @param stackTrace the stack trace
 	 * @return a set containing the class names from the stack
 	 */
-	private static Set<Class<?>> getClasses(int maxDepth, StackTraceElement[] stackTrace) {
+	private static Set<Class<?>> getClasses(int maxDepth, int skip, StackTraceElement[] stackTrace) {
 		HashSet<Class<?>> classSet = new HashSet<Class<?>>();
+		if (skip < 0) { skip = 0; }
 		int cnt = 0;
 		for(StackTraceElement ste : stackTrace) {
+			if (skip > 0) { skip--; continue; }
 			if (cnt++ >= maxDepth) { break; }
 			Class<?> clazz = resolver.resolve(ste.getClassName());
 			if (clazz != null) {

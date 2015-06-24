@@ -45,8 +45,7 @@ l.layout(
 	//Load additional Javascript
 	st.adjunct(includes: adjunctPrefix + ".confirmChangesPopup")
 	//Prompt the user to enter a version message
-	if (my.areAllVersionsUnstable()) {
-		//buttonMsg = _("Warning! Your changes will get effective immediately if you press OK.\nPlease type in short description of what you changed:")
+	if (my.getCurrentVersionNotification().areAllVersionsUnstable()) {
 		buttonMsg = _("Warning! Your changes will get effective immediately if you press OK.\\nPlease type in short description of what you changed:")
 	} else {
 		buttonMsg = _("Please type in short description of what you changed:")
@@ -57,31 +56,23 @@ l.layout(
 	l.main_panel() {
 		div(class: "behavior-loading", _("LOADING"))
 		
-		include(my, "transient-job-fields")
-		
 		ct.form(name: "config", action: "submitChildJobCreation", method: "post", onsubmit: saveButtonFunction) {
 			descriptor = my.descriptor
 			instance = my
 			
-			//Add an invisible versioning message box; this is filled with a value during form submission
-			f.invisibleEntry() {
-				f.textbox(name: "versionMessageString")
-			}
+			include(my, "transient-job-fields")
 			
-			// Add the version-selection box
-			ct.colored_block(backCol: "Khaki", borderCol: "navy") {
-				include(my, "configure-version-selection")
-			}
-			
-			// Job property configurations; copied from root-project
-			// This basically boils down to the parameter properties
-			f.entry(
+			ct.colored_block(backCol: "LightGoldenRodYellow ", borderCol: "navy") {
+				f.section(title: _("Parameters")) {}
+				//This description list only renders correctly, if there's an
+				//entry (even a blank one) in the same table
+				ct.blankEntry()
 				f.descriptorList(
 						field: "properties",
 						forceRowSet: "true",
-						descriptors: my.getJobPropertyDescriptors(my.getClass())
+						descriptors: my.getJobPropertyDescriptors(my.getClass(), false, "ParametersDefinitionProperty")
 				)
-			)
+			}
 			
 			// Add the box with the sub-job definitions
 			ct.colored_block(backCol: "Bisque", borderCol: "navy") {
