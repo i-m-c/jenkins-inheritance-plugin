@@ -596,9 +596,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public static InheritanceProject getProjectByName(String name) {
-		System.out.println("Intentando encontrar... " + name);
 		Item item = Jenkins.getInstance().getItemByFullName(name);
-		System.out.println("Es del tipo... " + item);
 		if (item instanceof InheritanceProject) {
 			return (InheritanceProject) item;
 		}
