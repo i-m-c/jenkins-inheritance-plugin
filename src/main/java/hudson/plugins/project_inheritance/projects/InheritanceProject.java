@@ -233,14 +233,24 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		private final String projectName;
 		private final String detail;
 		private final Object defaultValue;
+		private final String url;
 		private int order = 0;
 		
 		public ParameterDerivationDetails(
 				String paramName, String projectName, String detail, Object defaultValue) {
+			String url = "";
+			String shortProjectName = "";
+			Item job = Jenkins.getInstance().getItemByFullName(projectName);
+			if (job != null) {
+				url = job.getUrl();
+				shortProjectName = job.getName(); // Yes, the short name
+			}
+
 			this.parameterName = paramName;
-			this.projectName = projectName;
 			this.detail = detail;
 			this.defaultValue = defaultValue;
+			this.url = url;
+			this.projectName = shortProjectName;
 			
 			if (this.parameterName == null || this.projectName == null) {
 				throw new NullPointerException();
@@ -257,6 +267,10 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		public String getDetail() {
 			return this.detail;
+		}
+
+		public String getUrl() {
+			return this.url;
 		}
 		
 		public String getProjectAndDetail() {
@@ -4208,6 +4222,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String parent : node.parents) {
+System.out.println("Finding parent... " + parent);
 				InheritanceProject par = InheritanceProject.getProjectByName(parent);
 				if (par == null || seenProjects.contains(parent)) {
 					continue;
@@ -4334,6 +4349,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			String paramName = scope.param.getName();
 			String projName = scope.owner;
 			String detail = "";
+
 			Object def = scope.param.getDefaultParameterValue().getShortDescription();
 			
 			

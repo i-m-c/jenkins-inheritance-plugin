@@ -72,7 +72,7 @@ l.layout(title: my.getDisplayName(), noRefresh: "true") {
 					td (class:"pane forceWrap", e.getParameterName())
 					// Project origin
 					td (class:"pane forceWrap") {
-						a(href: rootURL + "/job/" + pName, pName)
+						a(href: rootURL + "/" + e.getUrl(), pName)
 					}
 					// Order 
 					td (class:"pane forceWrap", e.getOrder())

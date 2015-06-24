@@ -88,7 +88,7 @@ for (type in Relationship.Type.values()) {
 								if (last) {
 									td(class: "pane") {
 										ct.buildtime(
-												link: rootURL + "/job/" + project.getFullDisplayName() + "/" + last.number,
+												link: rootURL + "/" + getUrl() + last.number,
 												buildtime: last.getTime(),
 												buildStatusUrl: project.getBuildStatusUrl(),
 												buildDisplayId: last.number)
@@ -128,7 +128,7 @@ for (type in Relationship.Type.values()) {
 					if (relationsMap.get(project).type == type) {
 						tr() {
 							td(class: "pane forceWrap") {
-								a(href: rootURL + "/job/" + project.getName(),
+								a(href: rootURL + "/" + project.getUrl(),
 										project.getName()
 								)
 							}
@@ -139,7 +139,7 @@ for (type in Relationship.Type.values()) {
 								if (last) {
 									td(class: "pane") {
 										ct.buildtime(
-												link: rootURL + "/job/" + project.getFullDisplayName() + "/" + last.number,
+												link: rootURL + "/" + getUrl() + last.number,
 												buildtime: last.getTime(),
 												buildStatusUrl: project.getBuildStatusUrl(),
 												buildDisplayId: last.number)
