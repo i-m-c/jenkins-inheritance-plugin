@@ -885,7 +885,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 		
 		//Recording our old project name
-		String oldName = this.name;
+		String oldName = this.getFullName();
 		
 		//Executing the rename
 		super.renameTo(newName);
