@@ -27,6 +27,7 @@ import hudson.Extension;
 import hudson.Functions;
 import hudson.Util;
 import hudson.model.Action;
+import hudson.model.AbstractItem;
 import hudson.model.DependencyGraph;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
@@ -143,6 +144,7 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
 import jenkins.model.BuildDiscarder;
+import jenkins.model.DirectlyModifiableTopLevelItemGroup;
 import jenkins.model.Jenkins;
 import jenkins.scm.SCMCheckoutStrategy;
 import jenkins.util.TimeDuration;
@@ -231,6 +233,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.isLeaf = isLeaf;
 		}
 	}
+
 	
 	public class ParameterDerivationDetails implements Comparable<ParameterDerivationDetails> {
 		private final String parameterName;
@@ -532,11 +535,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public static InheritanceProject getProjectByName(String name) {
-		Item item = Jenkins.getInstance().getItemByFullName(name);
-		if (item instanceof InheritanceProject) {
-			return (InheritanceProject) item;
-		}
-		return null;
+System.out.println("Buscando proyecto por nombre... " + name);
+		return Jenkins.getInstance().getItemByFullName(name, InheritanceProject.class);
 	}
 	
 	public static void createBuffers() {
@@ -811,8 +811,30 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//And at the very end, we notify the PCE about our changes
 		ProjectCreationEngine.instance.notifyProjectChange(this);
 	}
-	
-	
+
+	@Override
+	public void movedTo(DirectlyModifiableTopLevelItemGroup destination, AbstractItem newItem, File destDir)
+	throws IOException {
+		String oldName = this.getFullName();
+		InheritanceProject newInstanceProject = (InheritanceProject) newItem;
+System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullName());
+		super.movedTo(destination, newItem, destDir);
+		clearBuffers(this);
+		//And then fixing all named references
+		for (InheritanceProject p : getProjectsMap().values()) {
+			for (AbstractProjectReference ref : p.getParentReferences()) {
+				if (ref.getName().equals(oldName)) {
+					ref.switchProject(newInstanceProject);
+				}
+			}
+			for (AbstractProjectReference ref : p.compatibleProjects) {
+				if (ref.getName().equals(oldName)) {
+					ref.switchProject(newInstanceProject);
+				}
+			}
+		}
+	}
+
 	@Override
 	public void renameTo(String newName) throws IOException {
 		if (this.name.equals(newName)) {
@@ -2337,7 +2359,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return versions;
 		}
 	}
-	
+
+
 	public List<InheritedVersionInfo> getAllInheritedVersionsList() {
 		return this.getAllInheritedVersionsList(null);
 	}
@@ -2915,53 +2938,53 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * @return a map of triggers, might be empty, but never null
 	 */
-	public synchronized Map<TriggerDescriptor,Trigger> getTriggers() {
+	public synchronized Map<TriggerDescriptor,Trigger<?>> getTriggers() {
 		return this.getTriggers(IMode.AUTO);
 	}
 	
-	public synchronized Map<TriggerDescriptor,Trigger> getTriggers(IMode mode) {
+	public synchronized Map<TriggerDescriptor,Trigger<?>> getTriggers(IMode mode) {
 		if (ProjectCreationEngine.instance.getTriggersAreInherited() != TriggerInheritance.INHERIT) {
 			return this.getRawTriggers();
 		}
 		
-		InheritanceGovernor<Collection<Trigger>> gov =
-				new InheritanceGovernor<Collection<Trigger>>(
+		InheritanceGovernor<Collection<Trigger<?>>> gov =
+				new InheritanceGovernor<Collection<Trigger<?>>>(
 						"triggers", SELECTOR.MISC, this) {
 			@Override
-			protected Collection<Trigger> castToDestinationType(Object o) {
+			protected Collection<Trigger<?>> castToDestinationType(Object o) {
 				try {
-					return (Collection<Trigger>) o;
+					return (Collection<Trigger<?>>) o;
 				} catch (ClassCastException e) {
 					return null;
 				}
 			}
 			
 			@Override
-			public Collection<Trigger> getRawField(InheritanceProject ip) {
-				Map<TriggerDescriptor, Trigger> raw = ip.getRawTriggers();
+			public Collection<Trigger<?>> getRawField(InheritanceProject ip) {
+				Map<TriggerDescriptor, Trigger<?>> raw = ip.getRawTriggers();
 				return raw.values();
 			}
 			
 			@Override
-			protected Collection<Trigger> reduceFromFullInheritance(Deque<Collection<Trigger>> list) {
-				Collection<Trigger> out = new LinkedList<Trigger>();
-				for (Collection<Trigger> sub : list) {
+			protected Collection<Trigger<?>> reduceFromFullInheritance(Deque<Collection<Trigger<?>>> list) {
+				Collection<Trigger<?>> out = new LinkedList<Trigger<?>>();
+				for (Collection<Trigger<?>> sub : list) {
 					out.addAll(sub);
 				}
 				return out;
 			}
 		};
 		
-		Collection<Trigger> triggers = gov.retrieveFullyDerivedField(this, mode);
-		Map<TriggerDescriptor,Trigger> out = new HashMap<TriggerDescriptor,Trigger>();
-		for (Trigger t : triggers) {
-			Trigger copied = this.getReparentedTrigger(t);
+		Collection<Trigger<?>> triggers = gov.retrieveFullyDerivedField(this, mode);
+		Map<TriggerDescriptor,Trigger<?>> out = new HashMap<TriggerDescriptor,Trigger<?>>();
+		for (Trigger<?> t : triggers) {
+			Trigger<?> copied = this.getReparentedTrigger(t);
 			out.put(copied.getDescriptor(), copied);
 		}
 		return out;
 	}
 	
-	public synchronized Map<TriggerDescriptor,Trigger> getRawTriggers() {
+	public synchronized Map<TriggerDescriptor,Trigger<?>> getRawTriggers() {
 		return super.getTriggers();
 	}
 	

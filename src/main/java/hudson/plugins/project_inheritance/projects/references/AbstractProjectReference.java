@@ -64,7 +64,6 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	private transient long timeOfLastResolveError = 0;
 	
 	
-	@DataBoundConstructor
 	public AbstractProjectReference(String name) {
 		this.name = name;
 		//And attempting to load the associated object
