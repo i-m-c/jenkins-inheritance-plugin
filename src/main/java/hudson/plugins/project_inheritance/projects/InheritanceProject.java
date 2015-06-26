@@ -538,9 +538,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	public static InheritanceProject getProjectByName(String name) {
 		if ( Jenkins.getInstance().getInitLevel() == InitMilestone.COMPLETED ) {
-//final StackTraceElement[] ste = new Throwable().getStackTrace();
-//System.out.println("Buscando proyecto por nombre... " + name + " " + 
-//			ste[0].getClassName()+"." + ste[1].getMethodName() + " " + ste[1].getClassName()+"." + ste[1].getMethodName());
 			return Jenkins.getInstance().getItemByFullName(name, InheritanceProject.class);
 		}
 		return null;
@@ -818,30 +815,39 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//And at the very end, we notify the PCE about our changes
 		ProjectCreationEngine.instance.notifyProjectChange(this);
 	}
-/*
+
 	@Override
 	public void movedTo(DirectlyModifiableTopLevelItemGroup destination, AbstractItem newItem, File destDir)
 	throws IOException {
 		String oldName = this.getFullName();
-		InheritanceProject newInstanceProject = (InheritanceProject) newItem;
-System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullName());
+		InheritanceProject newProject = (InheritanceProject) newItem;
 		super.movedTo(destination, newItem, destDir);
-		clearBuffers(this);
+		String newName = newItem.getFullName();
+System.out.println("[MOVEDTO] " + oldName + " a " + newName);
+		clearBuffers(null);
 		//And then fixing all named references
-		for (InheritanceProject p : getProjectsMap().values()) {
+		for (InheritanceProject p : this.getProjectsMap().values()) {
 			for (AbstractProjectReference ref : p.getParentReferences()) {
 				if (ref.getName().equals(oldName)) {
-					ref.switchProject(newInstanceProject);
+System.out.println("[MOVEDTO] PARENT " + ref.getName() + " " + newName);
+					ref.switchProject(newName);
 				}
 			}
 			for (AbstractProjectReference ref : p.compatibleProjects) {
 				if (ref.getName().equals(oldName)) {
-					ref.switchProject(newInstanceProject);
+System.out.println("[MOVEDTO] COMPATIBLE " + ref.getName() + " " + newName);
+					ref.switchProject(newName);
 				}
 			}
+			p.save();
+			clearBuffers(p);
+			ProjectCreationEngine.instance.notifyProjectChange(p);
 		}
+		this.save();
+		clearBuffers(this);
+		ProjectCreationEngine.instance.notifyProjectChange(this);
 	}
-*/
+
 /*
 	@Override
 	public void renameTo(String newName) throws IOException {
