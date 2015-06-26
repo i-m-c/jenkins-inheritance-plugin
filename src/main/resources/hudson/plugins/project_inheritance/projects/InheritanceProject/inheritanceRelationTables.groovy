@@ -88,7 +88,7 @@ for (type in Relationship.Type.values()) {
 								if (last) {
 									td(class: "pane") {
 										ct.buildtime(
-												link: rootURL + "/" + project.getUrl() + "/" + last.number,
+												link: rootURL + "/" + project.getUrl() + last.number,
 												buildtime: last.getTime(),
 												buildStatusUrl: project.getBuildStatusUrl(),
 												buildDisplayId: last.number)
@@ -139,7 +139,7 @@ for (type in Relationship.Type.values()) {
 								if (last) {
 									td(class: "pane") {
 										ct.buildtime(
-												link: rootURL + "/" + project.getUrl() + "/" + last.number,
+												link: rootURL + "/" + project.getUrl() + last.number,
 												buildtime: last.getTime(),
 												buildStatusUrl: project.getBuildStatusUrl(),
 												buildDisplayId: last.number)
