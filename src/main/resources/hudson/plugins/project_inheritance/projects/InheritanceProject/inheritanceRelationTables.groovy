@@ -77,7 +77,7 @@ for (type in Relationship.Type.values()) {
 						tr() {
 							td(class: "pane forceWrap") {
 								a(href: rootURL + "/" + project.getUrl(),
-										project.getName()
+										project.getFullName()
 								)
 							}
 							td(class: "pane forceWrap", relationsMap.get(project).distance)
