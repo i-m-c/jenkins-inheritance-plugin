@@ -305,7 +305,7 @@ public class InheritanceRebuildAction implements Action {
 			return;
 		} else if (this.isApplicableFor(ip) == false) {
 			//Redirecting back to the job's page
-			rsp.sendRedirect(req.getContextPath() + "/job/" + ip.getName());
+			rsp.sendRedirect(req.getContextPath() + "/" + ip.getUrl());
 			return;
 		}
 		//Check if we were passed sensible data
@@ -330,7 +330,7 @@ public class InheritanceRebuildAction implements Action {
 		);
 		
 		//Sending the user to the project's root page
-		rsp.sendRedirect(req.getContextPath() + "/job/" + ip.getName());
+		rsp.sendRedirect(req.getContextPath() + "/" + ip.getUrl());
 	}
 
 	
