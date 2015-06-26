@@ -252,7 +252,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			Item job = Jenkins.getInstance().getItemByFullName(projectName);
 			if (job != null) {
 				url = job.getUrl();
-				shortProjectName = job.getName(); // Yes, the short name
+				shortProjectName = job.getFullName();
 			}
 
 			this.parameterName = paramName;
