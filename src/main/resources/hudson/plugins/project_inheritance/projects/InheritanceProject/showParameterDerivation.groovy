@@ -85,7 +85,7 @@ l.layout(title: my.getDisplayName(), noRefresh: "true") {
 		}
 		
 		//Add the back-button
-		form(id: "confirmation", method: "post", action: "/job/" + my.name) {
+		form(id: "confirmation", method: "post", action: "/" + my.url) {
 			div(style: "margin-top:5em;margin-bottom:5em")
 			f.submit(value: _("Okay, I have seen it."))
 		}
