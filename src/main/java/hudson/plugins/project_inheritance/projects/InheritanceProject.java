@@ -26,6 +26,8 @@ import hudson.BulkChange;
 import hudson.Extension;
 import hudson.Functions;
 import hudson.Util;
+
+import hudson.init.InitMilestone;
 import hudson.model.Action;
 import hudson.model.AbstractItem;
 import hudson.model.DependencyGraph;
@@ -480,7 +482,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 
 	public int compareTo(Project o) {
-		return this.name.compareTo(o.getFullName());
+		return this.getFullName().compareTo(o.getFullName());
 	}
 	
 	@Override
@@ -535,8 +537,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public static InheritanceProject getProjectByName(String name) {
-System.out.println("Buscando proyecto por nombre... " + name);
-		return Jenkins.getInstance().getItemByFullName(name, InheritanceProject.class);
+		if ( Jenkins.getInstance().getInitLevel() == InitMilestone.COMPLETED ) {
+//final StackTraceElement[] ste = new Throwable().getStackTrace();
+//System.out.println("Buscando proyecto por nombre... " + name + " " + 
+//			ste[0].getClassName()+"." + ste[1].getMethodName() + " " + ste[1].getClassName()+"." + ste[1].getMethodName());
+			return Jenkins.getInstance().getItemByFullName(name, InheritanceProject.class);
+		}
+		return null;
 	}
 	
 	public static void createBuffers() {
@@ -702,7 +709,7 @@ System.out.println("Buscando proyecto por nombre... " + name);
 		if (this.getIsTransient()) {
 			String msg = String.format(
 					"Updating %s by XML upload is not allowed: Transient project",
-					this.getName()
+					this.getFullName()
 			);
 			log.warning(msg);
 			throw new IOException(msg);
@@ -811,7 +818,7 @@ System.out.println("Buscando proyecto por nombre... " + name);
 		//And at the very end, we notify the PCE about our changes
 		ProjectCreationEngine.instance.notifyProjectChange(this);
 	}
-
+/*
 	@Override
 	public void movedTo(DirectlyModifiableTopLevelItemGroup destination, AbstractItem newItem, File destDir)
 	throws IOException {
@@ -834,7 +841,8 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			}
 		}
 	}
-
+*/
+/*
 	@Override
 	public void renameTo(String newName) throws IOException {
 		if (this.name.equals(newName)) {
@@ -852,7 +860,8 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 		
 		//Recording our old project name
 		String oldName = this.getFullName();
-		
+System.out.println("Renaming... " + this.name + " a " + newName + " : " + oldName);
+
 		//Executing the rename
 		super.renameTo(newName);
 		
@@ -873,7 +882,8 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			}
 		}
 	}
-	
+*/
+
 	/**
 	 * Adds the given {@link ProjectReference} as a parent to this node.
 	 * <p>
@@ -1047,7 +1057,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 		}
 		File standardRoot = this.getParent().getRootDir();
 		//Otherwise, we alter the last path segment
-		String pathSafeJobName = this.getName().replaceAll("[/\\\\]", "_");
+		String pathSafeJobName = this.getFullName().replaceAll("[/\\\\]", "_");
 		File newRoot = new File(
 				standardRoot.getAbsolutePath() +
 				File.separator + "transient_jobs" + File.separator +
@@ -1784,7 +1794,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 				//Fetching version
 				Version v = this.versionStore.getVersion(e.id);
 				if (v == null) {
-					log.warning("No such version " + e.id + " for " + this.getName());
+					log.warning("No such version " + e.id + " for " + this.getFullName());
 					continue;
 				}
 				v.setStability(e.stable);
@@ -1829,19 +1839,19 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			vos = VersionedObjectStore.load(vFile);
 		} catch (IOException ex) {
 			log.warning(
-					"No versions loaded for " + this.getName() + ". " +
+					"No versions loaded for " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
 		} catch (IllegalArgumentException ex) {
 			log.warning(
-					"No versions loaded for " + this.getName() + ". " +
+					"No versions loaded for " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
 		} catch (XStreamException ex) {
 			log.warning(
-					"Could not load Version for: " + this.getName() + ". " +
+					"Could not load Version for: " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
@@ -2052,7 +2062,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 		if (verObj != null && verObj instanceof Map) {
 			Map verMap = (Map) verObj;
 			try {
-				Object ver = verMap.get(this.getName());
+				Object ver = verMap.get(this.getFullName());
 				if (ver != null && ver instanceof Number) {
 					return ((Number)ver).longValue();
 				}
@@ -2090,7 +2100,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 				InheritanceProject.setVersioningMap(verMap);
 			}
 			//And checking if it contained a matching for the current project
-			Long version = verMap.get(this.getName());
+			Long version = verMap.get(this.getFullName());
 			if (version != null) {
 				return version;
 			}
@@ -2177,7 +2187,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			}
 			if (o instanceof Map) {
 				Map<String, Long> map = (Map<String,Long>) o;
-				Long ret = map.get(this.getName());
+				Long ret = map.get(this.getFullName());
 				if (ret != null) {
 					return ret;
 				}
@@ -2252,9 +2262,9 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			InheritanceProject ip = open.pop();
 			//Fetching the user-requested version for the open node
 			Long v = ip.getUserDesiredVersion();
-			out.put(ip.getName(), v);
+			out.put(ip.getFullName(), v);
 			//Then, adding this node to the closed set
-			closed.add(ip.getName());
+			closed.add(ip.getFullName());
 			//And adding the parent nodes to the open list
 			for (AbstractProjectReference apr : ip.getParentReferences()) {
 				if (closed.contains(apr.getName())) { continue; }
@@ -2408,7 +2418,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			Long verID = ip.getUserDesiredVersion(true);
 			if (verID == null) {
 				if (buildVersions != null) {
-					verID = buildVersions.get(ip.getName());
+					verID = buildVersions.get(ip.getFullName());
 				} else {
 					verID = ip.getUserDesiredVersion();
 				}
@@ -2444,7 +2454,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 		for (InheritanceProject p : map.values()) {
 			//Checking if that project inherits from us
 			for (AbstractProjectReference ref : p.getParentReferences()) {
-				if (this.name.equals(ref.getName())) {
+				if (this.getFullName().equals(ref.getName())) {
 					lst.add(p);
 				}
 			}
@@ -3158,6 +3168,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 		return out;
 	}
 	
+	// TODO I don't understand this method. May be necessary getFullName?
 	public InheritanceParametersDefinitionProperty getVarianceParameters() {
 		if (this.isTransient == false) {
 			//No variance is or can possibly be defined
@@ -4018,7 +4029,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 				new HashMap<String, ProjectGraphNode>();
 		
 		for (InheritanceProject ip : getProjectsMap().values()) {
-			String currName = ip.getName();
+			String currName = ip.getFullName();
 			ProjectGraphNode currNode = (map.containsKey(currName))
 					? map.get(currName)
 					: new ProjectGraphNode();
@@ -4037,7 +4048,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			}
 			map.put(currName, currNode);
 		}
-		
+//System.out.println("getConnetionGraph " + map);
 		onChangeBuffer.set(null, "getConnectionGraph", map);
 		return map;
 	}
@@ -4120,7 +4131,7 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 		Map<String, ProjectGraphNode> connGraph = getConnectionGraph();
 		
 		//Fetching the node for the current (this) project
-		ProjectGraphNode node = connGraph.get(this.getName());
+		ProjectGraphNode node = connGraph.get(this.getFullName());
 		if (node == null) { return map; }
 		
 		//Mates can be filled quite easily
@@ -4130,9 +4141,9 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 			boolean isLeaf = (mateNode == null) ? true : mateNode.children.isEmpty();
 			if (p == null) { continue; }
 			//Checking if we've seen this mate already
-			if (!seenProjects.contains(p.getName())) {
+			if (!seenProjects.contains(p.getFullName())) {
 				map.put(p, new Relationship(Relationship.Type.MATE, 0, isLeaf));
-				seenProjects.add(p.getName());
+				seenProjects.add(p.getFullName());
 			}
 		}
 		
@@ -4146,12 +4157,12 @@ System.out.println("Moviendo " + oldName + " a " + newInstanceProject.getFullNam
 		cOpen.add(this);
 		while (!cOpen.isEmpty()) {
 			InheritanceProject ip = cOpen.pop();
-			if (ip == null || seenProjects.contains(ip.getName())) {
+			if (ip == null || seenProjects.contains(ip.getFullName())) {
 				continue;
 			}
-			seenProjects.add(ip.getName());
+			seenProjects.add(ip.getFullName());
 			
-			node = connGraph.get(ip.getName());
+			node = connGraph.get(ip.getFullName());
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String parent : node.parents) {
@@ -4176,12 +4187,12 @@ System.out.println("Finding parent... " + parent);
 		cOpen.add(this);
 		while (!cOpen.isEmpty()) {
 			InheritanceProject ip = cOpen.pop();
-			if (ip == null || seenProjects.contains(ip.getName())) {
+			if (ip == null || seenProjects.contains(ip.getFullName())) {
 				continue;
 			}
-			seenProjects.add(ip.getName());
+			seenProjects.add(ip.getFullName());
 			
-			node = connGraph.get(ip.getName());
+			node = connGraph.get(ip.getFullName());
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String child : node.children) {
@@ -4218,7 +4229,7 @@ System.out.println("Finding parent... " + parent);
 		for (Map.Entry<InheritanceProject, Relationship> entry : rels.entrySet()) {
 			Relationship rel = entry.getValue();
 			Vector<String> vec = new Vector<String>();
-			vec.add(entry.getKey().getName());
+			vec.add(entry.getKey().getFullName());
 			switch (rel.type) {
 				case PARENT:
 					vec.add(Messages.InheritanceProject_Relationship_Type_ParentDesc());
@@ -4257,7 +4268,7 @@ System.out.println("Finding parent... " + parent);
 			fullScope = ipdp.getAllScopedParameterDefinitions();
 		} else {
 			String ownerName = (pdp.getOwner() != null)
-					? pdp.getOwner().getName() : "";
+					? pdp.getOwner().getFullName() : "";
 			fullScope = new LinkedList<ScopeEntry>();
 			for (ParameterDefinition pd : pdp.getParameterDefinitions()) {
 				fullScope.add(new ScopeEntry(ownerName, pd));
@@ -4347,8 +4358,6 @@ System.out.println("Finding parent... " + parent);
 		b.append(String.format(
 				"%d %s", num, str
 		));
-		
-		
 		
 		return b.toString();
 	}
@@ -4493,7 +4502,7 @@ System.out.println("Finding parent... " + parent);
 			//Popping the first element
 			InheritanceProject p = open.pop();
 			//Checking if we've seen that parent already
-			if (closed.contains(p.name)) {
+			if (closed.contains(p.getFullName())) {
 				//Detected a cyclic dependency
 				return true;
 			}
@@ -4514,7 +4523,7 @@ System.out.println("Finding parent... " + parent);
 					}
 				}
 			}
-			closed.add(p.name);
+			closed.add(p.getFullName());
 		}
 		// If we reach this spot, there is no such dependency
 		return false;
@@ -4617,7 +4626,7 @@ System.out.println("Finding parent... " + parent);
 						log.warning(
 								"Detected invalid inheritance mode: " +
 								s.previousMode.toString() + " on " +
-								this.getName() + "->" + pd.getName()
+								this.getFullName() + "->" + pd.getName()
 						);
 						break;
 				}
