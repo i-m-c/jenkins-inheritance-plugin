@@ -52,7 +52,7 @@ l.layout(title: my.displayName) {
 			h3(style: "color:darkgreen") {
 				span(warnMessage)
 				br()
-				a(href:rootURL + "/job/" + my.displayName + "/showConfigureVersions",
+				a(href:rootURL + "/" + my.url + "showConfigureVersions",
 					_("click here to change it"))
 			}
 		}
