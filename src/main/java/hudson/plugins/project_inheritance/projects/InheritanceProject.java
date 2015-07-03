@@ -495,7 +495,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	protected Class<InheritanceBuild> getBuildClass() {
 		return InheritanceBuild.class;
 	}
-	
+
 	/**
 	 * This method returns a mapping of project names to the
 	 * {@link InheritanceProject} objects that carry that name.
@@ -535,14 +535,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		onChangeBuffer.set(null, "getProjectsMap", pMap);
 		return pMap;
 	}
-	
+
 	public static InheritanceProject getProjectByName(String name) {
 		if ( Jenkins.getInstance().getInitLevel() == InitMilestone.COMPLETED ) {
 			return Jenkins.getInstance().getItemByFullName(name, InheritanceProject.class);
 		}
 		return null;
 	}
-	
+
 	public static void createBuffers() {
 		if (onChangeBuffer == null) {
 			onChangeBuffer = new TimedBuffer<InheritanceProject, String>();
@@ -554,7 +554,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			onInheritChangeBuffer = new TimedBuffer<InheritanceProject, String>();
 		}
 	}
-	
+
 	public static void clearBuffers(InheritanceProject root) {
 		//Ensuring that the buffers are present
 		createBuffers();
@@ -819,36 +819,23 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	@Override
 	public void movedTo(DirectlyModifiableTopLevelItemGroup destination, AbstractItem newItem, File destDir)
 	throws IOException {
-		String oldName = this.getFullName();
-		InheritanceProject newProject = (InheritanceProject) newItem;
-		super.movedTo(destination, newItem, destDir);
-		String newName = newItem.getFullName();
-System.out.println("[MOVEDTO] " + oldName + " a " + newName);
-		clearBuffers(null);
-		//And then fixing all named references
-		for (InheritanceProject p : this.getProjectsMap().values()) {
-			for (AbstractProjectReference ref : p.getParentReferences()) {
-				if (ref.getName().equals(oldName)) {
-System.out.println("[MOVEDTO] PARENT " + ref.getName() + " " + newName);
-					ref.switchProject(newName);
-				}
-			}
-			for (AbstractProjectReference ref : p.compatibleProjects) {
-				if (ref.getName().equals(oldName)) {
-System.out.println("[MOVEDTO] COMPATIBLE " + ref.getName() + " " + newName);
-					ref.switchProject(newName);
-				}
-			}
-			p.save();
-			clearBuffers(p);
-			ProjectCreationEngine.instance.notifyProjectChange(p);
+
+		//Check if the user has the permission to rename transient projects
+		//Do note that currently, that is impossible via the GUI for everyone anyway
+		if (this.getIsTransient() &&
+				!ProjectCreationEngine.instance.currentUserMayRename()) {
+			throw new IOException(
+					"Current user is not allowed to rename transient projects"
+			);
 		}
-		this.save();
-		clearBuffers(this);
-		ProjectCreationEngine.instance.notifyProjectChange(this);
+		// Before moving this InheritanceProject to its new destination, we preserve the old full name.
+		String oldFullName = this.getFullName();
+		super.movedTo(destination, newItem, destDir);
+		this.updateAllReferencesToThisProject(oldFullName, (InheritanceProject) newItem);
+
 	}
 
-/*
+
 	@Override
 	public void renameTo(String newName) throws IOException {
 		if (this.name.equals(newName)) {
@@ -863,33 +850,68 @@ System.out.println("[MOVEDTO] COMPATIBLE " + ref.getName() + " " + newName);
 					"Current user is not allowed to rename transient projects"
 			);
 		}
-		
-		//Recording our old project name
-		String oldName = this.getFullName();
-System.out.println("Renaming... " + this.name + " a " + newName + " : " + oldName);
+
+		// Before renaming this InheritanceProject, we preserve the old full name.
+		String oldFullName = this.getFullName();
 
 		//Executing the rename
 		super.renameTo(newName);
-		
-		//This means, that we need to force a refresh various buffers
+		this.updateAllReferencesToThisProject(oldFullName, this);
+	}
+
+
+	// Renames all references of jobs (inherited and not)
+	protected void updateAllReferencesToThisProject(String oldFullName, InheritanceProject newProject)
+	throws IOException {
 		clearBuffers(this);
-		
-		//And then fixing all named references
-		for (InheritanceProject p : getProjectsMap().values()) {
-			for (AbstractProjectReference ref : p.getParentReferences()) {
-				if (ref.getName().equals(oldName)) {
-					ref.switchProject(this);
+		for(InheritanceProject p: this.getProjectsMap().values()) {
+			p.switchProject(oldFullName, newProject);
+		}
+		clearBuffers(null);
+	}
+
+	/**
+	 * Updates all references in this project that matches with oldFullName to newProject.
+	 * Every time we update the references we save automatically a new version.
+	 * 
+	 * @param oldFullName the old full name of the inheritance project which has been moved or renamed.
+	 * @param newProject we update the references to this inheritance project.
+	 */
+	protected void switchProject(String oldFullName, InheritanceProject newProject)
+	throws IOException {
+		boolean changed = false;
+		clearBuffers(this);
+		// We initiate a BulkChange operation to get an atomic change on this project.
+		BulkChange bc = new BulkChange(this);
+		try {
+			for (AbstractProjectReference ref : this.getRawParentReferences()) {
+				if (ref.getName().equals(oldFullName)) {
+					ref.switchProject(newProject);
+					changed = true;
 				}
 			}
-			for (AbstractProjectReference ref : p.compatibleProjects) {
-				if (ref.getName().equals(oldName)) {
-					ref.switchProject(this);
+
+			for (AbstractProjectReference ref : this.getRawCompatibleProjects()) {
+				if (ref.getName().equals(oldFullName)) {
+					ref.switchProject(newProject);
+					changed = true;
 				}
 			}
+
+			if ( changed ) {
+				bc.commit();
+				//p.save();
+				this.dumpConfigToNewVersion( "Cause: renaming " + oldFullName + " to " + newProject.getFullName());
+				this.versionStore = this.loadVersionedObjectStore();
+				clearBuffers(null);
+				ProjectCreationEngine.instance.notifyProjectChange(this);
+			}
+		} catch (IOException cause) {
+
+		} finally {
+			bc.abort();
 		}
 	}
-*/
-
 	/**
 	 * Adds the given {@link ProjectReference} as a parent to this node.
 	 * <p>
@@ -4054,7 +4076,6 @@ System.out.println("Renaming... " + this.name + " a " + newName + " : " + oldNam
 			}
 			map.put(currName, currNode);
 		}
-//System.out.println("getConnetionGraph " + map);
 		onChangeBuffer.set(null, "getConnectionGraph", map);
 		return map;
 	}
@@ -4172,7 +4193,6 @@ System.out.println("Renaming... " + this.name + " a " + newName + " : " + oldNam
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String parent : node.parents) {
-System.out.println("Finding parent... " + parent);
 				InheritanceProject par = InheritanceProject.getProjectByName(parent);
 				if (par == null || seenProjects.contains(parent)) {
 					continue;
