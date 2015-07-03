@@ -22,6 +22,8 @@ package hudson.plugins.project_inheritance.util.svg.properties;
 
 import java.awt.Color;
 
+import java.util.Locale;
+
 public class ColorProperty {
 	public Color color;
 	public double width;
@@ -47,6 +49,6 @@ public class ColorProperty {
 	}
 	
 	public String getRGB24Hex() {
-		return String.format("#%06x", this.getRGB24());
+		return String.format(Locale.US, "#%06x", this.getRGB24());
 	}
 }

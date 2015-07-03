@@ -40,6 +40,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.jfree.util.Log;
@@ -83,7 +84,7 @@ public class SVGText implements SVGPrimitive {
 	public Element render(Document doc) {
 		Element txtElem = doc.createElement("text");
 		txtElem.setAttribute("font-family", props.fontName);
-		txtElem.setAttribute("font-size", String.format("%dpx", props.getSizeAsPts()));
+		txtElem.setAttribute("font-size", String.format(Locale.US, "%dpx", props.getSizeAsPts()));
 		
 		//The y-position needs to be fudged; as text boxes are anchored at the
 		//bottom of the first line; instead of the top left
@@ -244,7 +245,7 @@ public class SVGText implements SVGPrimitive {
 			
 			float lenInPx = tl.getAdvance();
 			if (lenInPx > lineBreakPxls) {
-				Log.error(String.format(
+				Log.error(String.format(Locale.US, 
 						"Line breaker error: String '%s' is %fpx wide, but should be < %fpx",
 						text, lenInPx, lineBreakPxls
 				));

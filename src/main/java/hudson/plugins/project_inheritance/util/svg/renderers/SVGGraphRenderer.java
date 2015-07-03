@@ -22,6 +22,7 @@ package hudson.plugins.project_inheritance.util.svg.renderers;
 
 import java.awt.geom.Rectangle2D;
 import java.util.Collection;
+import java.util.Locale;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -99,11 +100,11 @@ public abstract class SVGGraphRenderer {
 		
 		root.setAttribute(
 				"width",
-				String.format("%dpx", (width > 0) ? width : (int)bounds.width+3)
+				String.format(Locale.US, "%dpx", (width > 0) ? width : (int)bounds.width+3)
 		);
 		root.setAttribute(
 				"height",
-				String.format("%dpx", (height > 0) ? height : (int)bounds.height+3)
+				String.format(Locale.US, "%dpx", (height > 0) ? height : (int)bounds.height+3)
 		);
 		
 		return doc;
