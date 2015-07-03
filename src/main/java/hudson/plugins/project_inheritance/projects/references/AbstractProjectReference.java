@@ -137,6 +137,7 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	public void switchProject(String name) {
 		//Do note that the project referenced may not change through this
 		this.name = name;
+		this.project = null;
 		this.reloadProjectObject();
 	}
 	
