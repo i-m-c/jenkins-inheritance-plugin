@@ -129,11 +129,11 @@ public class SVGTreeRenderer extends SVGGraphRenderer {
 			SVGPrimitive drawable = new SVGClassBox(
 					new Point2D.Double(0,0), //Filled in later
 					new TextProperty(
-							node.getSVGLabel(), null, STYLE.BOLD, "monospace", 16, 5
+							node.getSVGLabel(), null, STYLE.BOLD, null, 16, 5
 					),
 					node.getSVGLabelLink(),
 					new TextProperty(
-							node.getSVGDetail(), null, STYLE.PLAIN, "monospace", 16, 5
+							node.getSVGDetail(), null, STYLE.PLAIN, null, 16, 5
 					),
 					new ColorProperty(
 							getColor(span.getEdgesFor(node).size()), this.width, 1.0, null

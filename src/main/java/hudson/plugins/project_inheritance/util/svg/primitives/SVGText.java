@@ -70,7 +70,7 @@ public class SVGText implements SVGPrimitive {
 
 	public String toString() {
 		StringBuilder b = new StringBuilder();
-		b.append("\"");
+		b.append('\"');
 		for (int i = 0; i < props.text.length; i++) {
 			b.append(props.text[i]);
 			if (i+1 < props.text.length) {
@@ -83,7 +83,7 @@ public class SVGText implements SVGPrimitive {
 	
 	public Element render(Document doc) {
 		Element txtElem = doc.createElement("text");
-		txtElem.setAttribute("font-family", props.fontName);
+		txtElem.setAttribute("font-family", props.getSVGFontFamily());
 		txtElem.setAttribute("font-size", String.format(Locale.US, "%dpx", props.getSizeAsPts()));
 		
 		//The y-position needs to be fudged; as text boxes are anchored at the
