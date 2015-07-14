@@ -26,6 +26,7 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -92,7 +93,7 @@ public class SVGRectangle implements SVGPrimitive {
 	}
 	
 	public String toString() {
-		return String.format(
+		return String.format(Locale.US,
 				"box[%.2f, %.2f, %.2f, %.2f]",
 				box.x,
 				box.y,
@@ -103,34 +104,33 @@ public class SVGRectangle implements SVGPrimitive {
 
 	public Element render(Document doc) {
 		Element e = doc.createElement("rect");
-		
-		String style = "";
+		StringBuilder style = new StringBuilder(64);
+
 		if (fill != null) {
-			style += String.format(
+			style.append(String.format(Locale.US,
 					"fill:#%06x;fill-opacity:%f;",
 					fill.getRGB24(), fill.opacity
-			);
+			));
 		} else {
-			style += String.format(
+			style.append(String.format(Locale.US,
 					"fill:#%06x;fill-opacity:%f;",
 					0, 0.0
-			);
+			));
 		}
 		if (stroke != null) {
-			style += String.format(
+			style.append(String.format(Locale.US,
 					"stroke:#%06x;stroke-opacity:%f;stroke-width=%f;",
 					stroke.getRGB24(), stroke.opacity, stroke.width
-			);
+			));
 		} else {
-			style += String.format(
+			style.append(String.format(Locale.US,
 					"stroke:#%06x;stroke-opacity:%f;",
 					0, 0.0
-			);
+			));
 		}
-		if (!style.isEmpty()) {
-			e.setAttribute("style", style);
+		if (style.length() > 0) {
+			e.setAttribute("style", style.toString());
 		}
-		
 		
 		e.setAttribute("x", Double.toString(box.x));
 		e.setAttribute("y", Double.toString(box.y));

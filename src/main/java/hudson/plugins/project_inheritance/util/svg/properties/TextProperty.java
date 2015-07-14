@@ -35,7 +35,6 @@ public class TextProperty {
 	public STYLE style;
 	
 	
-	
 	public TextProperty(String text, ColorProperty color, STYLE style,
 			String fontName, int fontSizePx, int horizLineDist) {
 		//Sanitizing the data
@@ -50,12 +49,15 @@ public class TextProperty {
 		}
 		
 		this.color = color;
-		this.fontName = (fontName == null) ? "" : fontName;
+		this.fontName = (fontName == null) ? Font.MONOSPACED : fontName;
 		this.fontSzPx = (fontSizePx <= 0) ? 1 : fontSizePx;
 		this.horizLineDist = horizLineDist;
 		this.style = (style == null) ? STYLE.PLAIN : style;
 	}
 	
+	public String getSVGFontFamily() {
+		return "monospace";
+	}
 	
 	public int getAwtFontStyle() {
 		switch(this.style) {
@@ -86,7 +88,7 @@ public class TextProperty {
 		StringBuilder b = new StringBuilder();
 		
 		for (int i = 0; i < text.length; i++) {
-			b.append(text[0]);
+			b.append(text[i]);
 			if (i+1 < text.length) {
 				b.append('\n');
 			}

@@ -26,7 +26,10 @@ import hudson.BulkChange;
 import hudson.Extension;
 import hudson.Functions;
 import hudson.Util;
+
+import hudson.init.InitMilestone;
 import hudson.model.Action;
+import hudson.model.AbstractItem;
 import hudson.model.DependencyGraph;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
@@ -143,6 +146,7 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
 import jenkins.model.BuildDiscarder;
+import jenkins.model.DirectlyModifiableTopLevelItemGroup;
 import jenkins.model.Jenkins;
 import jenkins.scm.SCMCheckoutStrategy;
 import jenkins.util.TimeDuration;
@@ -231,20 +235,31 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.isLeaf = isLeaf;
 		}
 	}
+
 	
 	public class ParameterDerivationDetails implements Comparable<ParameterDerivationDetails> {
 		private final String parameterName;
 		private final String projectName;
 		private final String detail;
 		private final Object defaultValue;
+		private final String url;
 		private int order = 0;
 		
 		public ParameterDerivationDetails(
 				String paramName, String projectName, String detail, Object defaultValue) {
+			String url = "";
+			String shortProjectName = "";
+			Item job = Jenkins.getInstance().getItemByFullName(projectName);
+			if (job != null) {
+				url = job.getUrl();
+				shortProjectName = job.getFullName();
+			}
+
 			this.parameterName = paramName;
-			this.projectName = projectName;
 			this.detail = detail;
 			this.defaultValue = defaultValue;
+			this.url = url;
+			this.projectName = shortProjectName;
 			
 			if (this.parameterName == null || this.projectName == null) {
 				throw new NullPointerException();
@@ -261,6 +276,10 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		public String getDetail() {
 			return this.detail;
+		}
+
+		public String getUrl() {
+			return this.url;
 		}
 		
 		public String getProjectAndDetail() {
@@ -463,7 +482,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 
 	public int compareTo(Project o) {
-		return this.name.compareTo(o.getName());
+		return this.getFullName().compareTo(o.getFullName());
 	}
 	
 	@Override
@@ -476,7 +495,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	protected Class<InheritanceBuild> getBuildClass() {
 		return InheritanceBuild.class;
 	}
-	
+
 	/**
 	 * This method returns a mapping of project names to the
 	 * {@link InheritanceProject} objects that carry that name.
@@ -509,22 +528,21 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			// We ensure that we may only inherit from actually inheritable,
 			// non-transient projects
 			if (p instanceof InheritanceProject) {
-				pMap.put(p.getName(), (InheritanceProject) p);
+				pMap.put(p.getFullName(), (InheritanceProject) p);
 			}
 		}
 		
 		onChangeBuffer.set(null, "getProjectsMap", pMap);
 		return pMap;
 	}
-	
+
 	public static InheritanceProject getProjectByName(String name) {
-		TopLevelItem item = Jenkins.getInstance().getItem(name);
-		if (item instanceof InheritanceProject) {
-			return (InheritanceProject) item;
+		if ( Jenkins.getInstance().getInitLevel() == InitMilestone.COMPLETED ) {
+			return Jenkins.getInstance().getItemByFullName(name, InheritanceProject.class);
 		}
 		return null;
 	}
-	
+
 	public static void createBuffers() {
 		if (onChangeBuffer == null) {
 			onChangeBuffer = new TimedBuffer<InheritanceProject, String>();
@@ -536,7 +554,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			onInheritChangeBuffer = new TimedBuffer<InheritanceProject, String>();
 		}
 	}
-	
+
 	public static void clearBuffers(InheritanceProject root) {
 		//Ensuring that the buffers are present
 		createBuffers();
@@ -688,7 +706,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		if (this.getIsTransient()) {
 			String msg = String.format(
 					"Updating %s by XML upload is not allowed: Transient project",
-					this.getName()
+					this.getFullName()
 			);
 			log.warning(msg);
 			throw new IOException(msg);
@@ -797,8 +815,27 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//And at the very end, we notify the PCE about our changes
 		ProjectCreationEngine.instance.notifyProjectChange(this);
 	}
-	
-	
+
+	@Override
+	public void movedTo(DirectlyModifiableTopLevelItemGroup destination, AbstractItem newItem, File destDir)
+	throws IOException {
+
+		//Check if the user has the permission to rename transient projects
+		//Do note that currently, that is impossible via the GUI for everyone anyway
+		if (this.getIsTransient() &&
+				!ProjectCreationEngine.instance.currentUserMayRename()) {
+			throw new IOException(
+					"Current user is not allowed to rename transient projects"
+			);
+		}
+		// Before moving this InheritanceProject to its new destination, we preserve the old full name.
+		String oldFullName = this.getFullName();
+		super.movedTo(destination, newItem, destDir);
+		this.updateAllReferencesToThisProject(oldFullName, (InheritanceProject) newItem);
+
+	}
+
+
 	@Override
 	public void renameTo(String newName) throws IOException {
 		if (this.name.equals(newName)) {
@@ -813,31 +850,68 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					"Current user is not allowed to rename transient projects"
 			);
 		}
-		
-		//Recording our old project name
-		String oldName = this.name;
-		
+
+		// Before renaming this InheritanceProject, we preserve the old full name.
+		String oldFullName = this.getFullName();
+
 		//Executing the rename
 		super.renameTo(newName);
-		
-		//This means, that we need to force a refresh various buffers
+		this.updateAllReferencesToThisProject(oldFullName, this);
+	}
+
+
+	// Renames all references of jobs (inherited and not)
+	protected void updateAllReferencesToThisProject(String oldFullName, InheritanceProject newProject)
+	throws IOException {
 		clearBuffers(this);
-		
-		//And then fixing all named references
-		for (InheritanceProject p : getProjectsMap().values()) {
-			for (AbstractProjectReference ref : p.getParentReferences()) {
-				if (ref.getName().equals(oldName)) {
-					ref.switchProject(this);
+		for(InheritanceProject p: this.getProjectsMap().values()) {
+			p.switchProject(oldFullName, newProject);
+		}
+		clearBuffers(null);
+	}
+
+	/**
+	 * Updates all references in this project that matches with oldFullName to newProject.
+	 * Every time we update the references we save automatically a new version.
+	 * 
+	 * @param oldFullName the old full name of the inheritance project which has been moved or renamed.
+	 * @param newProject we update the references to this inheritance project.
+	 */
+	protected void switchProject(String oldFullName, InheritanceProject newProject)
+	throws IOException {
+		boolean changed = false;
+		clearBuffers(this);
+		// We initiate a BulkChange operation to get an atomic change on this project.
+		BulkChange bc = new BulkChange(this);
+		try {
+			for (AbstractProjectReference ref : this.getRawParentReferences()) {
+				if (ref.getName().equals(oldFullName)) {
+					ref.switchProject(newProject);
+					changed = true;
 				}
 			}
-			for (AbstractProjectReference ref : p.compatibleProjects) {
-				if (ref.getName().equals(oldName)) {
-					ref.switchProject(this);
+
+			for (AbstractProjectReference ref : this.getRawCompatibleProjects()) {
+				if (ref.getName().equals(oldFullName)) {
+					ref.switchProject(newProject);
+					changed = true;
 				}
 			}
+
+			if ( changed ) {
+				bc.commit();
+				//p.save();
+				this.dumpConfigToNewVersion( "Cause: renaming " + oldFullName + " to " + newProject.getFullName());
+				this.versionStore = this.loadVersionedObjectStore();
+				clearBuffers(null);
+				ProjectCreationEngine.instance.notifyProjectChange(this);
+			}
+		} catch (IOException cause) {
+
+		} finally {
+			bc.abort();
 		}
 	}
-	
 	/**
 	 * Adds the given {@link ProjectReference} as a parent to this node.
 	 * <p>
@@ -1011,7 +1085,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 		File standardRoot = this.getParent().getRootDir();
 		//Otherwise, we alter the last path segment
-		String pathSafeJobName = this.getName().replaceAll("[/\\\\]", "_");
+		String pathSafeJobName = this.getFullName().replaceAll("[/\\\\]", "_");
 		File newRoot = new File(
 				standardRoot.getAbsolutePath() +
 				File.separator + "transient_jobs" + File.separator +
@@ -1748,7 +1822,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				//Fetching version
 				Version v = this.versionStore.getVersion(e.id);
 				if (v == null) {
-					log.warning("No such version " + e.id + " for " + this.getName());
+					log.warning("No such version " + e.id + " for " + this.getFullName());
 					continue;
 				}
 				v.setStability(e.stable);
@@ -1793,19 +1867,19 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			vos = VersionedObjectStore.load(vFile);
 		} catch (IOException ex) {
 			log.warning(
-					"No versions loaded for " + this.getName() + ". " +
+					"No versions loaded for " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
 		} catch (IllegalArgumentException ex) {
 			log.warning(
-					"No versions loaded for " + this.getName() + ". " +
+					"No versions loaded for " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
 		} catch (XStreamException ex) {
 			log.warning(
-					"Could not load Version for: " + this.getName() + ". " +
+					"Could not load Version for: " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
@@ -2016,7 +2090,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		if (verObj != null && verObj instanceof Map) {
 			Map verMap = (Map) verObj;
 			try {
-				Object ver = verMap.get(this.getName());
+				Object ver = verMap.get(this.getFullName());
 				if (ver != null && ver instanceof Number) {
 					return ((Number)ver).longValue();
 				}
@@ -2054,7 +2128,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				InheritanceProject.setVersioningMap(verMap);
 			}
 			//And checking if it contained a matching for the current project
-			Long version = verMap.get(this.getName());
+			Long version = verMap.get(this.getFullName());
 			if (version != null) {
 				return version;
 			}
@@ -2141,7 +2215,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 			if (o instanceof Map) {
 				Map<String, Long> map = (Map<String,Long>) o;
-				Long ret = map.get(this.getName());
+				Long ret = map.get(this.getFullName());
 				if (ret != null) {
 					return ret;
 				}
@@ -2216,9 +2290,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			InheritanceProject ip = open.pop();
 			//Fetching the user-requested version for the open node
 			Long v = ip.getUserDesiredVersion();
-			out.put(ip.getName(), v);
+			out.put(ip.getFullName(), v);
 			//Then, adding this node to the closed set
-			closed.add(ip.getName());
+			closed.add(ip.getFullName());
 			//And adding the parent nodes to the open list
 			for (AbstractProjectReference apr : ip.getParentReferences()) {
 				if (closed.contains(apr.getName())) { continue; }
@@ -2323,7 +2397,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return versions;
 		}
 	}
-	
+
+
 	public List<InheritedVersionInfo> getAllInheritedVersionsList() {
 		return this.getAllInheritedVersionsList(null);
 	}
@@ -2371,7 +2446,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			Long verID = ip.getUserDesiredVersion(true);
 			if (verID == null) {
 				if (buildVersions != null) {
-					verID = buildVersions.get(ip.getName());
+					verID = buildVersions.get(ip.getFullName());
 				} else {
 					verID = ip.getUserDesiredVersion();
 				}
@@ -2407,7 +2482,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		for (InheritanceProject p : map.values()) {
 			//Checking if that project inherits from us
 			for (AbstractProjectReference ref : p.getParentReferences()) {
-				if (this.name.equals(ref.getName())) {
+				if (this.getFullName().equals(ref.getName())) {
 					lst.add(p);
 				}
 			}
@@ -2901,53 +2976,53 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * @return a map of triggers, might be empty, but never null
 	 */
-	public synchronized Map<TriggerDescriptor,Trigger> getTriggers() {
+	public synchronized Map<TriggerDescriptor,Trigger<?>> getTriggers() {
 		return this.getTriggers(IMode.AUTO);
 	}
 	
-	public synchronized Map<TriggerDescriptor,Trigger> getTriggers(IMode mode) {
+	public synchronized Map<TriggerDescriptor,Trigger<?>> getTriggers(IMode mode) {
 		if (ProjectCreationEngine.instance.getTriggersAreInherited() != TriggerInheritance.INHERIT) {
 			return this.getRawTriggers();
 		}
 		
-		InheritanceGovernor<Collection<Trigger>> gov =
-				new InheritanceGovernor<Collection<Trigger>>(
+		InheritanceGovernor<Collection<Trigger<?>>> gov =
+				new InheritanceGovernor<Collection<Trigger<?>>>(
 						"triggers", SELECTOR.MISC, this) {
 			@Override
-			protected Collection<Trigger> castToDestinationType(Object o) {
+			protected Collection<Trigger<?>> castToDestinationType(Object o) {
 				try {
-					return (Collection<Trigger>) o;
+					return (Collection<Trigger<?>>) o;
 				} catch (ClassCastException e) {
 					return null;
 				}
 			}
 			
 			@Override
-			public Collection<Trigger> getRawField(InheritanceProject ip) {
-				Map<TriggerDescriptor, Trigger> raw = ip.getRawTriggers();
+			public Collection<Trigger<?>> getRawField(InheritanceProject ip) {
+				Map<TriggerDescriptor, Trigger<?>> raw = ip.getRawTriggers();
 				return raw.values();
 			}
 			
 			@Override
-			protected Collection<Trigger> reduceFromFullInheritance(Deque<Collection<Trigger>> list) {
-				Collection<Trigger> out = new LinkedList<Trigger>();
-				for (Collection<Trigger> sub : list) {
+			protected Collection<Trigger<?>> reduceFromFullInheritance(Deque<Collection<Trigger<?>>> list) {
+				Collection<Trigger<?>> out = new LinkedList<Trigger<?>>();
+				for (Collection<Trigger<?>> sub : list) {
 					out.addAll(sub);
 				}
 				return out;
 			}
 		};
 		
-		Collection<Trigger> triggers = gov.retrieveFullyDerivedField(this, mode);
-		Map<TriggerDescriptor,Trigger> out = new HashMap<TriggerDescriptor,Trigger>();
-		for (Trigger t : triggers) {
-			Trigger copied = this.getReparentedTrigger(t);
+		Collection<Trigger<?>> triggers = gov.retrieveFullyDerivedField(this, mode);
+		Map<TriggerDescriptor,Trigger<?>> out = new HashMap<TriggerDescriptor,Trigger<?>>();
+		for (Trigger<?> t : triggers) {
+			Trigger<?> copied = this.getReparentedTrigger(t);
 			out.put(copied.getDescriptor(), copied);
 		}
 		return out;
 	}
 	
-	public synchronized Map<TriggerDescriptor,Trigger> getRawTriggers() {
+	public synchronized Map<TriggerDescriptor,Trigger<?>> getRawTriggers() {
 		return super.getTriggers();
 	}
 	
@@ -3121,6 +3196,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return out;
 	}
 	
+	// TODO I don't understand this method. May be necessary getFullName?
 	public InheritanceParametersDefinitionProperty getVarianceParameters() {
 		if (this.isTransient == false) {
 			//No variance is or can possibly be defined
@@ -3981,7 +4057,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				new HashMap<String, ProjectGraphNode>();
 		
 		for (InheritanceProject ip : getProjectsMap().values()) {
-			String currName = ip.getName();
+			String currName = ip.getFullName();
 			ProjectGraphNode currNode = (map.containsKey(currName))
 					? map.get(currName)
 					: new ProjectGraphNode();
@@ -4000,7 +4076,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 			map.put(currName, currNode);
 		}
-		
 		onChangeBuffer.set(null, "getConnectionGraph", map);
 		return map;
 	}
@@ -4083,7 +4158,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		Map<String, ProjectGraphNode> connGraph = getConnectionGraph();
 		
 		//Fetching the node for the current (this) project
-		ProjectGraphNode node = connGraph.get(this.getName());
+		ProjectGraphNode node = connGraph.get(this.getFullName());
 		if (node == null) { return map; }
 		
 		//Mates can be filled quite easily
@@ -4093,9 +4168,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			boolean isLeaf = (mateNode == null) ? true : mateNode.children.isEmpty();
 			if (p == null) { continue; }
 			//Checking if we've seen this mate already
-			if (!seenProjects.contains(p.getName())) {
+			if (!seenProjects.contains(p.getFullName())) {
 				map.put(p, new Relationship(Relationship.Type.MATE, 0, isLeaf));
-				seenProjects.add(p.getName());
+				seenProjects.add(p.getFullName());
 			}
 		}
 		
@@ -4109,12 +4184,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		cOpen.add(this);
 		while (!cOpen.isEmpty()) {
 			InheritanceProject ip = cOpen.pop();
-			if (ip == null || seenProjects.contains(ip.getName())) {
+			if (ip == null || seenProjects.contains(ip.getFullName())) {
 				continue;
 			}
-			seenProjects.add(ip.getName());
+			seenProjects.add(ip.getFullName());
 			
-			node = connGraph.get(ip.getName());
+			node = connGraph.get(ip.getFullName());
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String parent : node.parents) {
@@ -4138,12 +4213,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		cOpen.add(this);
 		while (!cOpen.isEmpty()) {
 			InheritanceProject ip = cOpen.pop();
-			if (ip == null || seenProjects.contains(ip.getName())) {
+			if (ip == null || seenProjects.contains(ip.getFullName())) {
 				continue;
 			}
-			seenProjects.add(ip.getName());
+			seenProjects.add(ip.getFullName());
 			
-			node = connGraph.get(ip.getName());
+			node = connGraph.get(ip.getFullName());
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String child : node.children) {
@@ -4180,7 +4255,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		for (Map.Entry<InheritanceProject, Relationship> entry : rels.entrySet()) {
 			Relationship rel = entry.getValue();
 			Vector<String> vec = new Vector<String>();
-			vec.add(entry.getKey().getName());
+			vec.add(entry.getKey().getFullName());
 			switch (rel.type) {
 				case PARENT:
 					vec.add(Messages.InheritanceProject_Relationship_Type_ParentDesc());
@@ -4219,7 +4294,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			fullScope = ipdp.getAllScopedParameterDefinitions();
 		} else {
 			String ownerName = (pdp.getOwner() != null)
-					? pdp.getOwner().getName() : "";
+					? pdp.getOwner().getFullName() : "";
 			fullScope = new LinkedList<ScopeEntry>();
 			for (ParameterDefinition pd : pdp.getParameterDefinitions()) {
 				fullScope.add(new ScopeEntry(ownerName, pd));
@@ -4244,6 +4319,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			String paramName = scope.param.getName();
 			String projName = scope.owner;
 			String detail = "";
+
 			Object def = scope.param.getDefaultParameterValue().getShortDescription();
 			
 			
@@ -4308,8 +4384,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		b.append(String.format(
 				"%d %s", num, str
 		));
-		
-		
 		
 		return b.toString();
 	}
@@ -4454,7 +4528,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			//Popping the first element
 			InheritanceProject p = open.pop();
 			//Checking if we've seen that parent already
-			if (closed.contains(p.name)) {
+			if (closed.contains(p.getFullName())) {
 				//Detected a cyclic dependency
 				return true;
 			}
@@ -4475,7 +4549,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					}
 				}
 			}
-			closed.add(p.name);
+			closed.add(p.getFullName());
 		}
 		// If we reach this spot, there is no such dependency
 		return false;
@@ -4578,7 +4652,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 						log.warning(
 								"Detected invalid inheritance mode: " +
 								s.previousMode.toString() + " on " +
-								this.getName() + "->" + pd.getName()
+								this.getFullName() + "->" + pd.getName()
 						);
 						break;
 				}

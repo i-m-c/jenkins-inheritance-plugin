@@ -5,7 +5,8 @@
 		<groupId>org.jenkins-ci.plugins</groupId>
 		<artifactId>plugin</artifactId>
 		<!-- which version of Jenkins is this plugin built against? -->
-		<version>1.509.1</version>
+		<version>1.584</version>
+<!-- 1.509.1 -->
 	</parent>
 	
 	<name>inheritance-plugin</name>

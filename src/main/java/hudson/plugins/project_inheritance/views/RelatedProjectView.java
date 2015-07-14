@@ -397,7 +397,7 @@ public class RelatedProjectView extends View {
 		public ListBoxModel doFillProjectNameItems() {
 			ListBoxModel pNames = new ListBoxModel();
 			for (InheritanceProject ip : InheritanceProject.getProjectsMap().values()) {
-				pNames.add(ip.getName());
+				pNames.add(ip.getFullName());
 			}
 			return pNames;
 		}

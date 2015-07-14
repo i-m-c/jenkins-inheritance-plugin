@@ -93,7 +93,7 @@ l.layout(title: "Build ${my.displayName}", norefresh: "true") {
 									f.textbox(
 											style: "visibility:hidden",
 											name: "project",
-											value: e.project.getName()
+											value: e.project.getFullName()
 									)
 								}
 								

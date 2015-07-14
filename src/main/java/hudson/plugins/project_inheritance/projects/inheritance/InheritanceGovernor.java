@@ -209,7 +209,7 @@ public abstract class InheritanceGovernor<T> {
 		List<InheritanceProject> all = new LinkedList<InheritanceProject>();
 		if (root == null) { return all; }
 		
-		String name = root.getName();
+		String name = root.getFullName();
 		if (seen.contains(name)) {
 			return all;
 		}

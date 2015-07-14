@@ -26,6 +26,7 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -44,7 +45,7 @@ public class SVGLine implements SVGPrimitive {
 	}
 	
 	public String toString() {
-		return String.format(
+		return String.format(Locale.US,
 				"lin[%.2f, %.2f, %.2f, %.2f]",
 				start.x, start.y,
 				end.x, end.y
@@ -55,7 +56,7 @@ public class SVGLine implements SVGPrimitive {
 		Element e = doc.createElement("line");
 		
 		if (stroke != null) {
-			String style = String.format(
+			String style = String.format(Locale.US,
 					"stroke:#%06x;stroke-opacity:%f;stroke-width:%f",
 					stroke.getRGB24(), stroke.opacity, stroke.width
 			);

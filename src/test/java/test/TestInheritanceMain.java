@@ -270,7 +270,7 @@ public class TestInheritanceMain extends HudsonTestCase {
 		//Test if renaming keeps references intact
 		printInfo("Testing renaming of projects...");
 		parent.project.renameTo("parent-renamed");
-		TopLevelItem it = Jenkins.getInstance().getItem("parent-renamed");
+		TopLevelItem it = (TopLevelItem) Jenkins.getInstance().getItemByFullName("parent-renamed");
 		assertEquals("Project renaming failed", it, parent.project);
 		
 		for (TopLevelItem item : Jenkins.getInstance().getItems()) {

@@ -268,7 +268,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 				b.append(owner);
 			} else if (this.rootProperty.getOwner() != null) {
 				b.append("?->");
-				b.append(this.rootProperty.getOwner().getName());
+				b.append(this.rootProperty.getOwner().getFullName());
 			} else {
 				b.append("!->BROKEN");
 				

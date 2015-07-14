@@ -51,7 +51,7 @@ ct = namespace(lib.CustomTagLib);
 helpRoot = "/plugin/project-inheritance/help/ProjectReference"
 
 f.invisibleEntry() {
-	f.readOnlyTextbox(default: my.name, name: "projectName")
+	f.readOnlyTextbox(default: my.fullName, name: "projectName")
 }
 
 f.invisibleEntry() {
@@ -60,8 +60,8 @@ f.invisibleEntry() {
 
 f.entry(field: "name", title: _("Name")) {
 	if (isReadOnly) {
-		f.select(default: my.name, disabled: "disabled")
+		f.select(default: my.fullName, disabled: "disabled")
 	} else {
-		f.select(default: my.name)
+		f.select(default: my.fullName)
 	}
 }

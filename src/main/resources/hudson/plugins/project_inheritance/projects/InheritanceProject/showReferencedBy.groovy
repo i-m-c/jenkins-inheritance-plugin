@@ -48,7 +48,7 @@ l.layout(title: my.displayName, norefresh: true) {
 	l.main_panel() {
 		h1 {
 			img (src: imagesURL + "/48x48/error.png", alt: "", height: "48", width: "48")
-			span ("The project " + my.name + " is still referenced by:")
+			span ("The project " + my.fullName + " is still referenced by:")
 		}
 		
 		//Add the relationship tables in verbose mode

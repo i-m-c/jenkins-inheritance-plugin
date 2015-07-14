@@ -72,7 +72,7 @@ l.layout(title: my.getDisplayName(), noRefresh: "true") {
 					td (class:"pane forceWrap", e.getParameterName())
 					// Project origin
 					td (class:"pane forceWrap") {
-						a(href: rootURL + "/job/" + pName, pName)
+						a(href: rootURL + "/" + e.getUrl(), pName)
 					}
 					// Order 
 					td (class:"pane forceWrap", e.getOrder())
@@ -85,7 +85,7 @@ l.layout(title: my.getDisplayName(), noRefresh: "true") {
 		}
 		
 		//Add the back-button
-		form(id: "confirmation", method: "post", action: "/job/" + my.name) {
+		form(id: "confirmation", method: "post", action: "/" + my.url) {
 			div(style: "margin-top:5em;margin-bottom:5em")
 			f.submit(value: _("Okay, I have seen it."))
 		}

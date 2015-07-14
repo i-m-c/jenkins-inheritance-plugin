@@ -26,6 +26,7 @@ import hudson.plugins.project_inheritance.util.svg.properties.ColorProperty;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.util.List;
+import java.util.Locale;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -55,7 +56,7 @@ public class SVGArrow implements SVGPrimitive {
 	}
 
 	public String toString() {
-		return String.format(
+		return String.format(Locale.US,
 				"arr[%.2f, %.2f, %.2f, %.2f]",
 				body.start.x, body.start.y,
 				body.end.x, body.end.y
@@ -74,7 +75,7 @@ public class SVGArrow implements SVGPrimitive {
 			Element hElem = doc.createElement("path");
 			hElem.setAttribute(
 					"d",
-					String.format(
+					String.format(Locale.US,
 							"M %f %f L %f %f L %f %f %s %f %f Z",
 							pts[0].x, pts[0].y,
 							body.end.x, body.end.y,

@@ -307,7 +307,7 @@ public class InheritanceParametersDefinitionProperty extends
 				: new TimeDuration(0);
 		
 		Jenkins.getInstance().getQueue().schedule(
-				owner, (int) delay.as(TimeUnit.SECONDS),
+				(AbstractProject) owner, (int) delay.as(TimeUnit.SECONDS),
 				new ParametersAction(values),
 				new CauseAction(new Cause.UserIdCause()),
 				new VersioningAction(this.getVersioningMap())
@@ -341,7 +341,7 @@ public class InheritanceParametersDefinitionProperty extends
 				: new TimeDuration(0);
 		
 		Jenkins.getInstance().getQueue().schedule(
-				owner, (int) delay.as(TimeUnit.SECONDS),
+				(AbstractProject) owner, (int) delay.as(TimeUnit.SECONDS),
 				new ParametersAction(values),
 				buildCause,
 				new VersioningAction(this.getVersioningMap())

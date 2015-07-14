@@ -144,7 +144,7 @@ public class PathMapping {
 		int commonIndex = 0;
 		while (commonIndex < target.length && commonIndex < base.length
 				&& target[commonIndex].equals(base[commonIndex])) {
-			common.append(target[commonIndex] + pathSeparator);
+			common.append(target[commonIndex]).append(pathSeparator);
 			commonIndex++;
 		}
 
@@ -185,7 +185,7 @@ public class PathMapping {
 			int numDirsUp = baseIsFile ? base.length - commonIndex - 1 : base.length - commonIndex;
 
 			for (int i = 0; i < numDirsUp; i++) {
-				relative.append(".." + pathSeparator);
+				relative.append("..").append(pathSeparator);
 			}
 		}
 		relative.append(normalizedTargetPath.substring(common.length()));
