@@ -200,18 +200,14 @@ public class InheritanceParametersDefinitionProperty extends
 	}
 	
 	public static final List<ParameterDefinition> copyAndSortParametersByName(List<ParameterDefinition> in) {
-		//Crate a copy of all PDs in that list
-		TreeSet<ParameterDefinition> tree = new TreeSet<ParameterDefinition>(
-				new Comparator<ParameterDefinition>() {
+		//Create a copy of all PDs in that list
+		List<ParameterDefinition> result = new LinkedList<ParameterDefinition>(in);
+				Collections.sort(result, new Comparator<ParameterDefinition>(){
 					public int compare(ParameterDefinition o1, ParameterDefinition o2) {
 						return o1.getName().compareTo(o2.getName());
 					}
-				}
-		);
-		for (ParameterDefinition pd : in) {
-			tree.add(pd.copyWithDefaultValue(pd.getDefaultParameterValue()));
-		}
-		return new LinkedList<ParameterDefinition>(tree);
+				});
+		return result;
 	}
 	
 	public static InheritanceParametersDefinitionProperty createMerged(
