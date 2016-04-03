@@ -446,13 +446,13 @@ public abstract class InheritanceGovernor<T> {
 		if (Reflection.calledFromClass(
 				Build.class, BuildCommand.class,
 				Queue.class, BuildTrigger.class,
-				Trigger.class, BuildStep.class,
-				DependencyGraph.class
+				Trigger.class, BuildStep.class
 			) ||
 			Reflection.calledFromMethod(
 					InheritanceProject.class,
 					"doBuild", "scheduleBuild2", "doBuildWithParameters"
-			)
+			) ||
+			Reflection.calledFromMethod(DependencyGraph.class, "build")
 		) {
 			return true;
 		}
