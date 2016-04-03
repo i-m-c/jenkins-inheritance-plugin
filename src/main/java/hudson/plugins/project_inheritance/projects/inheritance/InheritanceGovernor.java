@@ -28,6 +28,7 @@ import hudson.model.Queue;
 import hudson.model.Saveable;
 import hudson.model.Descriptor;
 import hudson.model.Project;
+import hudson.model.DependencyGraph;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
@@ -445,7 +446,8 @@ public abstract class InheritanceGovernor<T> {
 		if (Reflection.calledFromClass(
 				Build.class, BuildCommand.class,
 				Queue.class, BuildTrigger.class,
-				Trigger.class, BuildStep.class
+				Trigger.class, BuildStep.class,
+				DependencyGraph.class
 			) ||
 			Reflection.calledFromMethod(
 					InheritanceProject.class,
