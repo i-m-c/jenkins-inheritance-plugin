@@ -1,38 +1,34 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.references;
-
-import hudson.Extension;
-import hudson.util.FormValidation;
 
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 
-import net.sf.json.JSONObject;
-
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.StaplerRequest;
+
+import hudson.Extension;
+import hudson.util.FormValidation;
 
 public class ProjectReference extends SimpleProjectReference {
 	public static class PrioMap {
@@ -57,10 +53,10 @@ public class ProjectReference extends SimpleProjectReference {
 	public final PrioMap prioMap;
 	
 	@DataBoundConstructor
-	public ProjectReference(String name,
+	public ProjectReference(String targetJob,
 			int parameterPriority, int buildWrapperPriority,
 			int builderPriority, int publisherPriority, int miscPriority) {
-		super(name);
+		super(targetJob);
 		this.prioMap = new PrioMap(
 				parameterPriority, buildWrapperPriority,
 				builderPriority, publisherPriority, miscPriority
@@ -70,8 +66,8 @@ public class ProjectReference extends SimpleProjectReference {
 	/**
 	 * Usability constructor, in case all priorities are identical
 	 */
-	public ProjectReference(String name, int priority) {
-		this(name, priority, priority, priority, priority, priority);
+	public ProjectReference(String targetJob, int priority) {
+		this(targetJob, priority, priority, priority, priority, priority);
 	}
 	
 	
@@ -187,17 +183,10 @@ public class ProjectReference extends SimpleProjectReference {
 		
 		@Override
 		public String getDisplayName() {
-			return "Ordered Project Reference";
-			//return Messages.StringParameterDefinition_DisplayName();
+			return Messages.ProjectReference_DisplayName();
 		}
 		
-		@Override
-		public AbstractProjectReference newInstance(
-				StaplerRequest req, JSONObject formData) throws FormException {
-			return req.bindJSON(ProjectReference.class, formData);
-		}
 		
-
 		public static FormValidation isNumber(String val, String errMsg) {
 			try {
 				Integer.parseInt(val);

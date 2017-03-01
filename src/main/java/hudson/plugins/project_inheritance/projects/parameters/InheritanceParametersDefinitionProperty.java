@@ -1,47 +1,25 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.parameters;
 
-import hudson.model.Build;
-import hudson.model.JobPropertyDescriptor;
-import hudson.model.ParameterValue;
-import hudson.model.AbstractProject;
-import hudson.model.Cause;
-import hudson.model.CauseAction;
-import hudson.model.Job;
-import hudson.model.ParameterDefinition;
-import hudson.model.ParametersAction;
-import hudson.model.ParametersDefinitionProperty;
-import hudson.model.StringParameterValue;
-import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
-import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
-import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
-import hudson.plugins.project_inheritance.util.LimitedHashMap;
-import hudson.plugins.project_inheritance.util.Reflection;
-
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,23 +27,43 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.TreeSet;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import javax.annotation.CheckForNull;
 import javax.servlet.ServletException;
 
+import org.apache.commons.lang.StringUtils;
+import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.export.Flavor;
+
+import hudson.model.AbstractProject;
+import hudson.model.Action;
+import hudson.model.Build;
+import hudson.model.Cause;
+import hudson.model.CauseAction;
+import hudson.model.Job;
+import hudson.model.JobPropertyDescriptor;
+import hudson.model.ParameterDefinition;
+import hudson.model.ParameterValue;
+import hudson.model.ParametersAction;
+import hudson.model.ParametersDefinitionProperty;
+import hudson.model.RunParameterDefinition;
+import hudson.model.StringParameterValue;
+import hudson.model.Queue.Task;
+import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
+import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
+import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
+import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
+import hudson.plugins.project_inheritance.projects.view.BuildViewExtension;
+import hudson.plugins.project_inheritance.util.Reflection;
 import jenkins.model.Jenkins;
 import jenkins.util.TimeDuration;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
-
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.StaplerResponse;
-import org.kohsuke.stapler.export.Flavor;
 
 /**
  * This class is a wrapper around {@link ParametersDefinitionProperty}.
@@ -136,14 +134,8 @@ import org.kohsuke.stapler.export.Flavor;
 public class InheritanceParametersDefinitionProperty extends
 		ParametersDefinitionProperty {
 	
-	private static final Pattern keyValP = Pattern.compile("([^=:]*)[=:](.*)");
-	private static final Pattern leftTrimP = Pattern.compile("^[ \'\"]*");
-	private static final Pattern rightTrimP = Pattern.compile("[ \'\"]*$");
-	
 	public static final String VERSION_PARAM_NAME = "JENKINS_JOB_VERSIONS";
 	
-	public static final Map<String, Map<String, Long>> decodedVersionMaps =
-			new LimitedHashMap<String, Map<String,Long>>(100);
 	
 	public static class ScopeEntry {
 		public final String owner;
@@ -153,7 +145,8 @@ public class InheritanceParametersDefinitionProperty extends
 			this.owner = owner;
 			this.param = param;
 		}
-		
+
+		@Override
 		public String toString() {
 			StringBuilder b = new StringBuilder();
 			b.append('[');
@@ -203,13 +196,25 @@ public class InheritanceParametersDefinitionProperty extends
 		//Crate a copy of all PDs in that list
 		TreeSet<ParameterDefinition> tree = new TreeSet<ParameterDefinition>(
 				new Comparator<ParameterDefinition>() {
+					@Override
 					public int compare(ParameterDefinition o1, ParameterDefinition o2) {
 						return o1.getName().compareTo(o2.getName());
 					}
 				}
 		);
 		for (ParameterDefinition pd : in) {
-			tree.add(pd.copyWithDefaultValue(pd.getDefaultParameterValue()));
+			// if a parameter definition of type RunParameterDefinition is not configured with a valid project,
+			// ParameterDefinition(RunParameterDefinition)#copyWithDefaultValue will raise a NullPointerException
+			if (pd instanceof RunParameterDefinition) {
+				Job<?, ?> job = ((RunParameterDefinition) pd).getProject();
+
+				if (job != null) {
+					tree.add(pd);
+				}
+			} else {
+				tree.add(pd.copyWithDefaultValue(pd.getDefaultParameterValue()));
+			}
+
 		}
 		return new LinkedList<ParameterDefinition>(tree);
 	}
@@ -263,11 +268,17 @@ public class InheritanceParametersDefinitionProperty extends
 	
 	// === BUILD HANDLING METHODS ===
 	
-	/**
-	 * {@inheritDoc}
-	 */
-	public void _doBuild(StaplerRequest req, StaplerResponse rsp)
-			throws IOException, ServletException {
+	@Override
+	@Deprecated
+	public void _doBuild(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
+		_doBuild(req, rsp, this.getDelayFromRequest(req));
+	}
+	
+	@Override
+	public void _doBuild(
+			StaplerRequest req, StaplerResponse rsp,
+			@QueryParameter TimeDuration delay
+	) throws IOException, ServletException {
 		if(!req.getMethod().equals("POST")) {
 			// show the parameter entry form.
 			req.getView(this,"index.jelly").forward(req,rsp);
@@ -297,20 +308,48 @@ public class InheritanceParametersDefinitionProperty extends
 					throw new IllegalArgumentException(
 							"No such parameter definition and also not a string parameter: " + name);
 				}
-				values.add(parameterValue);
-				
+				if (parameterValue != null) {
+					values.add(parameterValue);
+				}
 			}
 		}
-
-		TimeDuration delay = (req.hasParameter("delay"))
-				? TimeDuration.fromString(req.getParameter("delay"))
-				: new TimeDuration(0);
 		
-		Jenkins.getInstance().getQueue().schedule(
-				owner, (int) delay.as(TimeUnit.SECONDS),
-				new ParametersAction(values),
-				new CauseAction(new Cause.UserIdCause()),
-				new VersioningAction(this.getVersioningMap())
+		if (delay == null) {
+			delay = new TimeDuration(this.getJob().getQuietPeriod());
+		}
+		
+		CauseAction ca;
+		if (owner instanceof InheritanceProject) {
+			ca = ((InheritanceProject) owner).getBuildCauseOverride(req);
+		} else {
+			ca = new CauseAction(new Cause.UserIdCause());
+		}
+		
+		// Invoke the onBuild actions contributed by BuildViewExtension
+		req.getAncestors();
+		List<Action> actions;
+		if (owner instanceof AbstractProject<?,?>) {
+			actions = BuildViewExtension.callAll(
+					(AbstractProject<?, ?>) owner,
+					req
+			);
+		} else {
+			actions = Collections.emptyList();
+		}
+		
+		//Add the versioning Action
+		actions.add(new VersioningAction(VersionHandler.getVersions()));
+		//Add the cause action
+		actions.add(ca);
+		//Add the parameters action created from the values above
+		actions.add(new ParametersAction(values));
+		
+		//Merge the ParametersActions, if any
+		BuildViewExtension.mergeParameters(actions);
+		
+		Jenkins.getInstance().getQueue().schedule2(
+				(Task) owner, delay.getTime(),
+				actions
 		);
 
 		//Send the user back to the job page, except if "rebuildNoRedirect" is set
@@ -318,9 +357,23 @@ public class InheritanceParametersDefinitionProperty extends
 			rsp.sendRedirect(".");
 		}
 	}
+
+	/** @deprecated use {@link #buildWithParameters(StaplerRequest, StaplerResponse, TimeDuration)} */
+	@Deprecated
+	@Override
+	public void buildWithParameters(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
+		this.buildWithParameters(req, rsp, this.getDelayFromRequest(req));
+	}
 	
-	public void buildWithParameters(StaplerRequest req, StaplerResponse rsp)
-			throws IOException, ServletException {
+	@Override
+	public void buildWithParameters(
+			StaplerRequest req,
+			StaplerResponse rsp,
+			@CheckForNull TimeDuration delay
+	) throws IOException, ServletException {
+		List<Action> actions = new LinkedList<Action>();
+		
+		//Create action for the parameters
 		List<ParameterValue> values = new ArrayList<ParameterValue>();
 		for (ParameterDefinition d: this.getParameterDefinitions()) {
 			ParameterValue value = d.createValue(req);
@@ -328,23 +381,37 @@ public class InheritanceParametersDefinitionProperty extends
 				values.add(value);
 			}
 		}
+		actions.add(new ParametersAction(values));
 		
+		
+		//Create an action to override the build cause
 		CauseAction buildCause = null;
 		if (owner instanceof InheritanceProject) {
 			buildCause = ((InheritanceProject)owner).getBuildCauseOverride(req);
 		} else {
 			buildCause = new CauseAction(new Cause.UserIdCause());
 		}
+		actions.add(buildCause);
 		
-		TimeDuration delay = (req.hasParameter("delay"))
-				? TimeDuration.fromString(req.getParameter("delay"))
-				: new TimeDuration(0);
 		
-		Jenkins.getInstance().getQueue().schedule(
-				owner, (int) delay.as(TimeUnit.SECONDS),
-				new ParametersAction(values),
-				buildCause,
-				new VersioningAction(this.getVersioningMap())
+		//Add an action for the versioning
+		if (this.owner instanceof AbstractProject<?,?>) {
+			VersioningAction va = new VersioningAction((AbstractProject<?,?>)this.owner);
+			actions.add(va);
+		} else {
+			//FIXME: What to do in this case?
+		}
+		
+		
+		//Decode the delay, before the job can be run
+		if (delay == null) {
+			delay = new TimeDuration(getJob().getQuietPeriod());
+		}
+		
+		//Issue the job
+		Jenkins.getInstance().getQueue().schedule2(
+				(Task) owner, delay.getTime(),
+				actions
 		);
 
 		if (requestWantsJson(req)) {
@@ -362,104 +429,11 @@ public class InheritanceParametersDefinitionProperty extends
 		return !a.contains("text/html") && a.contains("application/json");
 	}
 	
-	
-	// === VERSIONING COMMUNICATION, STORAG AND HANDLING METHODS ===
-	
-	private Map<String,Long> getVersioningMap() {
-		if (this.owner == null || !(this.owner instanceof InheritanceProject)) {
-			return null;
-		}
-		return ((InheritanceProject)owner).getAllVersionsFromCurrentState();
+	private TimeDuration getDelayFromRequest(StaplerRequest req) {
+		return (req.hasParameter("delay"))
+				? TimeDuration.fromString(req.getParameter("delay"))
+				: new TimeDuration(0);
 	}
-	
-	public static String encodeVersioningMap(Map<String, Long> in) {
-		if (in == null || in.isEmpty()) {
-			return "";
-		}
-		StringBuilder out = new StringBuilder();
-		for (Entry<String, Long> e : in.entrySet()) {
-			String key = e.getKey();
-			if (key == null || key.isEmpty()) {
-				continue;
-			}
-			out.append(e.getKey());
-			out.append("=");
-			out.append(e.getValue());
-			out.append(";");
-		}
-		if (out.length() > 0) {
-			out.deleteCharAt(out.length()-1);
-		}
-		return out.toString();
-	}
-	
-	public String encodeVersioningMap() {
-		Map<String,Long> map = this.getVersioningMap();
-		if (map != null) {
-			return encodeVersioningMap(map);
-		}
-		return null;
-	}
-	
-	public static Map<String, Long> decodeVersioningMap(String in) {
-		//Sanity check
-		if (in == null || in.isEmpty()) {
-			return null;
-		}
-		
-		//Check if we already have decoded that string recently
-		Map<String, Long> out = decodedVersionMaps.get(in);
-		if (out != null) {
-			//Making sure that the hashed entry is put to the front in LRU fashion
-			decodedVersionMaps.put(in, out);
-			return out;
-		} else {
-			out = new HashMap<String, Long>();
-		}
-		
-		//The input might've been URL encoded; decode these until the string is stable
-		String escaped = in;
-		String unescaped = in;
-		do {
-			unescaped = escaped;
-			try {
-				escaped = URLDecoder.decode(unescaped, "utf8");
-			} catch (UnsupportedEncodingException ex) {
-				escaped = unescaped;
-				break;
-			}
-		} while (!unescaped.equals(escaped));
-		
-		
-		String inMod = escaped.trim();
-		inMod = leftTrimP.matcher(inMod).replaceFirst("");
-		inMod = rightTrimP.matcher(inMod).replaceFirst("");
-		
-		
-		//The value should look like this: <proj>=<ver>;<proj>=ver;...
-		for (String entry : inMod.split(";")) {
-			Matcher m = keyValP.matcher(entry);
-			while (m.find()) {
-				String key = m.group(1);
-				if (key == null || key.isEmpty()) { continue; }
-				String value = m.group(2);
-				if (value == null || value.isEmpty()) { continue; }
-				try {
-					Long lv = Long.parseLong(value);
-					//Trying to add this to the version map
-					out.put(key, lv);
-				} catch (NumberFormatException ex) {
-					continue;
-				}
-			}
-		}
-		
-		//Buffering that entry
-		decodedVersionMaps.put(in, out);
-		
-		return out;
-	}
-	
 	
 	
 	// === PARAMETER RETRIEVAL AND SUBSET GENERATION ===
@@ -487,21 +461,24 @@ public class InheritanceParametersDefinitionProperty extends
 		}
 		return out;
 	}
-	
+
+	@Override
 	public List<ParameterDefinition> getParameterDefinitions() {
 		return super.getParameterDefinitions();
 	}
-	
+
+	@Override
 	public ParameterDefinition getParameterDefinition(String name) {
 		return super.getParameterDefinition(name);
 	}
-	
+
+	@Override
 	public List<String> getParameterDefinitionNames() {
 		return super.getParameterDefinitionNames();
 	}
 	
 	
-	// === PARAMETER SCOPE COMPUATION ===
+	// === PARAMETER SCOPE COMPUTATION ===
 	
 	/**
 	 * Returns all parameter definitions that are involved in generating parameter values.
@@ -582,7 +559,8 @@ public class InheritanceParametersDefinitionProperty extends
 		List<ScopeEntry> all = getAllScopedParameterDefinitions();
 		List<ScopeEntry> out = new LinkedList<ScopeEntry>();
 		for (ScopeEntry se : all) {
-			if (se.param.getName().equals(name)) {
+			String sName = se.param.getName();
+			if (StringUtils.equals(sName, name)) {
 				out.add(se);
 			}
 		}
@@ -602,6 +580,7 @@ public class InheritanceParametersDefinitionProperty extends
 	 * class not being able to completely wrap the
 	 * {@link ParametersDefinitionProperty} class.
 	 */
+	@Override
 	public JobPropertyDescriptor getDescriptor() {
 		//return super.getDescriptor();
 		return (JobPropertyDescriptor) Jenkins.getInstance().getDescriptorOrDie(

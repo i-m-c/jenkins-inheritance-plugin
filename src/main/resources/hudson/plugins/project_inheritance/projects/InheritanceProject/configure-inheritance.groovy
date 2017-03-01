@@ -24,6 +24,7 @@ import hudson.plugins.project_inheritance.projects.references.SimpleProjectRefer
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
+st = namespace("jelly:stapler")
 
 
 f.section(title: _("Parent Projects")) {
@@ -46,6 +47,23 @@ f.section(title: _("Parent Projects")) {
 					descriptors: pDescriptors,
 					addCaption: _("Add parent project")
 			)
+			
+			/* Add the invisible field, which will receive (via the JS
+			 * instrumentation below) the value of all inherited parents on the
+			 * current page as a CSV.
+			 * 
+			 * This is then used in ProjectReferenceDescriptor.doCheckName(), 
+			 * to determine the validity of the hetero-list content
+			 */
+			f.invisibleEntry() { //Use "f.entry" in case of debugging
+				f.textbox(name: "parents", clazz: "parentageInfo");
+			}
 		}
 	}
+	
+	//Load instrumentation, that finds the hetero-list above and fills all
+	//f.textbox values with the "parentageInfo" class with a CSV string
+	//reflecting all selected values.
+	adjPrefix = "hudson.plugins.project_inheritance.util.javascript";
+	st.adjunct(includes: adjPrefix + ".identifyParents")
 }

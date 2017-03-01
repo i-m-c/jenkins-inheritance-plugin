@@ -29,7 +29,7 @@ helpRoot = "/plugin/project-inheritance/help/ProjectReference"
 
 include(AbstractProjectReference, "config")
 
-f.advanced(title: "Expand prioities", align: "left") {
+f.advanced(title: "Expand priorities", align: "left") {
 	f.entry(
 			field: "parameterPriority",
 			title: _("Parameter Order"),

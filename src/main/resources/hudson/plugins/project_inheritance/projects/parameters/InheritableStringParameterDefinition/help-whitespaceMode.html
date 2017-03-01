@@ -1,0 +1,21 @@
+<div>
+This field allows you to select, how whitespaces at the start/end of the
+parameter should be handled, when a build is started:
+<ol>
+	<li>Trim all leading/trailing whitespace from the entered value.</li>
+	<li>Keep the whitespace intact, exactly as the user entered it.</li>
+	<li>Keep the whitespace, but make sure that at least a single space
+		is added to the front of the value, in case it <b>extends</b> a
+		parameter with the same name from a parent.
+	</li>
+</ol>
+Select the first option, if you know the parameter should not have leading or
+trailing spaces.<br/>
+Select the third option, if you are constructing a parameter that is used in
+flag- or command-construction. For example Compiler Flags.<br/>
+Otherwise, or if in doubt, just select the second option.
+<p>
+Do note that, if trimming is selected, this has an effect on both the default
+value used for automatically started builds, as well as user-initiated builds
+where the user had a chance to alter the parameter value.
+</div>

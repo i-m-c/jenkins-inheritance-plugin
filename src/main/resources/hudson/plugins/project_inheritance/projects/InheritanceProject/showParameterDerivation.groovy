@@ -1,4 +1,5 @@
 /**
+ * Copyright (c) 2016, Intel Deutschland GmbH
  * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
  * 
  * 
@@ -55,15 +56,15 @@ l.layout(title: my.getDisplayName(), noRefresh: "true") {
 	
 	// Add the main-panel containing the big table of parameters
 	l.main_panel() {
-		h1("The project  has the following full derivation for parameters:")
+		h1(my.getFullName() + " Parameter Derivation")
 		
 		table(class: "pane sortable bigtable fixed") {
 			tr() {
-				th(class: "pane-header wide forceWrap", initialSortDir: "down", _("Parameter Name"))
-				th(class: "pane-header wider forceWrap", initialSortDir: "down", _("From"))
-				th(class: "pane-header small forceWrap", initialSortDir: "down", _("Order"))
-				th(class: "pane-header medium forceWrap", initialSortDir: "down", _("Force default / assigned"))
-				th(class: "pane-header variable forceWrap", initialSortDir: "down", _("Default Value"))
+				th(class: "pane-header wide forceWrap", initialSortDir: "down", _("Parameter"))
+				th(class: "pane-header wider forceWrap",  _("From"))
+				th(class: "pane-header small forceWrap",  _("Order"))
+				th(class: "pane-header medium forceWrap",  _("Force default / assigned"))
+				th(class: "pane-header variable forceWrap",  _("Default Value"))
 			}
 			for (e in my.getParameterDerivationList()) {
 				pName = e.getProjectName()
@@ -82,12 +83,6 @@ l.layout(title: my.getDisplayName(), noRefresh: "true") {
 					td (class:"pane forceWrap", e.getDefault())
 				}
 			}
-		}
-		
-		//Add the back-button
-		form(id: "confirmation", method: "post", action: "/job/" + my.name) {
-			div(style: "margin-top:5em;margin-bottom:5em")
-			f.submit(value: _("Okay, I have seen it."))
 		}
 	}
 }

@@ -28,50 +28,27 @@ ct = namespace(lib.CustomTagLib)
 p = namespace("/lib/hudson/project")
 
 
-if (my.getIsTransient() == false) {
+if (!my.getIsTransient()) {
 	// Add the box with the sub-job definitions
-	ct.colored_block(backCol: "Bisque", borderCol: "navy") {
-		f.section(title: _("CreationClass")) {}
-		f.entry(field: "creationClass") {
-			f.select(default: "")
-			f.description(
-					"Select the type of this project. You can use this to" +
-					" group projects by their type.<br/> It can also be used" +
-					" to allow Jenkins to automatically produce transient" +
-					" projects from two or more project definitions." +
-					" The list of available types can be managed in the" +
-					" 'Inheritance Configuration' section of Jenkins'" +
-					" management page."
-			)
+	if (my.needsCreationClass()) {
+		ct.colored_block(backCol: "Bisque", borderCol: "navy") {
+			f.section(title: _("CreationClass")) {}
+			f.entry(field: "creationClass") {
+				f.select(default: "")
+				f.description(
+						"Select the type of this project. You can use this to" +
+						" group projects by their type.<br/> It can also be used" +
+						" to allow Jenkins to automatically produce transient" +
+						" projects from two or more project definitions." +
+						" The list of available types can be managed in the" +
+						" 'Inheritance Configuration' section of Jenkins'" +
+						" management page."
+				)
+			}
 		}
 	}
-	
 	ct.colored_block(backCol: "PowderBlue", borderCol: "navy") {
-		f.section(title: _("Project Inheritance Options")) {
-			f.invisibleEntry(field: "isTransient", title: _("Is Transient Project")) {
-				f.checkbox()
-				/*
-				//Descriptions of invisibleEntries are still rendered!
-				f.description(
-					"If this is checked, the project will not be stored on disk." +
-					" Do note that this flag is read-only. Only projects automatically" +
-					" created by the 'Project Creation Engine' have this flag set."
-				)
-				*/
-			}
-			f.entry(field: "isAbstract", title: _("Is abstract project")) {
-				f.checkbox()
-				f.description(
-						"If this is checked, the project will be marked as" +
-						" abstract and can not	be run directly. While this" +
-						" superficially sounds similar to just deactivating" + 
-						" the project, it additionally relaxes certain checks" +
-						" related to inheritance of values. One example is" +
-						" the error that occurs if you've not given a default" +
-						" value to a mandatory variable."
-				)
-			}
-		}
+		include(my, "configure-abstract")
 	}
 }
 

@@ -21,8 +21,15 @@
 import java.util.UUID;
 import org.kohsuke.stapler.Stapler;
 
+import hudson.model.AbstractProject;
+
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.plugins.project_inheritance.projects.references.filters.IProjectReferenceFilter;
+
+f = namespace(lib.FormTagLib);
+l = namespace(lib.LayoutTagLib);
+ct = namespace(lib.CustomTagLib);
+
 
 //Check if the parent scope has set the read-only flag
 filterKey = "";
@@ -31,37 +38,38 @@ isReadOnly = false;
 request = Stapler.getCurrentRequest();
 if (request != null) {
 	//Fetch the read-only flag from the request
+	//TODO: Convert this to a proper AJAX Capture based approach later
 	o = request.getAttribute("FIELDS_READ_ONLY");
 	isReadOnly = (o != null && o instanceof Boolean) ? o : false;
-	
-	//Fetch the naming filter from the request (if any)
-	o = request.getAttribute("REFERENCE_FILTER");
-	filter = (o != null && o instanceof IProjectReferenceFilter) ? o : null;
-	if (filter != null) {
-		filterKey = UUID.randomUUID().toString();
-		descriptor.addReferenceFilter(filterKey, filter);
-	}
 }
 
-f = namespace(lib.FormTagLib);
-l = namespace(lib.LayoutTagLib);
-ct = namespace(lib.CustomTagLib);
-
-
-helpRoot = "/plugin/project-inheritance/help/ProjectReference"
-
-f.invisibleEntry() {
-	f.readOnlyTextbox(default: my.name, name: "projectName")
+// Check if there's a reference filter, if so, add it to the descriptor to
+//filter the select box below
+try {
+	filterKey = UUID.randomUUID().toString();
+	descriptor.addReferenceFilter(filterKey, referenceFilter);
+} catch (Exception ex) {
+	//No filter
 }
+
 
 f.invisibleEntry() {
 	f.readOnlyTextbox(default: filterKey, name: "filterKey")
 }
 
+/* A different name (targetJob) is given to the select box, to properly work
+ * with 'InheritableStringParameterReferenceDefinition' instances, which need to
+ * look up this field, but can't properly handle duplicate "QueryParameters".
+ * 
+ * Do note, that in Java, the field will be read from "name", but in JSON, it
+ * will show up as "targetJob" and must be named as such in the
+ * @DataBoundConstructor as well as all methods using @QueryParameter.
+ */
+
 f.entry(field: "name", title: _("Name")) {
 	if (isReadOnly) {
-		f.select(default: my.name, disabled: "disabled")
+		f.select(default: "", disabled: "disabled", name: "targetJob")
 	} else {
-		f.select(default: my.name)
+		f.select(default: "", name: "targetJob")
 	}
 }

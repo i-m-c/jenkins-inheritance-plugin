@@ -1,57 +1,51 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.parameters;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+import java.util.logging.Logger;
+
+import org.apache.commons.lang.StringUtils;
+import org.kohsuke.stapler.AncestorInPath;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest;
+
 import hudson.Extension;
-import hudson.model.ParameterValue;
 import hudson.model.AbstractProject;
 import hudson.model.ParameterDefinition;
+import hudson.model.ParameterValue;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.StringParameterDefinition;
 import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
-import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
-
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import net.sf.json.JSONObject;
-
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.StaplerRequest;
 
 public class InheritableStringParameterDefinition extends StringParameterDefinition {
 	private static final long serialVersionUID = 5458085487475338803L;
@@ -60,7 +54,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			InheritableStringParameterDefinition.class.toString()
 	);
 	
-	public enum IModes {
+	public static enum IModes {
 		OVERWRITABLE, EXTENSIBLE, FIXED;
 		
 		private static final String[] names = getNames();
@@ -97,14 +91,52 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		}
 	}
 	
+	public static enum WhitespaceMode {
+		/** Trim whitespace from front and end*/
+		TRIM,
+		/** Keep whitespace chars as-is */
+		KEEP,
+		/** Keep whitespace, but also automatically add one, if extending others */
+		ADD_IF_EXTENSION;
+		
+		@Override
+		public String toString() {
+			switch (this) {
+				case KEEP:
+					return Messages.WhitespaceMode_KEEP();
+				case TRIM:
+					return Messages.WhitespaceMode_TRIM();
+				case ADD_IF_EXTENSION:
+					return Messages.WhitespaceMode_ADD();
+				
+				default:
+					return this.name();
+			}
+		}
+	}
+	
 	private final IModes inheritanceMode;
-	/** Should really have been static; but it is too late now. */
-	private final IModes defaultInheritanceMode = IModes.OVERWRITABLE;
 	
 	private final boolean mustHaveDefaultValue;
 	private final boolean mustBeAssigned;
-	private final boolean autoAddSpaces;
 	private final boolean isHidden;
+	
+	/**
+	 * The way how this parameter handles whitespace characters.
+	 * 
+	 * Should be made final, once {@link #autoAddSpaces} is removed.
+	 */
+	private WhitespaceMode whitespaceMode;
+	
+	/**
+	 * Whether or not to automatically add spaces when mode is "Overwritable"
+	 * <p>
+	 * Has been deprecated in favour of the more flexible {@link #whitespaceMode}.
+	 * <p>
+	 * Remove in next release.
+	 */
+	@Deprecated
+	private boolean autoAddSpaces;
 	
 	/**
 	 * This field stores a reference to the property that created this
@@ -131,57 +163,81 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			String name, String defaultValue) {
 		this(
 				name, defaultValue, null, IModes.OVERWRITABLE,
-				false, false, true, false
+				false, false, WhitespaceMode.ADD_IF_EXTENSION, false
 		);
 	}
 	
 	public InheritableStringParameterDefinition(
 			String name, String defaultValue, IModes iMode,
 			boolean mustHaveDefaultValue, boolean mustBeAssigned,
-			boolean autoAddSpaces, boolean isHidden) {
+			WhitespaceMode whitespaceMode, boolean isHidden) {
 		this(
 				name, defaultValue, null, iMode,
-				mustHaveDefaultValue, mustBeAssigned, autoAddSpaces, isHidden
+				mustHaveDefaultValue, mustBeAssigned, whitespaceMode, isHidden
 		);
 	}
 
 	public InheritableStringParameterDefinition(String name, String defaultValue,
 			String description, IModes inheritanceMode,
 			boolean mustHaveDefaultValue, boolean mustBeAssigned,
-			boolean autoAddSpaces, boolean isHidden) {
-		super(name, defaultValue, description);
+			WhitespaceMode whitespaceMode, boolean isHidden) {
+		super(StringUtils.trim(name), defaultValue, description);
 		this.mustHaveDefaultValue = mustHaveDefaultValue;
 		this.mustBeAssigned = mustBeAssigned;
-		this.autoAddSpaces = autoAddSpaces;
 		this.isHidden = isHidden;
 		
-		if (inheritanceMode == null) {
-			this.inheritanceMode = defaultInheritanceMode;
-		} else {
-			this.inheritanceMode = inheritanceMode;
-		}
+		this.whitespaceMode = (whitespaceMode == null)
+				? WhitespaceMode.KEEP
+				: whitespaceMode;
+		
+		this.inheritanceMode = (inheritanceMode == null)
+				? IModes.OVERWRITABLE
+				: inheritanceMode;
 	}
 	
 	@DataBoundConstructor
 	public InheritableStringParameterDefinition(String name, String defaultValue,
 			String description, String inheritanceMode,
 			boolean mustHaveDefaultValue, boolean mustBeAssigned,
-			boolean autoAddSpaces, boolean isHidden) {
+			String whitespaceMode, boolean isHidden) {
 		this(
-				name, defaultValue, description, IModes.valueOf(inheritanceMode),
-				mustHaveDefaultValue, mustBeAssigned, autoAddSpaces, isHidden
+				StringUtils.trim(name), defaultValue, description,
+				StringUtils.isBlank(inheritanceMode)
+						? IModes.OVERWRITABLE
+						: IModes.valueOf(inheritanceMode),
+				mustHaveDefaultValue, mustBeAssigned,
+				StringUtils.isBlank(whitespaceMode)
+						? WhitespaceMode.KEEP
+						: WhitespaceMode.valueOf(whitespaceMode),
+				isHidden
 		);
 	}
 
 	public InheritableStringParameterDefinition(InheritableStringParameterDefinition other) {
 		this(
-				other.getName(), other.getDefaultValue(), other.getDescription(),
-				other.getInheritanceMode(), other.getMustHaveDefaultValue(),
-				other.getMustBeAssigned(), other.getAutoAddSpaces(),
+				other.getName(),
+				other.getDefaultValue(),
+				other.getDescription(),
+				other.getInheritanceModeAsVar(),
+				other.getMustHaveDefaultValue(),
+				other.getMustBeAssigned(),
+				other.getWhitespaceModeAsVar(),
 				other.getIsHidden()
 		);
 		this.rootProperty = other.rootProperty;
 		this.variance = other.variance;
+	}
+	
+	public Object readResolve() {
+		//Check if a whitespace mode is present
+		if (whitespaceMode == null) {
+			if (autoAddSpaces) {
+				whitespaceMode = WhitespaceMode.ADD_IF_EXTENSION;
+			} else {
+				whitespaceMode = WhitespaceMode.KEEP;
+			}
+		}
+		return this;
 	}
 	
 	/**
@@ -214,10 +270,14 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		//Creating the PD to return
 		InheritableStringParameterDefinition ispd =
 			new InheritableStringParameterDefinition(
-				getName(), value, getDescription(),
-				this.getInheritanceMode(),
-				this.getMustHaveDefaultValue(), this.getMustBeAssigned(),
-				this.getAutoAddSpaces(), this.getIsHidden()
+				getName(),
+				value,
+				getDescription(),
+				this.getInheritanceModeAsVar(),
+				this.getMustHaveDefaultValue(),
+				this.getMustBeAssigned(),
+				this.getWhitespaceModeAsVar(),
+				this.getIsHidden()
 			);
 		ispd.variance = this.variance;
 		ispd.setRootProperty(this.rootProperty);
@@ -268,7 +328,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 				b.append(owner);
 			} else if (this.rootProperty.getOwner() != null) {
 				b.append("?->");
-				b.append(this.rootProperty.getOwner().getName());
+				b.append(this.rootProperty.getOwner().getFullName());
 			} else {
 				b.append("!->BROKEN");
 				
@@ -311,10 +371,6 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		return this.mustBeAssigned;
 	}
 	
-	public boolean getAutoAddSpaces() {
-		return this.autoAddSpaces;
-	}
-	
 	public String getInheritanceMode() {
 		return this.getInheritanceModeAsVar().name();
 	}
@@ -329,6 +385,20 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	public boolean getIsHidden() {
 		return this.isHidden;
 	}
+	
+	public String getWhitespaceMode() {
+		WhitespaceMode m  = this.getWhitespaceModeAsVar();
+		return m.name();
+	}
+	
+	public WhitespaceMode getWhitespaceModeAsVar() {
+		if (whitespaceMode == null) {
+			return WhitespaceMode.KEEP;
+		} else {
+			return whitespaceMode;
+		}
+	}
+	
 	
 	
 	// === VALUE DERIVATION ===
@@ -445,13 +515,19 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			
 			mustHaveValueSet |= ispd.getMustBeAssigned();
 			
+			//Adjust for whitespaces
+			WhitespaceMode wsMode = ispd.getWhitespaceModeAsVar();
+			if (wsMode == WhitespaceMode.TRIM) {
+				ispdVal = StringUtils.trim(ispdVal);
+			}
+			
 			switch(currMode) {
 				case OVERWRITABLE:
 					value = ispdVal;
 					break;
 					
 				case EXTENSIBLE:
-					if (ispd.getAutoAddSpaces()) {
+					if (wsMode == WhitespaceMode.ADD_IF_EXTENSION) {
 						value += " ";
 					}
 					value += ispdVal;
@@ -467,51 +543,13 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 					throw new IllegalArgumentException(msg);
 				
 				default:
-					if (currMode == null) {
-						log.severe("Detected null inheritance mode");
-					} else {
-						log.severe("Detected unknown inheritance mode: " + currMode.toString());
-					}
+					log.severe(String.format(
+							"Detected unknown inheritance mode: %s",
+							currMode.toString()
+					));
 					continue;
 			}
 			currMode = ispd.getInheritanceModeAsVar();
-		}
-		
-		//Now, we check if we wants to automatically un-escape "%3D" to "=", as
-		//the "="-sign can't be passes as-is via the Jenkins CLI
-		//TODO: This has been fixed in Jenkins up-stream. Feature can thus be
-		//      removed in future version; as soon as Jenkins adopts
-		//      args4j v2.0.23
-		//TODO: Submit pull request for this change!
-		if (ProjectCreationEngine.instance.getUnescapeEqualsCharInParams()) {
-			CharsetDecoder cd = Charset.forName("cp1252").newDecoder();
-			
-			ByteBuffer bb = ByteBuffer.allocate(1);
-			StringBuilder sb = new StringBuilder(value.length());
-			
-			//Then, we grab the escaped bytes
-			Pattern p = Pattern.compile("%([0-9a-fA-F]{2})");
-			Matcher m = p.matcher(value);
-			int pos = 0;
-			while (m.find()) {
-				sb.append(value, pos, m.start());
-				byte code = Byte.valueOf(m.group(1), 16);
-				bb.put(code);
-				bb.rewind();
-				try {
-					CharBuffer cb = cd.decode(bb);
-					sb.append(cb);
-				} catch (CharacterCodingException e) {
-					//Append the raw bytes
-					sb.append(m.group());
-				}
-				bb.rewind();
-				pos = m.end();
-			}
-			if (pos < value.length()) {
-				sb.append(value.substring(pos));
-			}
-			value = sb.toString();
 		}
 		
 		//Now, we can create the new value
@@ -563,8 +601,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			return value;
 		}
 		
-		//Stripping newlines from start and end
-		String newVal = value.trim();
+		String newVal = value;
 		
 		//Itering over all parent PDs to drop prefixes
 		Iterator<ScopeEntry> sIter = fullScope.iterator();
@@ -588,7 +625,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 					break;
 				default:
 					//Reverting to the initial value, as no extension took place
-					newVal = value.trim();
+					newVal = value;
 					continue;
 			}
 			
@@ -610,11 +647,13 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	/**
 	 * Returns the default value for this parameter.
 	 * <p>
-	 * It will always return the locally defined value, but not a derived one
+	 * It will always return the locally defined value, and not a derived one
 	 * you'd get via {@link #createValue(String)} or
-	 * {@link #createValue(StaplerRequest)}.
+	 * {@link #createValue(StaplerRequest)}, to be compatible with how the
+	 * configure page is retrieving the locally defined value.
 	 * <p>
-	 * There are at least 3 different ways a job can be scheduled:
+	 * Unfortunately, this conflicts with the way jobs are being scheduled.
+	 * There are at least 3 different ways for this:
 	 * <ol>
 	 * 	<li>Spawned via an HTTP/CLI request with parameters assigned</li>
 	 * 	<li>Spawned via a parameterised trigger</li>
@@ -624,17 +663,26 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	 * </ol>
 	 * The first two pass through {@link #createValue(String)} or
 	 * {@link #createValue(StaplerRequest)}. Unfortunately, the last one
-	 * calls this method here directly.
+	 * calls this method here directly, because there only is the default value
+	 * of the parameter to consider.<br/>
+	 * As such, Jenkins code simply calls this method, instead of createValue.
 	 * <p>
-	 * As such, an InheritanceProject <b><i>does not call</b></i> its super
-	 * implementation. For performance reasons, we do not use reflection here,
-	 * as it is easier to simply not call the super class.
+	 * This causes a significant complication, in that this function would
+	 * need to figure out via slow reflection, through which code path it was
+	 * called.<br/>
+	 * Due to these performance reasons, we do not use reflection here and
+	 * return the locally defined version.
 	 * <p>
-	 * Always be aware of this locality of the value when using this method here.
+	 * <b>Always be aware of this locality of the value when using this method here.</b>
+	 * <br/>
+	 * Please bear in mind, that the returned value will <b>not</b> be an
+	 * {@link InheritableStringParameterValue}, but a regular {@link StringParameterValue},
+	 * to further denote the locality.
 	 * 
 	 * @see InheritanceProject#scheduleBuild2(int, hudson.model.Cause, java.util.Collection)
 	 * 
-	 * @return the local default value for this parameter definition.
+	 * @return the local default value for this parameter definition as an
+	 * {@link InheritableStringParameterValue}
 	 */
 	@Override
 	public StringParameterValue getDefaultParameterValue() {
@@ -659,10 +707,10 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	
 		public FormValidation doCheckName(
 				@QueryParameter String name,
-				@QueryParameter String projectName) {
-			//Fetching the project from the central map of projects
-			InheritanceProject rootP = InheritanceProject.getProjectByName(projectName);
-			if (rootP == null) {
+				@AncestorInPath InheritanceProject project
+		) {
+			//Check if the config page has a reference to the current project
+			if (project == null) {
 				//The currently configured project is not an IP project;
 				//so there is no inheritance, and as such no check to be done
 				return FormValidation.ok();
@@ -676,19 +724,11 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			FormValidation fv = FormValidation.ok();
 			
 			
-			LinkedList<InheritanceProject> projects =
-					new LinkedList<InheritanceProject>();
-			//First the root project
-			projects.add(rootP);
-			//Then, we add all compatible jobs
-			for (AbstractProjectReference apr : rootP.getCompatibleProjects()) {
-				InheritanceProject compat = apr.getProject();
-				if (compat == null) { continue; }
-				projects.add(compat);
-			}
+			Set<InheritanceProject> references = 
+					this.getReferencedProjects(project);
 			
 			//Then, we check the parameters of each such linked project
-			for (InheritanceProject proj : projects) {
+			for (InheritanceProject proj : references) {
 				//Fetch all parameters from the given project 
 				ParametersDefinitionProperty pdp =
 						proj.getProperty(ParametersDefinitionProperty.class, IMode.INHERIT_FORCED);
@@ -704,7 +744,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 					if (entry.param == null ||
 							!(entry.param instanceof InheritableStringParameterDefinition) ||
 							entry.param.getName().equals(name) == false ||
-							entry.owner.equals(projectName)) {
+							entry.owner.equals(project.getFullName())) {
 						continue;
 					}
 					InheritableStringParameterDefinition ispd =
@@ -713,11 +753,11 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 					//Fetching the IMode for this definition
 					IModes mode = ispd.getInheritanceModeAsVar();
 					if (mode == IModes.FIXED) {
-						if (proj != rootP) {
+						if (proj != project) {
 							String msg = String.format(
 								"Be careful! This variable is marked as fixed" +
 								" in the compatible job: %s",
-								proj.getName()
+								proj.getFullName()
 							);
 							fv = FormValidation.warning(msg);
 						} else {
@@ -737,7 +777,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 								mode.toString(),
 								(ispd.getMustBeAssigned()) ? ", must be assigned before run" : "",
 								(ispd.getMustHaveDefaultValue()) ? ",  must have a default set" : "",
-								(proj == rootP) ? "parent" : "compatible job",
+								(proj == project) ? "parent" : "compatible job",
 								entry.owner
 						);
 						fv = FormValidation.ok(msg);
@@ -748,9 +788,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			return fv;
 		}
 		
-		public FormValidation doCheckDefaultValue(
-				@QueryParameter String name,
-				@QueryParameter String projectName) {
+		public FormValidation doCheckDefaultValue(@QueryParameter String name) {
 			return FormValidation.ok();
 		}
 		
@@ -760,6 +798,48 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 				m.add(im.toString(), im.name());
 			}
 			return m;
+		}
+		
+		public ListBoxModel doFillWhitespaceModeItems() {
+			ListBoxModel m = new ListBoxModel();
+			for (WhitespaceMode mode : WhitespaceMode.values()) {
+				m.add(mode.toString(), mode.name());
+			}
+			return m;
+		}
+		
+		/**
+		 * Determines the set of projects referenced from the given project
+		 * (including the current project).
+		 * <p>
+		 * The default implementation returns all references:
+		 * <ul>
+		 *	<li>
+		 *		Via inheritance from the local job
+		 * 		(TODO: the user might've changed inheritance on the current config page!)
+		 * 	</li>
+		 *	<li>
+		 *		via the 'compatible' projects used for automatic job creation
+		 *	</li>
+		 * </ul>
+		 * 
+		 * @param root the project to begin from
+		 * @return a set, may be empty, but never null. If root != null will
+		 * contain at least root.
+		 */
+		protected Set<InheritanceProject> getReferencedProjects(InheritanceProject root) {
+			if (root == null) { return Collections.emptySet(); }
+			
+			Set<InheritanceProject> refs =
+					new HashSet<InheritanceProject>();
+			refs.add(root);
+			for (AbstractProjectReference apr : root.getCompatibleProjects()) {
+				InheritanceProject mate = apr.getProject();
+				if (mate == null) { continue; }
+				refs.add(mate);
+			}
+			
+			return refs;
 		}
 	}
 

@@ -31,61 +31,61 @@ l.layout(
 		title: my.displayName + " Versioning Config",
 		permission: my.EXTENDED_READ, norefresh: "true"
 ) {
-	
+
 	l.header() {
 		// Necessary CSS classes for fixed table sizes
 		link(
 				rel: "stylesheet", type: "text/css",
 				href: resURL + "/plugin/project-inheritance/styles/table-monospace.css"
 		)
-		
+
 		//Load additional JS/CSS for the diffing functionality
 		st.adjunct(includes: adjunctPrefix + ".selectDiff")
 	}
-	
+
 	// Include the standard side-panel for this project
 	include(my, "sidepanel")
-	
-	
+
+
 	l.main_panel() {
 		f.form(
 				name: "configVersions", action: "configVersionsSubmit", method: "post"
 		) {
 			descriptor = my.descriptor
 			instance = my
-			
+
 			f.entry() {
 				table(class: "pane sortable bigtable fixed vTable") {
 					tr() {
-						th(initialSortDir: "down", class: "pane-header small", _("Version"))
-						th(initialSortDir: "down", class: "pane-header small", _("Stable?"))
-						th(initialSortDir: "down", class: "pane-header medium", _("Created on"))
-						th(initialSortDir: "down", class: "pane-header wide", _("Created by"))
-						th(initialSortDir: "down", class: "pane-header auto", _("Description"))
+						th(initialSortDir: "up", class: "pane-header small", _("Version"))
+						th(class: "pane-header small", _("Stable?"))
+						th(class: "pane-header medium", _("Created on"))
+						th(class: "pane-header wide", _("Created by"))
+						th(class: "pane-header auto", _("Description"))
 					}
 					for (e in my.getVersions()) {
 						tr(onclick:"selectForDiff(event)") {
 							// Version number
-							td(class: "pane") {
+							td(class: "pane", data: e.id) {
 								a(href: "configure?version=" + e.id, e.id)
 								f.textbox(style: "visibility:hidden", name: "versionID", value: e.id)
 							}
-							
+
 							// Stability flag
 							td(class: "pane") {
 								f.checkbox(name: "stable", checked: e.getStability())
 							}
-							
+
 							// Timestamp
-							td(class: "pane", e.getLocalTimestamp())
-							
+							td(class: "pane", data: e.timestamp, e.getLocalTimestamp())
+
 							// User that committed the version
-							td(class: "pane") {
+							td(class: "pane", data: e.username) {
 								a(href: rootURL + "/user/" + e.getUsername(), e.getUsername())
 							}
-							
+
 							// Description of that version
-							td(class: "pane") {
+							td(class: "pane", data: e.description) {
 								div(class: "tdcenter") {
 									f.textbox(name: "description", value: e.description)
 								}

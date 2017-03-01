@@ -1,23 +1,22 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.inheritance;
 
 import hudson.ExtensionList;
@@ -33,6 +32,7 @@ import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator;
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
+import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
 import hudson.plugins.project_inheritance.util.Reflection;
 import hudson.scm.SCM;
 import hudson.tasks.BuildStep;
@@ -181,7 +181,7 @@ public abstract class InheritanceGovernor<T> {
 		
 		if (!needsInheritance) {
 			return this.getVersionedField(
-					root, root.getUserDesiredVersion()
+					root, VersionHandler.getVersion(root)
 			);
 		}
 		
@@ -192,7 +192,7 @@ public abstract class InheritanceGovernor<T> {
 		
 		for (InheritanceProject ip : scope) {
 			//Fetch the version desired for this project
-			Long version = ip.getUserDesiredVersion();
+			Long version = VersionHandler.getVersion(ip);
 			//Fetch the field for that tuple
 			T field = this.getVersionedField(ip, version);
 			if (field != null) {
@@ -209,7 +209,7 @@ public abstract class InheritanceGovernor<T> {
 		List<InheritanceProject> all = new LinkedList<InheritanceProject>();
 		if (root == null) { return all; }
 		
-		String name = root.getName();
+		String name = root.getFullName();
 		if (seen.contains(name)) {
 			return all;
 		}
@@ -372,6 +372,37 @@ public abstract class InheritanceGovernor<T> {
 		}
 		
 		return new DescribableList<R, Descriptor<R>>(NOOP, merge);
+	}
+	
+	protected static <R extends Describable<R>> DescribableList<R, Descriptor<R>> reduceDescribableByMergeWithoutDuplicates(
+			Deque<DescribableList<R, Descriptor<R>>> list) {
+		
+			// set for keeping track of found classes
+			Set<Class<?>> seen = new HashSet<Class<?>>();
+			
+			if (list == null) {
+				return new DescribableList<R, Descriptor<R>>(NOOP);
+			}
+			
+			// result list
+			List<R> merge = new LinkedList<R>();
+			
+			// descending order for keeping the last buildwrapper that was set = lower in the inheritance tree
+			Iterator<DescribableList<R, Descriptor<R>>> rIter = list.descendingIterator();
+			while (rIter.hasNext()) {
+				DescribableList<R, Descriptor<R>> sub = rIter.next();
+				
+				for (R item : sub) {
+					Class<?> clazz = item.getClass();
+					
+					if (!seen.contains(clazz)) {
+						merge.add(item);
+						seen.add(clazz);
+					}
+				}
+			}
+			
+			return new DescribableList<R, Descriptor<R>>(NOOP, merge);
 	}
 	
 	@SuppressWarnings("unchecked")

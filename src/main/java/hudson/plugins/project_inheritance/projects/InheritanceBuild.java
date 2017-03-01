@@ -1,42 +1,23 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects;
-
-import hudson.FilePath;
-import hudson.model.Build;
-import hudson.model.BuildListener;
-import hudson.model.ParameterValue;
-import hudson.model.Result;
-import hudson.model.Job;
-import hudson.model.Node;
-import hudson.model.ParametersAction;
-import hudson.model.Run;
-import hudson.model.StringParameterValue;
-import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterValue;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
-import hudson.plugins.project_inheritance.util.PathMapping;
-import hudson.plugins.project_inheritance.util.Resolver;
-import hudson.slaves.WorkspaceList;
-import hudson.slaves.WorkspaceList.Lease;
 
 import java.io.File;
 import java.io.IOException;
@@ -44,9 +25,33 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import hudson.FilePath;
+import hudson.model.Build;
+import hudson.model.BuildListener;
+import hudson.model.Executor;
+import hudson.model.Job;
+import hudson.model.Messages;
+import hudson.model.Node;
+import hudson.model.ParameterValue;
+import hudson.model.ParametersAction;
+import hudson.model.Result;
+import hudson.model.Run;
+import hudson.model.StringParameterValue;
+import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterValue;
+import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
+import hudson.plugins.project_inheritance.util.NodeFileSeparator;
+import hudson.plugins.project_inheritance.util.PathMapping;
+import hudson.plugins.project_inheritance.util.Resolver;
+import hudson.slaves.WorkspaceList;
+import hudson.slaves.WorkspaceList.Lease;
 
 
 public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild> {
+	private static final Logger LOGGER = Logger.getLogger(InheritanceBuild.class.getName());
 	
 	protected transient Map<String, Long> projectVersions;
 	
@@ -83,46 +88,35 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	}
 	
 	private void setVersions() {
-		Map<String, Long> versions = null;
-
-		/*
-		 * we try to find the versions inside the special parameter VERSION_PARAM_NAME
-		 * by looking in the build parameters
-		 */
-		String versionParamName = getBuildVariables().get(InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME);
-		if ( versionParamName != null) {
-			versions = InheritanceParametersDefinitionProperty.decodeVersioningMap(
-					versionParamName
-			);
-		}		
-		/*
-		 * If we didn't find the parameter VERSION_PARAM_NAME in the parametersAction,
-		 * we fetch it from getProjectVersions
-		 */
-		if (null == versions) {
-			versions = getProjectVersions();
+		//Clear current set of versions
+		VersionHandler.clearVersions();
+		
+		//Check if a versioning action is present
+		Map<String, Long> map = this.getProjectVersions();
+		if (map != null) {
+			VersionHandler.initVersions(map);
+			return;
 		}
 		
-		if (versions != null) {
-			//Set the normal versioning (will not register values in thread)
-			InheritanceProject.setVersioningMap(versions);
-			//Save the versioning also in the local thread, since by this point
-			//we might not have an HTTPRequest to use as a storage anymore
-			InheritanceProject.setVersioningMapInThread(versions);
-		}
+		//Otherwise, we init from our parent
+		map = VersionHandler.initVersions(this.getParent());
+		this.addAction(new VersioningAction(map));
 	}
 	
 	private void unsetVersions() {
-		InheritanceProject.unsetVersioningMap();
+		VersionHandler.clearVersions();
 	}
 	
 	public static FilePath getWorkspacePathFor(
 			Node n, InheritanceProject project, Map<String, String> values) {
 		if (n == null || project == null) { return null; }
 		
+		final NodeFileSeparator nfi = NodeFileSeparator.instance;
+		
 		//Check if a custom workspace is demanded
 		String customWorkspace = project.getCustomWorkspace();
 		if (customWorkspace != null) {
+			customWorkspace = nfi.ensurePathCorrect(n, customWorkspace);
 			FilePath root = n.getRootPath();
 			return new FilePath(root, customWorkspace);
 		}
@@ -144,12 +138,15 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 					resolv = PathMapping.join(root.getRemote(), resolv);
 				}
 			}
+			resolv = nfi.ensurePathCorrect(n, resolv);
 			return new FilePath(n.getChannel(), resolv);
 		}
 		
 		//Use the workspace locator extensions, if no parameterized WS is present
 		return n.getWorkspaceFor(project);
 	}
+	
+	
 	
 	/**
 	 * This method schedules the execution of this build object.
@@ -161,16 +158,20 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	 * </p>
 	 */
 	@Override
-	@SuppressWarnings("unchecked")
 	public void run() {
 		//Making sure that we set the desired versions correctly
 		this.setVersions();
 		try {
-			super.execute(new InheritanceBuildExecution());
+			this.onRun();
 		} finally {
 			this.unsetVersions();
 		}
 	}
+	
+	public void onRun() {
+		super.execute(new InheritanceBuildExecution());
+	}
+	
 	
 	protected class InheritanceBuildExecution extends BuildExecution {
 		@Override
@@ -210,8 +211,24 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 				}
 			}
 			
-			//Call the regular build response
-			return super.doRun(listener);
+			/* Call the regular build response; note: an InterruptedException may
+			 * be raised to the caller in case of a job abort.
+			 * The default behaviour of Jenkins is to emit a stack trace on
+			 * the log output. We don't want that, and thus catch the IE here.
+			 */
+			try {
+				return super.doRun(listener);
+			} catch (InterruptedException e) {
+				//Exception handling code copied from Run.execute()
+				result = Executor.currentExecutor().abortResult();
+				listener.getLogger().println(Messages.Run_BuildAborted());
+				Executor.currentExecutor().recordCauseOfInterruption(
+						run, listener
+				);
+				//Log the abort, but not the exception
+				LOGGER.log(Level.INFO, run + " aborted");
+				return result;
+			}
 		}
 		
 		/**
@@ -283,6 +300,7 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			
 			for (ParametersAction pa : actions) {
 				for (ParameterValue pv : pa.getParameters()) {
+					if (pv == null || pv.getName() == null) { continue; }
 					map.put(pv.getName(), pv);
 				}
 			}

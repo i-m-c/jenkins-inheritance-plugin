@@ -1,110 +1,31 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects;
 
 import static javax.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 import static javax.servlet.http.HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
-import hudson.BulkChange;
-import hudson.Extension;
-import hudson.Functions;
-import hudson.Util;
-import hudson.model.Action;
-import hudson.model.DependencyGraph;
-import hudson.model.Item;
-import hudson.model.ItemGroup;
-import hudson.model.JobProperty;
-import hudson.model.JobPropertyDescriptor;
-import hudson.model.ParameterValue;
-import hudson.model.TopLevelItem;
-import hudson.model.TransientProjectActionFactory;
-import hudson.model.AbstractProject;
-import hudson.model.Cause;
-import hudson.model.Cause.RemoteCause;
-import hudson.model.Cause.UserIdCause;
-import hudson.model.CauseAction;
-import hudson.model.Descriptor;
-import hudson.model.Descriptor.FormException;
-import hudson.model.Hudson;
-import hudson.model.Job;
-import hudson.model.Label;
-import hudson.model.ParameterDefinition;
-import hudson.model.ParametersAction;
-import hudson.model.ParametersDefinitionProperty;
-import hudson.model.Project;
-import hudson.model.Queue;
-import hudson.model.Queue.WaitingItem;
-import hudson.model.StringParameterValue;
-import hudson.model.queue.QueueTaskFuture;
-import hudson.model.queue.SubTask;
-import hudson.model.queue.SubTaskContributor;
-import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship.Type;
-import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
-import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
-import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.TriggerInheritance;
-import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationClass;
-import hudson.plugins.project_inheritance.projects.inheritance.InheritanceGovernor;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
-import hudson.plugins.project_inheritance.projects.rebuild.InheritanceRebuildAction;
-import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
-import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator;
-import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
-import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
-import hudson.plugins.project_inheritance.util.Helpers;
-import hudson.plugins.project_inheritance.util.Reflection;
-import hudson.plugins.project_inheritance.util.ThreadAssocStore;
-import hudson.plugins.project_inheritance.util.TimedBuffer;
-import hudson.plugins.project_inheritance.util.VersionedObjectStore;
-import hudson.plugins.project_inheritance.util.VersionedObjectStore.Version;
-import hudson.plugins.project_inheritance.util.VersionsNotification;
-import hudson.plugins.project_inheritance.util.svg.Graph;
-import hudson.plugins.project_inheritance.util.svg.SVGNode;
-import hudson.plugins.project_inheritance.util.svg.renderers.SVGTreeRenderer;
-import hudson.scm.NullSCM;
-import hudson.scm.SCM;
-import hudson.security.ACL;
-import hudson.security.Permission;
-import hudson.security.PermissionScope;
-import hudson.tasks.BuildStep;
-import hudson.tasks.BuildWrapper;
-import hudson.tasks.Builder;
-import hudson.tasks.Publisher;
-import hudson.tasks.LogRotator;
-import hudson.triggers.Trigger;
-import hudson.triggers.TriggerDescriptor;
-import hudson.util.DescribableList;
-import hudson.util.FormApply;
-import hudson.util.ListBoxModel;
-import hudson.widgets.Widget;
-import hudson.widgets.HistoryWidget;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
@@ -126,6 +47,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.Vector;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
@@ -133,6 +55,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
 
+import javax.annotation.CheckForNull;
 import javax.servlet.ServletException;
 import javax.xml.transform.Source;
 import javax.xml.transform.Transformer;
@@ -142,30 +65,118 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import jenkins.model.BuildDiscarder;
-import jenkins.model.Jenkins;
-import jenkins.scm.SCMCheckoutStrategy;
-import jenkins.util.TimeDuration;
-import junit.framework.TestCase;
-import net.sf.json.JSONArray;
-import net.sf.json.JSONException;
-import net.sf.json.JSONObject;
-
+import org.apache.commons.httpclient.HttpStatus;
 import org.apache.commons.lang.StringEscapeUtils;
-import org.kohsuke.stapler.HttpResponses;
+import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.WebMethod;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 import org.w3c.dom.Document;
 
+import com.google.common.base.Joiner;
 import com.sun.mail.util.BASE64EncoderStream;
 import com.thoughtworks.xstream.XStreamException;
 
 import difflib.DiffUtils;
 import difflib.Patch;
+import hudson.BulkChange;
+import hudson.Extension;
+import hudson.Functions;
+import hudson.Util;
+import hudson.model.AbstractProject;
+import hudson.model.Action;
+import hudson.model.Cause;
+import hudson.model.CauseAction;
+import hudson.model.DependencyGraph;
+import hudson.model.Descriptor;
+import hudson.model.Item;
+import hudson.model.ItemGroup;
+import hudson.model.Items;
+import hudson.model.Job;
+import hudson.model.JobProperty;
+import hudson.model.JobPropertyDescriptor;
+import hudson.model.Label;
+import hudson.model.ParameterDefinition;
+import hudson.model.ParameterValue;
+import hudson.model.ParametersAction;
+import hudson.model.ParametersDefinitionProperty;
+import hudson.model.Project;
+import hudson.model.Queue;
+import hudson.model.StringParameterValue;
+import hudson.model.TopLevelItem;
+import hudson.model.TransientProjectActionFactory;
+import hudson.model.Cause.RemoteCause;
+import hudson.model.Cause.UserIdCause;
+import hudson.model.Descriptor.FormException;
+import hudson.model.listeners.ItemListener;
+import hudson.model.queue.QueueTaskFuture;
+import hudson.model.queue.ScheduleResult;
+import hudson.model.queue.SubTask;
+import hudson.model.queue.SubTaskContributor;
+import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship.Type;
+import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationClass;
+import hudson.plugins.project_inheritance.projects.inheritance.InheritanceGovernor;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
+import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
+import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
+import hudson.plugins.project_inheritance.projects.rebuild.InheritanceRebuildAction;
+import hudson.plugins.project_inheritance.projects.rebuild.RebuildCause;
+import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ProjectReference;
+import hudson.plugins.project_inheritance.projects.references.Referencer;
+import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator;
+import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
+import hudson.plugins.project_inheritance.projects.versioning.VersionChangeListener;
+import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
+import hudson.plugins.project_inheritance.projects.view.BuildViewExtension;
+import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
+import hudson.plugins.project_inheritance.util.Helpers;
+import hudson.plugins.project_inheritance.util.MockItemGroup;
+import hudson.plugins.project_inheritance.util.ThreadAssocStore;
+import hudson.plugins.project_inheritance.util.TimedBuffer;
+import hudson.plugins.project_inheritance.util.VersionedObjectStore;
+import hudson.plugins.project_inheritance.util.VersionedObjectStore.Version;
+import hudson.plugins.project_inheritance.util.VersionsNotification;
+import hudson.plugins.project_inheritance.util.exceptions.HttpStatusException;
+import hudson.plugins.project_inheritance.util.svg.Graph;
+import hudson.plugins.project_inheritance.util.svg.SVGNode;
+import hudson.plugins.project_inheritance.util.svg.renderers.SVGTreeRenderer;
+import hudson.plugins.project_inheritance.widgets.ExtendedBuildHistoryWidget;
+import hudson.scm.NullSCM;
+import hudson.scm.SCM;
+import hudson.security.ACL;
+import hudson.security.Permission;
+import hudson.security.PermissionScope;
+import hudson.tasks.BuildStep;
+import hudson.tasks.BuildWrapper;
+import hudson.tasks.Builder;
+import hudson.tasks.LogRotator;
+import hudson.tasks.Publisher;
+import hudson.triggers.Trigger;
+import hudson.triggers.TriggerDescriptor;
+import hudson.util.DescribableList;
+import hudson.util.FormApply;
+import hudson.util.ListBoxModel;
+import hudson.widgets.BuildHistoryWidget;
+import hudson.widgets.HistoryWidget;
+import hudson.widgets.Widget;
+import jenkins.model.BuildDiscarder;
+import jenkins.model.Jenkins;
+import jenkins.scm.SCMCheckoutStrategy;
+import jenkins.util.TimeDuration;
+import net.sf.json.JSONArray;
+import net.sf.json.JSONException;
+import net.sf.json.JSONObject;
 
 /**
  * A simple base class for all inheritable jobs/projects.
@@ -183,7 +194,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			InheritanceProject.class.toString()
 	);
 	
-	private static ReentrantLock globalProjectLock = new ReentrantLock();
+	/**
+	 * This lock is used, to ensure that only one project at a time rebuilds the
+	 * graph.
+	 * <p>
+	 * Previously, this class had to use a lot of synchronized methods, which
+	 * made building graphs for two projects at a time dangerous. Nowadays,
+	 * with Jenkins > 1.625, the graphs could probably be built in parallel,
+	 * but it is only a minor performance penalty to build the graphs serially.
+	 */
+	private static ReentrantLock globalGraphBuildingLock = new ReentrantLock();
 	
 	// === NESTED CLASS AND ENUM DEFINITIONS ===
 	
@@ -195,6 +215,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		public enum Type {
 			PARENT, MATE, CHILD;
 			
+			@Override
 			public String toString() {
 				switch (this) {
 					case PARENT:
@@ -287,6 +308,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.order = order;
 		}
 		
+		@Override
 		public boolean equals(Object other) {
 			if (!(other instanceof ParameterDerivationDetails)) {
 				return false;
@@ -439,6 +461,17 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	protected String parameterizedWorkspace;
 	
+	protected Object readResolve() {
+		if (parentReferences == null) {
+			parentReferences =
+					new LinkedList<AbstractProjectReference>();
+		}
+		if (compatibleProjects == null) {
+			compatibleProjects =
+					new LinkedList<AbstractProjectReference>();
+		}
+		return this;
+	}
 	
 	
 	// === CONSTRUCTORS AND CONSTRUCTION HELPERS ===
@@ -454,23 +487,20 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//Generating a new IP causes a refresh of the project map and buffers
 		clearBuffers(null);
-		
-		//And we notify the PCE about the new project, if we're not transient
-		if (!isTransient) {
-			ProjectCreationEngine.instance.notifyProjectNew(this);
-		}
-		clearBuffers(null);
 	}
 
 	public int compareTo(Project o) {
-		return this.name.compareTo(o.getName());
+		return this.name.compareTo(o.getFullName());
 	}
 	
 	@Override
 	public String toString() {
-		return this.getName();
+		return this.getFullName();
 	}
 	
+	public String getIconFileName() {
+		return "/plugin/project-inheritance/images/64x64/run-build.png";
+	}
 	
 	@Override
 	protected Class<InheritanceBuild> getBuildClass() {
@@ -486,8 +516,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * all defined projects again and again.
 	 * 
 	 * The downside of this, is that you have to call
-	 * {@link #forceProjectsMapRefresh()} whenever a change to this mapping
-	 * might have occurred.
+	 * {@link #clearBuffers(InheritanceProject)} with null, whenever a change
+	 * to this mapping might have occurred.
 	 * 
 	 * @return a map of names to projects with guaranteed O(1) performance on
 	 * repeated read access. The first invocation might run in O(n), where n
@@ -497,6 +527,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * somewhat unreliable in certain situations and it might cause deadlocks
 	 * as it iterates over all items registered in Jenkins.
 	 */
+	@Deprecated
 	public static Map<String, InheritanceProject> getProjectsMap() {
 		Object obj = onChangeBuffer.get(null, "getProjectsMap");
 		if (obj != null && obj instanceof Map) {
@@ -505,24 +536,28 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		HashMap<String, InheritanceProject> pMap =
 				new HashMap<String, InheritanceProject>();
-		for (AbstractProject p : Hudson.getInstance().getAllItems(AbstractProject.class)) {
-			// We ensure that we may only inherit from actually inheritable,
-			// non-transient projects
-			if (p instanceof InheritanceProject) {
-				pMap.put(p.getName(), (InheritanceProject) p);
-			}
+		for (InheritanceProject p : Jenkins.getInstance().getAllItems(InheritanceProject.class)) {
+			if (p == null) { continue; }
+			pMap.put(p.getFullName(), p);
 		}
 		
 		onChangeBuffer.set(null, "getProjectsMap", pMap);
 		return pMap;
 	}
 	
-	public static InheritanceProject getProjectByName(String name) {
-		TopLevelItem item = Jenkins.getInstance().getItem(name);
-		if (item instanceof InheritanceProject) {
-			return (InheritanceProject) item;
-		}
-		return null;
+	/**
+	 * Simple wrapper around {@link Jenkins#getItemByFullName(String, Class)}.
+	 * <p>
+	 * The class is set to {@link InheritanceProject}, of course. 
+	 * 
+	 * @param name the <b>full</b> name of the item. May be null.
+	 * @return the project, if found, otherwise null.
+	 */
+	public static @CheckForNull InheritanceProject getProjectByName(String name) {
+		if (StringUtils.isEmpty(name)) { return null; }
+		return Jenkins.getInstance().getItemByFullName(
+				name, InheritanceProject.class
+		);
 	}
 	
 	public static void createBuffers() {
@@ -573,16 +608,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	// === PROJECT CONFIGURATION METHODS ===
 	
+	@Override
 	public void doConfigSubmit(StaplerRequest req,
 			StaplerResponse rsp) throws IOException, ServletException, FormException {
 		//Check if we're transient; in which case a submit does nothing
 		if (this.isTransient) {
 			return;
 		}
-		//FIXME: Possible deadlock due to the interaction between:
-		// - this.doConfigSubmit() --> unsynchronized
-		// - this.buildDependencyGraph() --> unsynchronized
-		// - this.getPublishersList() --> SYNCHRONIZED
 		
 		//Calling the super implementation; will ultimately call submit()
 		super.doConfigSubmit(req, rsp);
@@ -665,7 +697,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.creationClass = null;
 		}
 		
-		//LOCAL NUKE before versioning is saved 
+		//LOCAL NUKE before versioning is saved
 		clearBuffers(this);
 		
 		//After everything was altered, we generate a new version
@@ -675,11 +707,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.dumpConfigToNewVersion();
 		}
 		
-		//LOCAL NUKE after versioning is saved 
+		//LOCAL NUKE after versioning is saved
 		clearBuffers(this);
 		
-		//And at the very end, we notify the PCE about our changes
-		ProjectCreationEngine.instance.notifyProjectChange(this);
+		
+		//Note: ItemListener.onChanged() is called by caller (usually doConfigSubmit())
 	}
 	
 	@Override
@@ -688,7 +720,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		if (this.getIsTransient()) {
 			String msg = String.format(
 					"Updating %s by XML upload is not allowed: Transient project",
-					this.getName()
+					this.getFullName()
 			);
 			log.warning(msg);
 			throw new IOException(msg);
@@ -702,8 +734,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		this.dumpConfigToNewVersion("New version uploaded as XML via API/CLI");
 		clearBuffers(this);
 		
-		//Notify the PCE about our changes
-		ProjectCreationEngine.instance.notifyProjectChange(this);
+		//Notify that this project may have changed
+		ItemListener.fireOnUpdated(this);
 	}
 	
 	@RequirePOST
@@ -791,11 +823,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.dumpConfigToNewVersion();
 		}
 		
-		//LOCAL NUKE after versioning is saved 
+		//LOCAL NUKE after versioning is saved
 		clearBuffers(this);
 		
-		//And at the very end, we notify the PCE about our changes
-		ProjectCreationEngine.instance.notifyProjectChange(this);
+		//Notify that this project may have changed
+		ItemListener.fireOnUpdated(this);
 	}
 	
 	
@@ -908,11 +940,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public void setVarianceLabel(String variance) {
-		if (this.isTransient) {
-			this.variance =
-					(variance == null || variance.isEmpty())
-					? null : variance;
+		if (this.isTransient && StringUtils.isNotBlank(variance)) {
+			this.variance = variance.trim();
 		}
+	}
+	
+	public void setAssignedLabel(Label l) throws IOException {
+		super.setAssignedLabel(l);
+		//After a label change, the caches need to be invalidated
+		clearBuffers(this);
 	}
 	
 	public void setCreationClass(String creationClass) {
@@ -931,20 +967,27 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * The triggering method is
 	 * {@link #doConfigSubmit(StaplerRequest, StaplerResponse)}.
 	 * <p>
-	 * Unfortunately, it is wholly unsynchronized and can thus lead to a bad
-	 * case of deadlock if two rebuilds happen at the same time, explore the
-	 * inheritance tree and call a synchronized function.
+	 * Before most methods in the super-class were de-synchronized, this
+	 * method was dangerous, because two separate projects would trigger a
+	 * graph rebuild and get stuck on each other.
 	 * <p>
-	 * The most likely culprit will be {@link #getPublishersList()}.
+	 * As such, a global lock for all projects was added here. Since most
+	 * methods are de-synchronized now, this method ought to be re-entrant save.
+	 * <p>
+	 * On the other hand, the global locking does not cause much loss of
+	 * performance, since graph rebuilding only happens on saving of jobs.
+	 * <p>
+	 * Therefore, for the moment the global lock is still fine.
 	 */
+	@Override
 	protected void buildDependencyGraph(DependencyGraph graph) {
 		//Fetch the global lock of all projects
 		//TODO: Use an interruptible lock here?
-		globalProjectLock.lock();
+		globalGraphBuildingLock.lock();
 		try {
 			super.buildDependencyGraph(graph);
 		} finally {
-			globalProjectLock.unlock();
+			globalGraphBuildingLock.unlock();
 		}
 	}
 	
@@ -997,21 +1040,51 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		clearBuffers(null);
 	}
 	
+	public void onCopiedFrom(Item src) {
+		//Do whatever the super-classes need to do
+		super.onCopiedFrom(src);
+		
+		//Escape if someone abused this method
+		if (!(src instanceof InheritanceProject)) { return; }
+		InheritanceProject ip = (InheritanceProject) src;
+		
+		//Make sure that the new properties mirror the current stable version
+		// -- not the one that was created last.
+		if (ip.getLatestVersion() == ip.getStableVersion()) {
+			//Nothing to do, the two versions are identical
+			return;
+		}
+		
+		//Copy the versioned field from the other job's currently selected (stable) version
+		try {
+			this.copyVersionedSettingsFrom(ip);
+		} catch (IOException ex) {
+			log.severe(String.format(
+					"Job '%s' could not be copied cleanly. Reason: %s",
+					this.getFullName(),
+					ex.getMessage()
+			));
+		}
+	};
+	
 	/**
 	 * This method tells this class and all its superclass's which directory
 	 * to use for storing stuff.
-	 * 
+	 * <p>
 	 * For regular jobs this is the default Jenkins path for jobs ([root]/jobs).
 	 * For transient jobs; this is redirected to ([root]/transient_jobs) to
 	 * make them more invisible to Jenkins.
+	 * <p>
+	 * Note: Dynamically created project always exist in the root namespace.
 	 */
+	@Override
 	public File getRootDir() {
 		if (!this.isTransient) {
 			return super.getRootDir();
 		}
 		File standardRoot = this.getParent().getRootDir();
 		//Otherwise, we alter the last path segment
-		String pathSafeJobName = this.getName().replaceAll("[/\\\\]", "_");
+		String pathSafeJobName = this.getFullName().replaceAll("[/\\\\]", "_");
 		File newRoot = new File(
 				standardRoot.getAbsolutePath() +
 				File.separator + "transient_jobs" + File.separator +
@@ -1032,13 +1105,173 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public File getBuildDir() {
 		return super.getBuildDir();
+	}
+	
+	/**
+	 * This method sets all the versioned fields in the local job to the
+	 * values of the other job.
+	 * <p>
+	 * It uses the currently stored versioning information to select the right
+	 * version of the source.
+	 * <p>
+	 * This field is private, because there is really only two internal methods
+	 * that should make use of this:
+	 * <ul>
+	 * 	<li>{@link #onLoad(ItemGroup, String)}.</li>
+	 * 	<li>{@link #doConfigDotXml(StaplerRequest, StaplerResponse)}</li>
+	 * </ul>
+	 * <p>
+	 * Note: One field can't be altered, namely the "actions" field. That one
+	 * is hidden by the parent class and can't be overwritten easily.
+	 * 
+	 * @param src the job to copy settings from.
+	 * @throws IOException if the copying failed -- may leave the current
+	 * 		project in an undefined state of some fields having been copied and
+	 * 		otherse not.
+	 */
+	private void copyVersionedSettingsFrom(InheritanceProject src) throws IOException {
+		if (src == null) { return; }
+		
+		//Parameterized workspace
+		this.parameterizedWorkspace = src.getParameterizedWorkspace(IMode.LOCAL_ONLY);
+		//Custom workspace
+		this.setCustomWorkspace(src.getCustomWorkspace());
+		//Quiet period
+		this.setQuietPeriod(src.getQuietPeriodObject());
+		//SCM Checkout Retry
+		this.setScmCheckoutStrategy(src.getScmCheckoutStrategy(IMode.LOCAL_ONLY));
+		
+		//Parents
+		this.parentReferences.clear();
+		this.parentReferences.addAll(src.getParentReferences()); //Always LOCAL_ONLY
+		
+		//Properties
+		this.properties.replaceBy(src.getAllProperties(IMode.LOCAL_ONLY));
+		
+		//Publishers
+		this.getRawPublishersList().replaceBy(src.getPublishersList(IMode.LOCAL_ONLY));
+		
+		//Log Rotator
+		this.setBuildDiscarder(src.getBuildDiscarder(IMode.LOCAL_ONLY));
+		
+		// Block Build
+		this.blockBuildWhenDownstreamBuilding = src.blockBuildWhenDownstreamBuilding(IMode.LOCAL_ONLY);
+		this.blockBuildWhenUpstreamBuilding = src.blockBuildWhenUpstreamBuilding(IMode.LOCAL_ONLY);
+		
+		//Build wrappers
+		this.getRawBuildWrappersList().replaceBy(src.getBuildWrappersList(IMode.LOCAL_ONLY));
+		
+		//Compatible projects
+		this.compatibleProjects.clear();
+		this.compatibleProjects.addAll(src.getCompatibleProjects()); //Always LOCAL_ONLY
+		
+		//Build steps
+		this.getRawBuildersList().replaceBy(src.getBuildersList(IMode.LOCAL_ONLY));
+		
+		//SCM
+		this.setScm(src.getScm(IMode.LOCAL_ONLY));
 	}
 	
 	
 	
 	// === URL-BOUND ACTION METHODS ===
+	
+	/**
+	 * Accepts <tt>config.xml</tt> submission, as well as serve it.
+	 */
+	@Override
+	@WebMethod(name = "config.xml")
+	public void doConfigDotXml(StaplerRequest req, StaplerResponse rsp)
+			throws IOException {
+		/* Job reconfiguration is handled by the superclass, as there is no
+		 * need to involve versioning/inheritance there 
+		 */
+		if (req.getMethod().equals("POST")) {
+			super.doConfigDotXml(req, rsp);
+		}
+		if (!req.getMethod().equals("GET")) {
+			//Huh? Only GET/POST make sense
+			rsp.sendError(SC_BAD_REQUEST);
+		}
+		
+		//Check that the calling user is allowed to read the config
+		checkPermission(EXTENDED_READ);
+		
+		//Fetch the user-selected version (defaults to stable version)
+		//Note: Transient projects have no config.xml and can't use super.dCDX()
+		if (!this.isTransient) {
+			Long latestVersion = this.getLatestVersion();
+			Long selectedVersion = VersionHandler.getVersion(this);
+			if (selectedVersion == null || selectedVersion == latestVersion) {
+				//The super-method can handle these cases just fine
+				super.doConfigDotXml(req, rsp);
+				return;
+			}
+		}
+		
+		try {
+			// Tell the client browser to expect XML
+			rsp.setContentType("application/xml");
+			// Send the modified XML to the user
+			this.writeStableConfigDotXml(rsp.getOutputStream());
+		} catch (HttpStatusException ex) {
+			rsp.sendError(ex.status, ex.getMessage());
+			return;
+		}
+	}
+	
+	protected void writeStableConfigDotXml(OutputStream out)
+			throws IOException, HttpStatusException {
+		if (out == null) { return; }
+		//Get the XML for the current project, as it'd be written to disk
+		String selfXml = Items.XSTREAM2.toXML(this);
+		//Then, loading it back, to get a modifiable copy
+		Object obj = Items.XSTREAM2.fromXML(selfXml);
+		if (!(obj instanceof InheritanceProject)) {
+			throw new HttpStatusException(
+					HttpStatus.SC_INTERNAL_SERVER_ERROR,
+					"Error, could not (de-)serialize project"
+			);
+		}
+		
+		//Casting the project suitably, to access the needed fields
+		InheritanceProject mod = (InheritanceProject) obj;
+		
+		/* Some alterations to the project wish to save it, for this to work, we
+		 * need an ephemeral ItemGroup that serves as the container that can be
+		 * cleaned, once it is not needed anymore
+		 */
+		MockItemGroup<Job<?,?>> mig = new MockItemGroup<>();
+		
+		try {
+			//Giving the project a custom name and temporary item-group/directory
+			UUID uuid = UUID.randomUUID();
+			mod.onLoad(mig, uuid.toString());
+			
+			//Loaded project start without a VOB, so a blank one is created
+			mod.versionStore = new VersionedObjectStore();
+			
+			//Replacing all versioned fields in the copy with the currently selected versions
+			//NOTE: Actions can't be modified, since the parent class hides the field :(
+			try {
+				mod.copyVersionedSettingsFrom(this);
+			} catch (IOException ex) {
+				throw new HttpStatusException(
+						HttpStatus.SC_INTERNAL_SERVER_ERROR,
+						"Failed to produce XML for stable version", ex
+				);
+			}
+			
+			// Turning this modified project into an UTF8 XML and sending it to the client
+			Items.XSTREAM2.toXMLUTF8(mod, out);
+		} finally {
+			//Purge the temporary item group with fire
+			mig.clean();
+		}
+	}
 	
 	/**
 	 * This method displays the configuration as a complete XML dump.
@@ -1203,7 +1436,18 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				return;
 			}
 		}
-		//If we reach this spot, we can safely delete the project
+		
+		/* If we reach this spot, we can safely delete the project
+		 * 
+		 * NOTE: This used to be a deadlock-trap, because #getPublishersList()
+		 * used to be synchronized but could be called while a Queue lock was
+		 * held.
+		 * This collided with this function acquiring the object monitor first,
+		 * before locking the Queue.
+		 * 
+		 * Between Jenkins 1.509 and 1.625, the requirement for synchronized
+		 * methods in the Project class has been dropped, removing this deadlock. 
+		 */
 		super.doDoDelete(req, rsp);
 		
 		//Then, we refresh the project map and buffers
@@ -1289,8 +1533,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * @see VersionedObjectStore#getUserNotificationFor(Long)
 	 */
 	public VersionsNotification getCurrentVersionNotification() {
-		return versionStore.getUserNotificationFor(getUserDesiredVersion());
+		return versionStore.getUserNotificationFor(
+				VersionHandler.getVersion(this)
+		);
 	}
+	
 	
 	// === DIFF COMPUTATION METHODS ===
 	
@@ -1386,6 +1633,24 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	// === BUILD STARTING METHODS ===
 	
 	/**
+	 * This method may be used by projects extending from this class, to
+	 * modify the build, shortly before it is passed over to scheduling.
+	 */
+	protected void onBuild(StaplerRequest req, StaplerResponse rsp)
+			throws IOException, ServletException {
+		//Does nothing
+	}
+	
+	/**
+	 * This method may be used by projects extending from this class, to
+	 * modify the build, shortly before it is actually submitted into the Queue.
+	 */
+	protected void onScheduleBuild2(
+			int quietPeriod, Cause c, Collection<? extends Action> actions) {
+		//Does nothing
+	}
+	
+	/**
 	 * Executes a build started from the GUI.
 	 * <p>
 	 * Queries for parameters on an HTTP/GET, tries to decode submitted
@@ -1411,112 +1676,146 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	@Override
 	public void doBuild(StaplerRequest req, StaplerResponse rsp, @QueryParameter TimeDuration delay)
 			throws IOException, ServletException {
-		//Purge whatever's stored in the thread from a previous run
-		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
+		/* Purge the PERMANENT versioning information that might be left over
+		 * from a previous run. The transient information (from the Request) is
+		 * kept.
+		 */
+		VersionHandler.clearVersionsPartial();
 		
+		//Initialize versioning for active request from request / defaults
+		VersionHandler.initVersions(this);
+		try {
+			this.doBuildInternal(req, rsp, delay);
+		} finally {
+			// Clean out ALL versioning data
+			VersionHandler.clearVersions();
+		}
+	}
+	
+	/**
+	 * This is called by {@link #doBuild(StaplerRequest, StaplerResponse, TimeDuration)}
+	 * and implements the actual build scheduling and parameter assignment magic.
+	 * <p>
+	 * Do note that it expects, that all relevant versioning information has
+	 * already been registered in the current request and / or thread via
+	 * {@link VersionHandler#initVersions(AbstractProject)}.
+	 * 
+	 * @param req the request the user submitted.
+	 * @param rsp the response to allow information to be passed to the user
+	 * @param delay the build delay
+	 * 
+	 * @throws IOException
+	 * @throws ServletException
+	 */
+	private void doBuildInternal(StaplerRequest req, StaplerResponse rsp, @QueryParameter TimeDuration delay)
+			throws IOException, ServletException {
 		//The delay parameter might be null in case somebody used a custom URL
 		if (delay == null) {
 			delay = new TimeDuration(0);
 		}
 		
-		//Checking if we can fetch a fully defined versioning parameter
-		if (req.getMethod().equals("POST")) {
-			//Checking if parameters are set -- non-parameterized builds
-			//will throw a nasty exception on req.getSubmittedForm; since no
-			//form will have been submitted.
-			Map pMap = req.getParameterMap();
-			String cType = req.getContentType();
-			boolean hasFormContent = (
-					(pMap != null && pMap.containsKey("json")) ||
-					(cType != null && cType.startsWith("multipart/"))
-			);
-			if (hasFormContent) {
-				//Retrieving the submitted form
-				JSONObject jForm = req.getSubmittedForm();
-				
-				//Trying to retrieve a versioning field
-				try {
-					String jVerMap = jForm.getString("versionMap");
-					if (jVerMap != null && !jVerMap.isEmpty()) {
-						Map<String, Long> vMap = 
-								InheritanceParametersDefinitionProperty.
-								decodeVersioningMap(jVerMap);
-						if (vMap != null && !vMap.isEmpty()) {
-							InheritanceProject.setVersioningMap(vMap);
-						}
-					}
-				} catch (JSONException ex) {
-					//No version map set as a parameter; will default to stable versions
-				}
-			}
-		}
+		//Call the superclass to modify the job further
+		this.onBuild(req, rsp);
 		
-		/* We can't call the super-function, as it does not allow us to
+		/* === START COPY OF SUPER FUNCTION ===
+		 * 
+		 * We can't call the super-function, as it does not allow us to
 		 * add a custom action to rescue the versioning over to the start of
 		 * the actual build.
-		*/
-		//super.doBuild(req, rsp, delay);
-		
-		
-		/* === START COPY OF SUPER FUNCTION ===  */
+		 */
 		
 		//TODO: Check if this ACL check actually does the same as the commented
 		//instruction below
 		ACL acl = Jenkins.getInstance().getACL();
 		acl.checkPermission(BUILD);
 		//BuildAuthorizationToken.checkPermission(this, getAuthToken(), req, rsp);
-
+		
 		// if a build is parameterized, let that take over
 		ParametersDefinitionProperty pp = getProperty(ParametersDefinitionProperty.class);
 		if (pp != null) {
-			pp._doBuild(req,rsp);
+			pp._doBuild(req, rsp, delay);
 			return;
 		}
-
+		
+		// If this point is reached; the build is not parameterised
+		
 		if (!isBuildable()) {
-			throw HttpResponses.error(
-					SC_INTERNAL_SERVER_ERROR,new IOException(getFullName()+" is not buildable")
+			//Super implementation throws HTTP response; but we do not need the stacktrace
+			rsp.sendError(
+					SC_INTERNAL_SERVER_ERROR,
+					String.format("%s is not buildable", this.getFullName())
 			);
+			return;
 		}
 		
-		Jenkins.getInstance().getQueue().schedule(
-				this, delay.getTime(), this.getBuildCauseOverride(req),
-				new VersioningAction(this.getAllVersionsFromCurrentState())
+		// Invoke the onBuild actions contributed by BuildViewExtension
+		List<Action> actions = BuildViewExtension.callAll(this, req);
+		//Add the versioning Action, with the CURRENTLY active versions
+		actions.add(new VersioningAction(VersionHandler.getVersions()));
+		//Add the cause action
+		actions.add(this.getBuildCauseOverride(req));
+		
+		Jenkins.getInstance().getQueue().schedule2(
+				this, delay.getTime(), actions
 		);
 		
 		//Send the user back, except if "rebuildNoRedirect" is set
 		if (req.getAttribute("rebuildNoRedirect") == null) {
 			rsp.forwardToPreviousPage(req);
 		}
-		/* === END COPY OF SUPER FUNCTION ===  */
+		// === END COPY OF SUPER FUNCTION ===
 	}
 	
+	/**
+	 * This method is used, when the user wishes to build a very specific
+	 * version of this project or its parents.
+	 * <p>
+	 * This method comes in three stages:
+	 * <ol>
+	 * <li>The first that displays the current versions, and allows the user to
+	 * select the correct ones.</li>
+	 * <li>The second, that parses the version map from JSON and refreshes the page</li>
+	 * <li>The third, where the user actually wants to start the build.</li>
+	 * </ol>
+	 * Once the third phase is reached; the versioning information is encoded
+	 * in an URL parameter and passed to the normal build page and handled
+	 * via {@link #doBuild(StaplerRequest, StaplerResponse, TimeDuration)}
+	 * 
+	 * @param req the incoming request from the user.
+	 * @param rsp the response that shall be sent to the user
+	 * 
+	 * @throws IOException
+	 * @throws ServletException
+	 * @throws FormException
+	 */
 	public void doBuildSpecificVersion(StaplerRequest req, StaplerResponse rsp)
-			throws IOException, ServletException {
+			throws IOException, ServletException, FormException {
 		//Purge whatever's stored in the thread from a previous run
 		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
 		
 		//If we did not submit a form; just display the initial data
 		if(!req.getMethod().equals("POST")) {
-			req.getView(this, "buildSpecificVersion.jelly").forward(req,rsp);
+			req.getView(this, "buildSpecificVersion").forward(req,rsp);
 			return;
 		}
 		
-		Map<String, Long> verMap = InheritanceRebuildAction.decodeVersionMap(
-				req
-		);
-		
-		String verMapStr = 
-				InheritanceParametersDefinitionProperty
-				.encodeVersioningMap(verMap);
-		
-		if (verMapStr == null || verMapStr.isEmpty()) {
-			//TODO: Redirect to error page
-			rsp.sendRedirect(".");
+		//Convert the request's JSON into a proper Map
+		Map<String, Long> verMap = VersionHandler.getFromFormRequest(req);
+		if (verMap == null) {
+			throw new FormException(
+					"Could not decode versioning table",
+					VersionHandler.VERSIONING_KEY
+			);
 		}
 		
+		//Now, filter the map, to allow an URL that is as short as possible
+		this.filterVersionMap(verMap);
+		
+		//And turn the Map into an URL-safe string
+		String verMapStr = VersionHandler.encodeUrlParameter(verMap);
+		
 		//TODO: Think about passing the verMapStr compressed
-		String verUrlParm = "versions=\"" + verMapStr + "\"";
+		String verUrlParm = VersionHandler.getFullUrlParameter(verMapStr);
 		
 		//Checking if the user wants to build or refresh the page
 		if (req.hasParameter("doRefresh")) {
@@ -1529,13 +1828,68 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	/**
-	 * {@inheritDoc}
+	 * This method simplifies the given versioning map, by removing all versions
+	 * that superfluous.
+	 * <p>
+	 * Superfluous versions are those:
+	 * <ul>
+	 * 	<li>which are the last stable version of a project,</li>
+	 *  <li>the last version of a project without stable ones or</li>
+	 * 	<li>the only version of a project.</li>
+	 * </ul>
+	 * All three cases lead to these versions to be the default, and thus
+	 * unnecessary to be mentioned in GET/POST requests. This can substantially
+	 * lower the length of these URL requests.
+	 * 
+	 * @param verMap the map to filter. Elements are removed in place.
 	 */
+	protected void filterVersionMap(Map<String, Long> verMap) {
+		if (verMap == null) { return; }
+		
+		Set<String> removals = new HashSet<>();
+		for (String pName : verMap.keySet()) {
+			InheritanceProject ip = 
+					Jenkins
+					.getInstance()
+					.getItemByFullName(pName, InheritanceProject.class);
+			
+			//Check for existence of the project
+			if (ip == null) {
+				//Not a known IP -- so no need to include it
+				removals.add(pName);
+				continue;
+			}
+			
+			//Check if there's only one version at all
+			if (ip.getVersionedObjectStore().getAllVersions().isEmpty()) {
+				removals.add(pName);
+				continue;
+			}
+			
+			//Check if identical to last stable version (or last, if no stables)
+			Long selectedVersion = verMap.get(pName);
+			if (selectedVersion == null || selectedVersion < 1) {
+				removals.add(pName);
+				continue;
+			}
+			Long stableVersion = ip.getStableVersion();
+			if (stableVersion != null && stableVersion.equals(selectedVersion)) {
+				//Same as latest stable or latest version, if no stables
+				removals.add(pName);
+				continue;
+			}
+		}
+		if (!removals.isEmpty()) {
+			verMap.keySet().removeAll(removals);
+		}
+	}
+	
+	/**
+	 * See: {@link #doBuildWithParameters(StaplerRequest, StaplerResponse, TimeDuration)}
+	 */
+	@Override
 	public void doBuildWithParameters(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException {
-		//Purge whatever's stored in the thread from a previous run
-		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
-		
 		//TODO: The below function did not have the TimeDuration param previously
 		TimeDuration td = new TimeDuration(0);
 		super.doBuildWithParameters(req, rsp, td);
@@ -1551,30 +1905,37 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * 
 	 * @see InheritableStringParameterDefinition#getDefaultParameterValue()
 	 */
+	@Override
 	public QueueTaskFuture<InheritanceBuild> scheduleBuild2(
 			int quietPeriod, Cause c, Collection<? extends Action> actions) {
-		//Purge whatever's stored in the thread from a previous run
-		//ThreadAssocStore.getInstance().clear(Thread.currentThread());
+		//Purge whatever's stored in this thread from a previous run
+		VersionHandler.clearVersions();
 		
-		//Checking if a version-setting action is present,
-		boolean hasVersioningAction = false;
+		//Creating new list of actions, as we replace and merge them
+		List<Action> oActions = new LinkedList<Action>();
+		List<VersioningAction> vActions = new LinkedList<VersioningAction>();
+		List<ParametersAction> pActions = new LinkedList<ParametersAction>();
+		
+		//Removing versioning and parameterActions from the input actions, to
+		//treat them separately and unify them as one action each for the build
 		for (Action a : actions) {
 			if (a instanceof VersioningAction) {
-				//Storing that version-map in the thread
-				setVersioningMap(((VersioningAction)a).versionMap);
-				hasVersioningAction = true;
-				break;
+				vActions.add((VersioningAction) a);
+			} else if (a instanceof ParametersAction) {
+				pActions.add((ParametersAction) a);
+			} else {
+				oActions.add(a);
 			}
 		}
 		
-		//Checking if we have a parameter set which overrides everything 
-		Map<String, Long> vMap = new HashMap<String, Long>(); 
-		for (Action a : actions) {
-			if (!(a instanceof ParametersAction)) {
-				continue;
-			}
-			
-			ParametersAction pa = (ParametersAction) a;
+		//Seeding the environment with versions passed into this build (if any)
+		for (VersioningAction va : vActions) {
+			//Storing that version-map in the thread
+			VersionHandler.addVersions(va.versionMap);
+		}
+		
+		//Appending parameter-based versioning overrides
+		for (ParametersAction pa : pActions) {
 			ParameterValue pv = pa.getParameter(
 					InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME
 			);
@@ -1582,59 +1943,92 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				continue;
 			}
 			StringParameterValue spv = (StringParameterValue) pv;
-			vMap = InheritanceParametersDefinitionProperty
-					.decodeVersioningMap(spv.value);
+			Map<String, Long> vMap = VersionHandler.decodeUrlParameter(spv.value);
 			if (vMap == null) { continue; }
 			
 			//The decoded map is registered in the thread
-			setVersioningMap(vMap);
+			VersionHandler.addVersions(vMap);
 		}
 		
-		//If we need to create a new versioning action; we do this now
-		//Do note that this will retrieve versions previously stored in the thread!
-		//There is a special use case where the versions can be passed through the
-		//InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME so 
-		//we need to create a Versioning Action based on that in this case
-		if (!hasVersioningAction) {
-			LinkedList<Action> newActions = new LinkedList<Action>(actions);
-			if (!vMap.isEmpty()) {
-				newActions.add(
-						new VersioningAction(vMap)
-				);
-			} else {
-				newActions.add(
-						new VersioningAction(this.getAllVersionsFromCurrentState())
-				);
-			}
-			actions = newActions;
-		}
+		/* Create a new versioning action, with the now full set of versions
+		 * retrieved either form:
+		 *   - The URL request content
+		 *   - The special versioning assignment parameter
+		 *   - A VersioningAction passed into this build
+		 *   - Or, if all else fails, the defaults of the current project
+		 * 
+		 * Note that this also adds projects back in, which only had 1 version
+		 * to select from, since the build/rebuild UI will ignore those.
+		 */
+		Map<String, Long> vMap = VersionHandler.initVersions(this);
+		oActions.add(new VersioningAction(vMap));
+		
 		
 		//The buildable check must be done after versioning assignment
 		if (!isBuildable()) { return null; }
-
-		List<Action> queueActions = new ArrayList<Action>(actions);
-		if (isParameterized() && Util.filter(queueActions, ParametersAction.class).isEmpty()) {
-			List<ParameterValue> pvLst = new ArrayList<ParameterValue>();
+		
+		//Check if parameterisation is needed
+		if (isParameterized()) {
+			/* No matter who called us with what set of parameters, it
+			 * absolutely MUST be ensured that all inherited parameters are
+			 * present.
+			 * This is because some plugins do not fetch the parameters of the
+			 * project at all, or  in a way, which can't be detected as
+			 * needing parameter inheritance (i.e. outside of builds, the queue,
+			 * certain URLs, and so on;
+			 * see: InheritanceGovernor.inheritanceLookupRequired())
+			 * 
+			 * These starts would produce an incomplete set of parameters.
+			 * This incomplete list needs to be filled up.
+			 */
+			Map<String, ParameterValue> pvMap = new HashMap<>();
+			
+			//Fill in parameters from the user -- if any
+			for (ParametersAction pa : pActions) {
+				for (ParameterValue pv : pa.getParameters()) {
+					if (pv == null || pv.getName() == null) { continue; }
+					pvMap.put(pv.getName(), pv);
+				}
+			}
+			
+			//Fill in defaults from the project that have not yet been set
 			for (ParameterDefinition def : this.getParameters()) {
+				String pName = def.getName();
+				//Ignore already assigned parameters
+				if (pvMap.containsKey(pName)) { continue; }
+				
+				ParameterValue pv;
 				if (def instanceof InheritableStringParameterDefinition) {
 					InheritableStringParameterDefinition ispd =
 							(InheritableStringParameterDefinition) def;
-					pvLst.add(ispd.createValue(ispd.getDefaultValue()));
+					pv = ispd.createValue(ispd.getDefaultValue());
 				} else {
-					pvLst.add(def.getDefaultParameterValue());
+					pv = def.getDefaultParameterValue();
 				}
+				pvMap.put(pName, pv);
 			}
-			queueActions.add(new ParametersAction(pvLst));
+			
+			List<ParameterValue> pvLst = new LinkedList<>(pvMap.values());
+			oActions.add(new ParametersAction(pvLst));
+		} else {
+			//Project not parameterized, but parameters given -- just pass along
+			oActions.addAll(pActions);
 		}
 		
+		//Add a Cause Action, if a cause was given
 		if (c != null) {
-			queueActions.add(new CauseAction(c));
+			oActions.add(new CauseAction(c));
 		}
 		
-		WaitingItem i = Jenkins.getInstance().getQueue().schedule(
-				this, quietPeriod, queueActions
+		this.onScheduleBuild2(quietPeriod, c, oActions);
+		
+		ScheduleResult sched = Jenkins.getInstance().getQueue().schedule2(
+				this, quietPeriod, oActions
 		);
-		return (i == null) ? null : (QueueTaskFuture)i.getFuture();
+		if (sched == null || sched.isRefused()) {
+			return null;
+		}
+		return (QueueTaskFuture) sched.getItem().getFuture();
 	}
 	
 	/**
@@ -1653,7 +2047,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 */
 	@SuppressWarnings("deprecation")
 	public CauseAction getBuildCauseOverride(StaplerRequest req) {
-		Cause cause;
+		Cause cause = null;
 		if (getAuthToken() != null &&
 				getAuthToken().getToken() != null &&
 				req.getParameter("token") != null) {
@@ -1661,7 +2055,17 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			String causeText = req.getParameter("cause");
 			cause = new RemoteCause(req.getRemoteAddr(), causeText);
 		} else {
-			cause = new UserIdCause();
+			Object rebuild = req.getAttribute("rebuildCause");
+			if (rebuild != null && rebuild instanceof InheritanceRebuildAction) {
+				InheritanceRebuildAction inheritanceRebuildAction = (InheritanceRebuildAction) rebuild;
+				if (inheritanceRebuildAction.getBuild() != null) {
+					cause =
+							new RebuildCause(inheritanceRebuildAction.getBuild().number, 
+									inheritanceRebuildAction.getBuild().getUrl());
+				}
+			} else {
+				cause = new UserIdCause();
+			}
 		}
 		return new CauseAction(cause);
 	}
@@ -1748,7 +2152,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				//Fetching version
 				Version v = this.versionStore.getVersion(e.id);
 				if (v == null) {
-					log.warning("No such version " + e.id + " for " + this.getName());
+					log.warning("No such version " + e.id + " for " + this.getFullName());
 					continue;
 				}
 				v.setStability(e.stable);
@@ -1758,12 +2162,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			//Saving the altered versions to disk
 			this.versionStore.save(this.getVersionFile());
 			
+			for (VersionChangeListener vcl : VersionChangeListener.all()) {
+				vcl.onUpdated(this);
+			}
+			
 			//The selection of the stable version might have changed. So we need
 			//to clear the local buffers
 			clearBuffers(this);
 			
-			//Finally, triggering generation of new projects
-			ProjectCreationEngine.instance.notifyProjectChange(this);
+			//Fire the onChanged events, since switching versions may change fields
+			ItemListener.fireOnUpdated(this);
 			
 			//At the end, we mark the forms as successfully submitted
 			FormApply.success(".").generateResponse(req, rsp, null);
@@ -1793,19 +2201,19 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			vos = VersionedObjectStore.load(vFile);
 		} catch (IOException ex) {
 			log.warning(
-					"No versions loaded for " + this.getName() + ". " +
+					"No versions loaded for " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
 		} catch (IllegalArgumentException ex) {
 			log.warning(
-					"No versions loaded for " + this.getName() + ". " +
+					"No versions loaded for " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
 		} catch (XStreamException ex) {
 			log.warning(
-					"Could not load Version for: " + this.getName() + ". " +
+					"Could not load Version for: " + this.getFullName() + ". " +
 					ex.getLocalizedMessage()
 			);
 			return new VersionedObjectStore();
@@ -1840,7 +2248,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	
 	/**
-	 * Wrapper around {@link #dumpConfigToNewVersion(String)} with an empty message
+	 * Wrapper around {@link #dumpConfigToNewVersion(String)} with an empty
+	 * message.
 	 */
 	protected synchronized void dumpConfigToNewVersion() {
 		this.dumpConfigToNewVersion(null);
@@ -1852,10 +2261,17 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * Do note that versioning is stored separately from inheritance, but
 	 * evaluated together. This means that, over time, parentage may change as
-	 * well as compatibility markings. These <b>all</b> need to be saved 
+	 * well as compatibility markings. These <b>all</b> need to be saved
 	 * indefinitely.
+	 * <p>
+	 * To save custom fields in subclasses, override
+	 * {@link #dumpConfigToVersion(Version)}.
+	 * <p>
+	 * This method is package-private, to allow test cases to generate new
+	 * versions for test purposes.<br/>
+	 * External non-test code should not have any need to call this.
 	 */
-	protected synchronized void dumpConfigToNewVersion(String message) {
+	/*package*/ synchronized void dumpConfigToNewVersion(String message) {
 		//Sanity checks
 		if (this.isTransient) { return; }
 		if (this.versionStore == null) {
@@ -1885,6 +2301,37 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			v.setDescription(message);
 		}
 		
+		this.dumpConfigToVersion(v);
+
+		
+		//Now, we check if this version is the same as the last one
+		Version prev = this.versionStore.getVersion(v.id - 1);
+		if (prev != null && this.versionStore.areIdentical(prev, v)) {
+			//Drop the version, if possible
+			this.versionStore.undoVersion(v);
+		}
+		//Save the file, to persist our changes
+		try {
+			this.versionStore.save(this.getVersionFile());
+		} catch (IOException ex) {
+			log.severe(String.format(
+					"Failed to save version to: %s; Reason = %s",
+					this.getVersionFile(), ex.getMessage()
+			));
+		}
+	}
+	
+	/**
+	 * This method implements the actual association of a set of objects with
+	 * a given version.
+	 * <p>
+	 * Subclasses should override this method, call the super() implementation
+	 * and then associate their own fields with that version by calling
+	 * {@link VersionedObjectStore#setObjectFor(Version, String, Object)}.
+	 * 
+	 * @param v the version to archive settings for. Must never be null.
+	 */
+	protected void dumpConfigToVersion(Version v) {
 		//Storing the list of parents
 		this.versionStore.setObjectFor(
 				v, "parentReferences",
@@ -1946,290 +2393,30 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		this.versionStore.setObjectFor(v, "logRotator", super.getBuildDiscarder());
 		this.versionStore.setObjectFor(v, "customWorkspace", super.getCustomWorkspace());
 		this.versionStore.setObjectFor(v, "parameterizedWorkspace", this.getRawParameterizedWorkspace());
-
-		
-		//Now, we check if this version is the same as the last one
-		Version prev = this.versionStore.getVersion(v.id - 1);
-		if (prev != null && this.versionStore.areIdentical(prev, v)) {
-			//Drop the version, if possible
-			this.versionStore.undoVersion(v);
-		}
-		//Save the file, to persist our changes
-		try {
-			this.versionStore.save(this.getVersionFile());
-		} catch (IOException ex) {
-			log.severe(String.format(
-					"Failed to save version to: %s; Reason = %s",
-					this.getVersionFile(), ex.getMessage()
-			));
-		}
 	}
 	
 	
-	private InheritanceProject getProjectFromRequest(StaplerRequest req) {
-		//First, we check if an ancestor is defined
-		InheritanceProject ip = req.findAncestorObject(InheritanceProject.class);
-		if (ip != null) {
-			return ip;
-		}
-		
-		//Otherwise, we decode the URI and try to find the project that way
-		String jobName = null;
-		String uri = req.getRequestURI();
-		if (uri != null && !uri.isEmpty()) {
-			Matcher m = DescriptorImpl.urlJobPattern.matcher(uri);
-			if (m.find()) {
-				if (m.group(1) != null && !m.group(1).isEmpty()) {
-					jobName = m.group(1);
-				}
-			}
-		}
-		ip = null;
-		if (jobName != null) {
-			ip = InheritanceProject.getProjectByName(jobName);
-		}
-		return ip;
+	public static InheritanceProject getProjectFromRequest(StaplerRequest req) {
+		return req.findAncestorObject(InheritanceProject.class);
 	}
 	
 	
 	/**
-	 * This method tries to fetch the version number from the current
-	 * Stapler request.
+	 * Returns the currently desired version in the request state as a String.
 	 * <p>
-	 * Do note that this only works in threads started by a Web-/GUI-request.
-	 * It will not work if a call is triggered by the CLI, during the
-	 * actual execution of a build or when Jenkins is querying values
-	 * internally.
+	 * It is used to determine the content of the version selection WEB UI
+	 * element.
 	 * 
-	 * @return the version desired by the user; or null if not a request
+	 * @return the selected version, or the empty string, if no version available.
 	 */
-	private Long getUserDesiredVersionFromRequest() {
-		//Checking if we were invoked through an HTTP URL request
-		StaplerRequest req = Stapler.getCurrentRequest();
-		if (req == null) {
-			return null;
+	public String getUserDesiredVersion() {
+		Long v = VersionHandler.getVersion(this);
+		if (v == null) {
+			return "";
+		} else {
+			return v.toString();
 		}
-		
-		//Checking if there's a specific "versions" attribute associated with
-		//the current request, and is a Map of Strings to Long values
-		Object verObj = req.getAttribute("versions");
-		if (verObj != null && verObj instanceof Map) {
-			Map verMap = (Map) verObj;
-			try {
-				Object ver = verMap.get(this.getName());
-				if (ver != null && ver instanceof Number) {
-					return ((Number)ver).longValue();
-				}
-			} catch (ClassCastException ex) {
-				log.warning(
-					"ClassCaseException when attempting to decode 'versions' attribute of HTTP-Request"
-				);
-			} catch (NullPointerException ex) {
-				log.warning(
-					"NullPointerException when attempting to decode 'versions' attribute of HTTP-Request"
-				);
-			}
-		}
-		
-		//If that did not exist, we try for the broader "timestamp" attribute
-		Object tsObj = req.getAttribute("vTimestamp");
-		if (tsObj != null && tsObj instanceof Number) {
-			Number ts = (Number) tsObj;
-			Version v = this.versionStore.getNearestTo(ts.longValue());
-			if (v != null) {
-				return v.id;
-			}
-		}
-		
-		
-		//Now that we've exhausted the attributes, we need to check the raw
-		//URL parameters, which are of course MUCH more brittle
-		
-		String verParm = req.getParameter("versions");
-		if (verParm != null && !verParm.isEmpty()) {
-			Map<String, Long> verMap = 
-					InheritanceParametersDefinitionProperty.
-					decodeVersioningMap(verParm);
-			if (!verMap.isEmpty()) {
-				InheritanceProject.setVersioningMap(verMap);
-			}
-			//And checking if it contained a matching for the current project
-			Long version = verMap.get(this.getName());
-			if (version != null) {
-				return version;
-			}
-		}
-		
-		//If that failed, we try to get the "timestamp" attribute
-		String tsParm = req.getParameter("timestamp");
-		if (tsParm != null && !tsParm.isEmpty()) {
-			//Trying to parse as a number
-			try {
-				Long ts = Long.valueOf(tsParm, 10);
-				if (ts != null && ts >= 0) {
-					//Saving it, to not re-decode it again
-					req.setAttribute("vTimestamp", ts);
-					Version v = this.versionStore.getNearestTo(ts.longValue());
-					if (v != null) {
-						return v.id;
-					}
-				}
-			} catch (NumberFormatException ex) {
-				log.warning(
-					"NumberFormatException when attempting to decode 'timestamp' attribute of HTTP-Request"
-				);
-			}
-		}
-		
-		/* If that also failed, we try to decode the simple "version" parameter
-		 * Since this is always just defined for ONE particular project, we
-		 * need to grab the stable version closest to the timestamp of
-		 * the specified version when dealing with other projects.
-		 */
-		
-		verParm = req.getParameter("version");
-		if (verParm != null) {
-			//Fetching the project associated with that request; if any
-			InheritanceProject ip = this.getProjectFromRequest(req);
-			if (ip != null) {
-				try {
-					Long vNum = Long.valueOf(verParm, 10);
-					if (this == ip) {
-						return vNum;
-					}
-					//Fetching the timestamp of that version
-					Version v = ip.versionStore.getVersion(vNum);
-					if (v != null) {
-						long ts = v.timestamp;
-						//Fetching the best matching version to that ts
-						Version near = this.versionStore.getNearestTo(ts);
-						if (near != null) {
-							return near.id;
-						}
-					}
-				} catch (NumberFormatException ex) {
-					log.warning(
-						"NumberFormatException when attempting to decode 'version' attribute of HTTP-Request"
-					);
-				}
-			}
-		}
-		//If we reach this spot; no version was defined anywhere
-		return null;
-		//return this.getStableVersion();
 	}
-	
-	/**
-	 * This method tries to use the {@link ThreadAssocStore} to fetch the
-	 * special "versions" field.
-	 * <p>
-	 * The assumptions are that:
-	 * <ol>
-	 * <li>The {@link InheritanceBuild#run()} method has set this field up.</li>
-	 * <li>No two builds share the same thread.</li>
-	 * <li>If a thread does get re-used, that the previous builds do not make
-	 * calls to Jenkins anymore that need versioning information.
-	 * </li>
-	 * </ol>
-	 * @return
-	 */
-	private Long getUserDesiredVersionFromThread() {
-		Object o = ThreadAssocStore.getInstance().getValue("versions");
-		if (o != null) {
-			if (o instanceof Number) {
-				return ((Number)o).longValue();
-			}
-			if (o instanceof Map) {
-				Map<String, Long> map = (Map<String,Long>) o;
-				Long ret = map.get(this.getName());
-				if (ret != null) {
-					return ret;
-				}
-			}
-		}
-		return null;
-	}
-	
-	/**
-	 * This method tries to determine the actual version requested by the
-	 * current call sequence. This may be due to a configuration page request or
-	 * through a build started from the GUI / CLI.
-	 * <p>
-	 * Do note that the returned version is the one defined for <b>this</b>
-	 * project. If you desire the version of a particular parent project, call
-	 * the parent's implementation of this method. If you wish to get all
-	 * the parent's versions, it is faster to call
-	 * {@link #getUserDesiredParentVersions()}.
-	 * 
-	 * @see #getUserDesiredParentVersions()
-	 * @see #getVersionIDs()
-	 * 
-	 * @return the desired version number; or null if no such version can be
-	 * found and the latest version is to be used.
-	 */
-	public Long getUserDesiredVersion() {
-		return this.getUserDesiredVersion(false);
-	}
-	
-	public Long getUserDesiredVersion(boolean noInsertStableVersion) {
-		//TODO: Buffer this result in some way
-		
-		//First, we check if a version was passed via an URL parameter
-		Long version = this.getUserDesiredVersionFromRequest();
-		
-		//If that failed, we try to fetch it from the Thread
-		if (version == null) {
-			version = this.getUserDesiredVersionFromThread();
-		}
-		
-		//If that failed, too, we just use the latest stable version
-		if (version == null) {
-			if (noInsertStableVersion) {
-				return null;
-			}
-			return this.getStableVersion();
-		}
-		
-		//We check whether the user-passed version is valid at all
-		if (this.getVersionIDs().contains(version)) {
-			return version;
-		}
-		//Otherwise, the version does not exist and we return the latest one
-		return this.getLatestVersion();
-	}
-	
-	/**
-	 * This method returns the versions selected for this project and its
-	 * parents.
-	 * 
-	 * @return
-	 */
-	public Map<String, Long> getAllVersionsFromCurrentState() {
-		LinkedList<InheritanceProject> open = new LinkedList<InheritanceProject>();
-		Set<String> closed = new HashSet<String>();
-		Map<String, Long> out = new HashMap<String, Long>();
-		
-		//Adding ourselves as the first node
-		open.add(this);
-		
-		while (!open.isEmpty()) {
-			InheritanceProject ip = open.pop();
-			//Fetching the user-requested version for the open node
-			Long v = ip.getUserDesiredVersion();
-			out.put(ip.getName(), v);
-			//Then, adding this node to the closed set
-			closed.add(ip.getName());
-			//And adding the parent nodes to the open list
-			for (AbstractProjectReference apr : ip.getParentReferences()) {
-				if (closed.contains(apr.getName())) { continue; }
-				InheritanceProject next = apr.getProject();
-				if (next == null) { continue; }
-				open.addLast(next);
-			}
-		}
-		return out;
-	}
-	
 	
 	public Deque<Long> getVersionIDs() {
 		Object obj = onSelfChangeBuffer.get(this, "getVersionIDs()");
@@ -2303,8 +2490,19 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return (v == null) ? null : v.id;
 	}
 	
+	public boolean setVersionStability(long version, boolean stable) {
+		Version v = this.versionStore.getVersion(version);
+		if (v == null) { return false; }
+		v.setStability(stable);
+		try {
+			this.versionStore.save(this.getVersionFile());
+			return true;
+		} catch (IOException e) {
+			return false;
+		}
+	}
 	
-	public class InheritedVersionInfo {
+	public static class InheritedVersionInfo {
 		public final InheritanceProject project;
 		public final Long version;
 		public final List<Long> versions;
@@ -2319,72 +2517,173 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.description = description;
 		}
 		
+		public String toString() {
+			return String.format(
+					"%s(%d)",
+					project.getFullName(),
+					version
+			);
+		}
+		
 		public List<Long> getVersions() {
 			return versions;
 		}
+	
+		public static InheritedVersionInfo getVersionFrom(
+				InheritanceProject p, Map<String, Long> predefs) {
+			LinkedList<Long> verLst = new LinkedList<Long>();
+			for (Version v : p.versionStore.getAllVersions()) {
+				verLst.add(v.id);
+			}
+			Long verId = predefs.get(p.getFullName());
+			if (verId == null) {
+				verId = p.getStableVersion();
+			}
+			
+			Version verObj = p.versionStore.getVersion(verId);
+			return new InheritedVersionInfo(
+					p, verId, verLst,
+					(verObj != null) ? verObj.getDescription() : null
+			);
+		}
 	}
+	
 	
 	public List<InheritedVersionInfo> getAllInheritedVersionsList() {
 		return this.getAllInheritedVersionsList(null);
 	}
 	
+	/**
+	 * Returns the versions for all parent projects (including the current one)
+	 * based on the information in the given build.
+	 * <p>
+	 * Do note that this method is recursive and will emit all parents.
+	 * It is safe even in the case of cyclical references, even though these
+	 * are not permitted/buildable.
+	 * 
+	 * @param build the build for which to generate the versions.
+	 * @return a list of versions.
+	 */
 	public List<InheritedVersionInfo> getAllInheritedVersionsList(InheritanceBuild build) {
+		return InheritanceProject.getAllInheritedVersionsList(this, build);
+	}
+	
+	/**
+	 * Static part of {@link #getAllInheritedVersionsList(InheritanceBuild)}.
+	 * <p>
+	 * This is needed, because an overriding class might want to override
+	 * the member method, while still having access to this simple implementation.
+	 * <p>
+	 * An example would be to add projects that are not part of the inheritance
+	 * tree to the list of versions (say, downstream projects). For the
+	 * purpose of cycle-avoidance, calling this static method might be necessary.
+	 * 
+	 * @param build the build for which to generate the versions.
+	 * @return a list of versions only derived from the inheritance relationship.
+	 */
+	public static List<InheritedVersionInfo> getAllInheritedVersionsList(
+			InheritanceProject root,
+			InheritanceBuild build
+	) {
+		//Create the list of projects and their versions to be returned
 		List<InheritedVersionInfo> out = new LinkedList<InheritedVersionInfo>();
 		
-		//Adding ourselves as the first entry
-		LinkedList<Long> verLst = new LinkedList<Long>();
-		for (Version v : this.versionStore.getAllVersions()) {
-			verLst.add(v.id);
-		}
-		if (!verLst.isEmpty()) {
-			Long verID = this.getUserDesiredVersion();
-			Version verObj = this.versionStore.getVersion(verID);
-			
-			out.add(new InheritedVersionInfo(
-					this, verID, verLst,
-					(verObj != null) ? verObj.getDescription() : null
-			));
-		}
-		
-		Map<String, Long> buildVersions = null;
+		//Retrieve the predefined versions from the given build & environment
+		Map<String, Long> predefs = new HashMap<String, Long>();
 		if (build != null) {
-			buildVersions = build.getProjectVersions();
+			predefs.putAll(build.getProjectVersions());
 		}
+		predefs.putAll(VersionHandler.getVersions());
 		
-		//Fetching all parent references in order and adding them
-		List<AbstractProjectReference> aprLst =
-				this.getAllParentReferences(SELECTOR.MISC);
-		for (AbstractProjectReference apr: aprLst) {
-			InheritanceProject ip = apr.getProject();
-			if (ip == null) { continue; }
-			
-			verLst = new LinkedList<Long>();
-			for (Version v : ip.versionStore.getAllVersions()) {
-				verLst.add(v.id);
-			}
-			if (verLst.isEmpty()) {
-				// No versions available for that project; skipping it
+		//For each parent, use either the value from the predefs, or their default if missing
+		
+		//Loop over all jobs in the scope, until all have been seen
+		Set<String> seen = new HashSet<String>();
+		Deque<AbstractProject<?, ?>> open = new LinkedList<>();
+		open.add(root);
+		
+		while (!open.isEmpty()) {
+			AbstractProject<?, ?> ap = open.pop();
+			if (seen.contains(ap.getFullName())) {
 				continue;
 			}
+			seen.add(ap.getFullName());
 			
-			//Fetch the version; either from the passed build or URL params
-			Long verID = ip.getUserDesiredVersion(true);
-			if (verID == null) {
-				if (buildVersions != null) {
-					verID = buildVersions.get(ip.getName());
-				} else {
-					verID = ip.getUserDesiredVersion();
+			//If the project is an inheritance project; add its own version and
+			//look at its parents later
+			if (ap instanceof InheritanceProject) {
+				InheritanceProject ip = (InheritanceProject) ap;
+				InheritedVersionInfo ivf =
+						InheritedVersionInfo.getVersionFrom(ip, predefs);
+				//Ignore projects with no version
+				//Note: Some UI pages will also hide jobs with only 1 version
+				if (ivf != null && ivf.version != null) {
+					out.add(ivf);
+				}
+				for (AbstractProjectReference ref : ip.getParentReferences()) {
+					AbstractProject<?, ?> par = ref.getProject();
+					if (par != null) { open.add(par); }
 				}
 			}
 			
-			if (verID != null) {
-				//Fetch the version object associated with the given ID 
-				Version verObj = ip.versionStore.getVersion(verID);
-				if (verObj == null) { continue; }
-				
-				out.add(new InheritedVersionInfo(
-						ip, verID, verLst, verObj.getDescription()
-				));
+			//Explore references from local wrappers, builders and publishers later
+			for (String ref : getReferencers(ap)) {
+				AbstractProject it = Jenkins.getInstance().getItemByFullName(
+						ref, AbstractProject.class
+				);
+				if (it == null) { continue; }
+				open.push(it);
+			}
+		}
+		
+		return out;
+	}
+	
+	/**
+	 * This method takes the given job, and adds all jobs pointed to by
+	 * {@link Referencer}s in the Wrappers, Builders and Publishers of that job.
+	 * <p>
+	 * The found jobs are appended to the given {@link Deque}. There is no
+	 * attempt made to avoid duplicates.
+	 * 
+	 * @param ap the project to examine
+	 * @return the set of job names to fill with new references in no particular order
+	 */
+	private static Set<String> getReferencers(AbstractProject<?, ?> ap) {
+		if (ap == null) { return Collections.emptySet(); }
+		
+		List<Referencer> refs = new LinkedList<>();
+		
+		if (ap instanceof InheritanceProject) {
+			InheritanceProject ip = (InheritanceProject) ap;
+			for (BuildWrapper w : ip.getRawBuildWrappersList()) {
+				if (w instanceof Referencer) { refs.add((Referencer)w); }
+			}
+			for (Builder w : ip.getRawBuildersList()) {
+				if (w instanceof Referencer) { refs.add((Referencer)w); }
+			}
+			for (Publisher w : ip.getRawPublishersList()) {
+				if (w instanceof Referencer) { refs.add((Referencer)w); }
+			}
+		} else if (ap instanceof AbstractProject<?, ?>) {
+			Project<?, ?> p = (Project<?, ?>) ap;
+			for (BuildWrapper w : p.getBuildWrappersList()) {
+				if (w instanceof Referencer) { refs.add((Referencer)w); }
+			}
+			for (Builder w : p.getBuildersList()) {
+				if (w instanceof Referencer) { refs.add((Referencer)w); }
+			}
+			for (Publisher w : p.getPublishersList()) {
+				if (w instanceof Referencer) { refs.add((Referencer)w); }
+			}
+		}
+		if (refs.isEmpty()) { return Collections.emptySet(); }
+		
+		//Add all referenced jobs from the sources above
+		HashSet<String> out = new HashSet<>();
+		for (Referencer r : refs) {
+			for (String ref : r.getReferencedJobs()) {
+				out.add(ref);
 			}
 		}
 		return out;
@@ -2426,28 +2725,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			InheritanceProject ip = ref.getProject();
 			if (ip == null) { continue; }
 			lst.add(ip);
-		}
-		
-		return lst;
-	}
-	
-	public List<String> getProjectReferenceIssues() {
-		LinkedList<String> lst = new LinkedList<String>();
-				
-		//Checking direct parents
-		for (AbstractProjectReference apr : this.getParentReferences()) {
-			InheritanceProject ip = apr.getProject();
-			if (ip == null) {
-				lst.add("Invalid parent reference to: " + apr.getName());
-			}
-		}
-		
-		//Checking matings
-		for (AbstractProjectReference apr : this.compatibleProjects) {
-			InheritanceProject ip = apr.getProject();
-			if (ip == null) {
-				lst.add("Invalid compatibility reference to: " + apr.getName());
-			}
 		}
 		
 		return lst;
@@ -2535,13 +2812,20 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return this.getParentReferences(SELECTOR.MISC);
 	}
 	
+	static <T> List<T> nonNull(List<T> v) {
+		if (v == null) {
+			return Collections.emptyList();
+		}
+		return v;
+	}
+
 	public List<AbstractProjectReference> getParentReferences(
 			ProjectReference.PrioComparator.SELECTOR sortKey) {
 		InheritanceGovernor<List<AbstractProjectReference>> gov =
 				getParentReferencesGovernor(sortKey);
 		//We will ALWAYS just return the LOCAL parent references.
 		//If you ever do anything else; this WILL cause an infinite loop!
-		return gov.retrieveFullyDerivedField(this, IMode.LOCAL_ONLY);
+		return nonNull(gov.retrieveFullyDerivedField(this, IMode.LOCAL_ONLY));
 	}
 	
 	public List<AbstractProjectReference> getRawParentReferences() {
@@ -2592,10 +2876,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				}
 				if (!hasAddedSelf && prio > 0) {
 					hasAddedSelf = true;
-					iter.add(new SimpleProjectReference(this.getFullName()));
+					//Put the current element at this place
+					iter.set(new SimpleProjectReference(this.getFullName()));
+					//And add the replaced element back
+					iter.add(ref);
+					break;
 				}
 			}
-			//Check if we were able to add a self-reference at all
+			//If no position was found, the end is the correct position
 			if (!hasAddedSelf) {
 				lst.add(new SimpleProjectReference(this.getFullName()));
 			}
@@ -2642,11 +2930,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized List<Action> getActions() {
+	public List<Action> getActions() {
 		return this.getActions(IMode.AUTO);
 	}
 	
-	public synchronized List<Action> getActions(IMode mode) {
+	public List<Action> getActions(IMode mode) {
 		InheritanceGovernor<List<Action>> gov =
 				new InheritanceGovernor<List<Action>>(
 						"actions", SELECTOR.MISC, this) {
@@ -2709,7 +2997,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return Collections.unmodifiableList(merge);
 	}
 
-	public synchronized List<Action> getRawActions() {
+	public List<Action> getRawActions() {
 		/* Do notice that the function below will not actually return all
 		 * actions; as the override of createTransientActions() causes the
 		 * super's transientActions field to be always empty to ensure that
@@ -2728,17 +3016,22 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * The downside with generating this on-the-fly is, that some plugins
 	 * themselves call {@link #getActions()} (maybe indirectly), which recurses
-	 * back into calling {@link #createVersionAwareTransientActions()};
+	 * back into calling {@link #createVersionAwareTransientActions()}.
 	 * <p>
 	 * This will cause a stack overflow. The only way to fix this is to
 	 * return an empty list if a recursion is detected.
+	 * <p>
+	 * This function is made final, to avoid any superclass to return something
+	 * else other than an empty list. Supertypes <b>must</b> override
+	 * {@link #createVersionAwareTransientActions()} to contribute transient
+	 * actions.
 	 * 
 	 * @see #getActions()
 	 * @see #getActions(IMode)
 	 */
 	@Override
-	protected List<Action> createTransientActions() {
-		return new LinkedList<Action>();
+	protected final List<Action> createTransientActions() {
+		return Collections.emptyList();
 	}
 	
 	/**
@@ -2760,17 +3053,22 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		// END Implementation from AbstractProject
 		
 		// START Implementation from Project
-		for (BuildStep step : this.getBuildersList())
+		for (BuildStep step : this.getBuildersList()) {
 			ta.addAll(step.getProjectActions(this));
-		for (BuildStep step : this.getPublishersList())
+		}
+		for (BuildStep step : this.getPublishersList()) {
 			ta.addAll(step.getProjectActions(this));
-		for (BuildWrapper step : this.getBuildWrappersList())
+		}
+		for (BuildWrapper step : this.getBuildWrappersList()) {
 			ta.addAll(step.getProjectActions(this));
+		}
 		
 		//FIXME: Triggers are not yet versioned! Correct this!
 		for (Trigger trigger : this.getTriggers().values())
+		 {
 			ta.addAll(trigger.getProjectActions());
 		// END Implementation from Project
+		}
 		
 		return ta;
 	}
@@ -2842,7 +3140,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			@Override
 			protected DescribableList<BuildWrapper, Descriptor<BuildWrapper>> reduceFromFullInheritance(
 					Deque<DescribableList<BuildWrapper, Descriptor<BuildWrapper>>> list) {
-				return InheritanceGovernor.reduceDescribableByMerge(list);
+				return InheritanceGovernor.reduceDescribableByMergeWithoutDuplicates(list);
 			}
 		};
 		
@@ -2858,13 +3156,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * {@inheritDoc}
 	 */
 	@Override
-	public synchronized DescribableList<Publisher,Descriptor<Publisher>> getPublishersList() {
-		//TODO: The marking of these functions as synchronized can easily lead
-		// to a deadlock: doConfigSubmit() -> buildDependencyGraph() -> getPublishersList()
+	public DescribableList<Publisher,Descriptor<Publisher>> getPublishersList() {
+		//Note: Between Jenkins 1.509 and 1.625, the "synchronized" requirement
+		//was dropped from this method, removing a source of deadlocks.
 		return this.getPublishersList(IMode.AUTO);
 	}
 	
-	public synchronized DescribableList<Publisher,Descriptor<Publisher>> getPublishersList(
+	public DescribableList<Publisher,Descriptor<Publisher>> getPublishersList(
 			IMode mode) {
 		InheritanceGovernor<DescribableList<Publisher, Descriptor<Publisher>>> gov =
 				new InheritanceGovernor<DescribableList<Publisher, Descriptor<Publisher>>>(
@@ -2890,7 +3188,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return gov.retrieveFullyDerivedField(this, mode);
 	}
 	
-	public synchronized DescribableList<Publisher, Descriptor<Publisher>> getRawPublishersList() {
+	public DescribableList<Publisher, Descriptor<Publisher>> getRawPublishersList() {
 		return super.getPublishersList();
 	}
 	
@@ -2901,68 +3199,62 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * @return a map of triggers, might be empty, but never null
 	 */
-	public synchronized Map<TriggerDescriptor,Trigger> getTriggers() {
+	@Override
+	public Map<TriggerDescriptor,Trigger<?>> getTriggers() {
 		return this.getTriggers(IMode.AUTO);
 	}
 	
-	public synchronized Map<TriggerDescriptor,Trigger> getTriggers(IMode mode) {
-		if (ProjectCreationEngine.instance.getTriggersAreInherited() != TriggerInheritance.INHERIT) {
-			return this.getRawTriggers();
-		}
-		
-		InheritanceGovernor<Collection<Trigger>> gov =
-				new InheritanceGovernor<Collection<Trigger>>(
+	public Map<TriggerDescriptor,Trigger<?>> getTriggers(IMode mode) {
+		InheritanceGovernor<Collection<Trigger<?>>> gov =
+				new InheritanceGovernor<Collection<Trigger<?>>>(
 						"triggers", SELECTOR.MISC, this) {
 			@Override
-			protected Collection<Trigger> castToDestinationType(Object o) {
+			protected Collection<Trigger<?>> castToDestinationType(Object o) {
 				try {
-					return (Collection<Trigger>) o;
+					return (Collection<Trigger<?>>) o;
 				} catch (ClassCastException e) {
 					return null;
 				}
 			}
 			
 			@Override
-			public Collection<Trigger> getRawField(InheritanceProject ip) {
-				Map<TriggerDescriptor, Trigger> raw = ip.getRawTriggers();
+			public Collection<Trigger<?>> getRawField(InheritanceProject ip) {
+				Map<TriggerDescriptor, Trigger<?>> raw = ip.getRawTriggers();
 				return raw.values();
 			}
 			
 			@Override
-			protected Collection<Trigger> reduceFromFullInheritance(Deque<Collection<Trigger>> list) {
-				Collection<Trigger> out = new LinkedList<Trigger>();
-				for (Collection<Trigger> sub : list) {
+			protected Collection<Trigger<?>> reduceFromFullInheritance(Deque<Collection<Trigger<?>>> list) {
+				Collection<Trigger<?>> out = new LinkedList<Trigger<?>>();
+				for (Collection<Trigger<?>> sub : list) {
 					out.addAll(sub);
 				}
 				return out;
 			}
 		};
 		
-		Collection<Trigger> triggers = gov.retrieveFullyDerivedField(this, mode);
-		Map<TriggerDescriptor,Trigger> out = new HashMap<TriggerDescriptor,Trigger>();
-		for (Trigger t : triggers) {
+		Collection<Trigger<?>> triggers = gov.retrieveFullyDerivedField(this, mode);
+		Map<TriggerDescriptor,Trigger<?>> out = new HashMap<TriggerDescriptor,Trigger<?>>();
+		for (Trigger<?> t : triggers) {
 			Trigger copied = this.getReparentedTrigger(t);
 			out.put(copied.getDescriptor(), copied);
 		}
 		return out;
 	}
 	
-	public synchronized Map<TriggerDescriptor,Trigger> getRawTriggers() {
+	public Map<TriggerDescriptor,Trigger<?>> getRawTriggers() {
 		return super.getTriggers();
 	}
 	
 	/**
 	 * Gets the specific trigger, or null if the property is not configured for this job.
 	 */
+	@Override
 	public <T extends Trigger> T getTrigger(Class<T> clazz) {
 		return this.getTrigger(clazz, IMode.AUTO);
 	}
 	
 	public <T extends Trigger> T getTrigger(Class<T> clazz, IMode mode) {
-		if (ProjectCreationEngine.instance.getTriggersAreInherited() != TriggerInheritance.INHERIT) {
-			return this.getRawTrigger(clazz);
-		}
-		
 		final Class<T> fClazz = clazz;
 		InheritanceGovernor<T> gov =
 				new InheritanceGovernor<T>(
@@ -3000,6 +3292,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	
+	@Override
 	public Map<JobPropertyDescriptor, JobProperty<? super InheritanceProject>> getProperties() {
 		return this.getProperties(IMode.AUTO);
 	}
@@ -3024,6 +3317,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	@Exported(name="property",inline=true)
 	public List<JobProperty<? super InheritanceProject>> getAllProperties() {
 		return this.getAllProperties(IMode.AUTO);
@@ -3052,7 +3346,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			protected List<JobProperty<? super InheritanceProject>> reduceFromFullInheritance(
 					Deque<List<JobProperty<? super InheritanceProject>>> list) {
 				//First, we add the variances for the root project
-				InheritanceParametersDefinitionProperty variance = 
+				InheritanceParametersDefinitionProperty variance =
 						rootProject.getVarianceParameters();
 				if (variance != null) {
 					List<JobProperty<? super InheritanceProject>> varLst =
@@ -3088,12 +3382,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * 		parameters comes from a direct child with the correct variance.
 	 * </li>
 	 * </ol>
+	 * <p>
+	 * Also note, that Jenkins does not allow direct access to the properties
+	 * list. So clearing or modifying this list will not work.
 	 * 
-	 * @param rootProject the project from which the call for inherited
-	 * properties originally came from.
-	 * @param rootParents the parents of that project. Passed to prevent having
-	 * to repeatedly access (versioning overhead!).
-	 * @return
+	 * @return the local list of properties.
 	 */
 	public List<JobProperty<? super InheritanceProject>> getRawAllProperties() {
 		LinkedList<JobProperty<? super InheritanceProject>> out =
@@ -3111,7 +3404,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 			//Converting a PDP to an IPDP
 			ParametersDefinitionProperty pdp = (ParametersDefinitionProperty) prop;
-			InheritanceParametersDefinitionProperty ipdp = 
+			InheritanceParametersDefinitionProperty ipdp =
 					new InheritanceParametersDefinitionProperty(
 							pdp.getOwner(),
 							pdp
@@ -3191,6 +3484,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public <T extends JobProperty> T getProperty(Class<T> clazz) {
 		return this.getProperty(clazz, IMode.AUTO);
 	}
@@ -3209,13 +3503,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					((Deque) props).descendingIterator();
 			while (rIter.hasNext()) {
 				JobProperty p = rIter.next();
-				if (clazz.isInstance(p))
+				if (clazz.isInstance(p)) {
 					return clazz.cast(p);
+				}
 			}
 		} else {
 			for (JobProperty p : props) {
-				if (clazz.isInstance(p))
+				if (clazz.isInstance(p)) {
 					return clazz.cast(p);
+				}
 			}
 		}
 		return null;
@@ -3225,6 +3521,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public JobProperty getProperty(String className) {
 		return this.getProperty(className, IMode.AUTO);
 	}
@@ -3242,6 +3539,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public Collection<?> getOverrides() {
 		return this.getOverrides(IMode.AUTO);
 	}
@@ -3271,11 +3569,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return r;
 	}
 	
-	public synchronized List<ParameterDefinition> getParameters() {
+	public List<ParameterDefinition> getParameters() {
 		return this.getParameters(IMode.AUTO);
 	}
 	
-	public synchronized List<ParameterDefinition> getParameters(IMode mode) {
+	public List<ParameterDefinition> getParameters(IMode mode) {
 		ParametersDefinitionProperty pdp =
 				this.getProperty(ParametersDefinitionProperty.class, mode);
 		if (pdp == null) {
@@ -3291,7 +3589,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public SCM getScm(IMode mode) {
-		InheritanceGovernor<SCM> gov = 
+		InheritanceGovernor<SCM> gov =
 				new InheritanceGovernor<SCM>(
 						"scm", SELECTOR.MISC, this) {
 			@Override
@@ -3383,7 +3681,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public Integer getScmCheckoutRetryCountObject() {
-		InheritanceGovernor<Integer> gov = 
+		InheritanceGovernor<Integer> gov =
 				new InheritanceGovernor<Integer>(
 						"scmCheckoutRetryCount", SELECTOR.MISC, this) {
 			@Override
@@ -3416,8 +3714,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 
 	
+	@Override
 	public SCMCheckoutStrategy getScmCheckoutStrategy() {
-		InheritanceGovernor<SCMCheckoutStrategy> gov = 
+		return getScmCheckoutStrategy(IMode.AUTO);
+	}
+	
+	public SCMCheckoutStrategy getScmCheckoutStrategy(IMode mode) {
+		InheritanceGovernor<SCMCheckoutStrategy> gov =
 				new InheritanceGovernor<SCMCheckoutStrategy>(
 						"scmCheckoutStrategy", SELECTOR.MISC, this) {
 			@Override
@@ -3433,7 +3736,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		return gov.retrieveFullyDerivedField(this, IMode.AUTO);
+		return gov.retrieveFullyDerivedField(this, mode);
 	}
 	
 	public SCMCheckoutStrategy getRawScmCheckoutStrategy() {
@@ -3444,7 +3747,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	@Override
 	public boolean blockBuildWhenDownstreamBuilding() {
-		InheritanceGovernor<Boolean> gov = 
+		return blockBuildWhenDownstreamBuilding(IMode.AUTO);
+	}
+	
+	public boolean blockBuildWhenDownstreamBuilding(IMode mode) {
+		InheritanceGovernor<Boolean> gov =
 				new InheritanceGovernor<Boolean>(
 						"blockBuildWhenDownstreamBuilding", SELECTOR.MISC, this) {
 			@Override
@@ -3460,7 +3767,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		return gov.retrieveFullyDerivedField(this, IMode.AUTO);
+		return gov.retrieveFullyDerivedField(this, mode);
 	}
 	
 	public boolean getRawBlockBuildWhenDownstreamBuilding() {
@@ -3470,7 +3777,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 
 	@Override
 	public boolean blockBuildWhenUpstreamBuilding() {
-		InheritanceGovernor<Boolean> gov = 
+		return this.blockBuildWhenUpstreamBuilding(IMode.AUTO);
+	}
+	
+	public boolean blockBuildWhenUpstreamBuilding(IMode mode) {
+		InheritanceGovernor<Boolean> gov =
 				new InheritanceGovernor<Boolean>(
 						"blockBuildWhenUpstreamBuilding", SELECTOR.MISC, this) {
 			@Override
@@ -3486,7 +3797,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		return gov.retrieveFullyDerivedField(this, IMode.AUTO);
+		return gov.retrieveFullyDerivedField(this, mode);
 	}
 	
 	public boolean getRawBlockBuildWhenUpstreamBuilding() {
@@ -3495,7 +3806,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	@Override
 	public String getCustomWorkspace() {
-		InheritanceGovernor<String> gov = 
+		return getCustomWorkspace(IMode.AUTO);
+	}
+	
+	public String getCustomWorkspace(IMode mode) {
+		InheritanceGovernor<String> gov =
 				new InheritanceGovernor<String>(
 						"customWorkspace", SELECTOR.MISC, this) {
 			@Override
@@ -3511,7 +3826,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		return gov.retrieveFullyDerivedField(this, IMode.AUTO);
+		return gov.retrieveFullyDerivedField(this, mode);
 	}
 	
 	public String getRawCustomWorkspace() {
@@ -3520,7 +3835,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	
 	public String getParameterizedWorkspace() {
-		InheritanceGovernor<String> gov = 
+		return this.getParameterizedWorkspace(IMode.AUTO);
+	}
+	
+	public String getParameterizedWorkspace(IMode mode) {
+		InheritanceGovernor<String> gov =
 				new InheritanceGovernor<String>(
 						"parameterizedWorkspace", SELECTOR.MISC, this) {
 			@Override
@@ -3536,7 +3855,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		return gov.retrieveFullyDerivedField(this, IMode.AUTO);
+		return gov.retrieveFullyDerivedField(this, mode);
 	}
 	
 	public String getRawParameterizedWorkspace() {
@@ -3544,22 +3863,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	/**
-	 * Sets the parameterized workspace variable. Will only work, if called
-	 * <b>directly</b> by a "TestCase" class. Will throw an exception otherwise.
+	 * Sets the parameterized workspace variable.
 	 * 
-	 * @deprecated Must only be used from within {@link TestCase} classes.
+	 * @deprecated Should only be used from within UnitTest classes.
 	 *
 	 * @param workspace the new value for the parameterized workspace
 	 */
 	@Deprecated
 	public void setRawParameterizedWorkspace(String workspace) {
-		if (Reflection.calledFromClass(2, TestCase.class)) {
-			this.parameterizedWorkspace = workspace;
-		} else {
-			throw new IllegalAccessError(
-					"Should not be called outside by something other than a TestCase class"
-			);
-		}
+		this.parameterizedWorkspace = workspace;
 	}
 	
 	
@@ -3570,6 +3882,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * @deprecated as of 1.503
 	 *	  Use {@link #getBuildDiscarder()}.
 	 */
+	@Deprecated
 	@Override
 	public LogRotator getLogRotator() {
 		BuildDiscarder d = this.getBuildDiscarder();
@@ -3582,9 +3895,10 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * @deprecated as of 1.503
 	 *	  Use {@link #getBuildDiscarder()}.
-	 *  
+	 * 
 	 * @see #getLogRotator()
 	 */
+	@Deprecated
 	public LogRotator getLogRotator(IMode mode) {
 		BuildDiscarder d = this.getBuildDiscarder(mode);
 		if (d instanceof LogRotator) {
@@ -3654,6 +3968,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * This is an accepted break, compared to the potential slowdown of
 	 * {@link Queue#maintain()} under high queue load situations.
 	 */
+	@Override
 	public Label getAssignedLabel() {
 		//Check if there's a cached value
 		Object cached = onChangeBuffer.get(this, "maintenanceAssignedLabel");
@@ -3666,7 +3981,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			 * is needed.
 			 */
 			return Jenkins.getInstance().getLabel(
-					String.format("\"%s\"", lbl.getName())
+					'"' + lbl.getName() + '"'
 			);
 		}
 		
@@ -3716,25 +4031,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 		};
 		
-		//Generate the label on this node and the optional "magic" label restriction
+		//Fetch the applicable label for this job
 		Label lbl = gov.retrieveFullyDerivedField(this, mode);
-		Label magic = ProjectCreationEngine.instance.getMagicNodeLabelForTestingValue();
-		
-		//Check if the magic label needs to be applied (only when building)
-		if (magic != null && !magic.isEmpty() && InheritanceGovernor.inheritanceLookupRequired(this)) {
-			if (lbl != null) {
-				String labelExpr = lbl.getName();
-				String magicExpr = magic.getName();
-				if (!labelExpr.contains(magicExpr)) {
-					//We need to add the magic to the label
-					lbl = lbl.and(magic.not());
-				}
-			} else {
-				//No label present, just use magic value as-is
-				lbl = magic.not();
-			}
-		}
-		
 		if (lbl == null) { return null; }
 		
 		/* The labels stored in versioning are essentially cached; which means
@@ -3755,7 +4053,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		 * string representation
 		 */
 		return Jenkins.getInstance().getLabel(
-				String.format("\"%s\"", lbl.getName())
+				'"' + lbl.getName() + '"'
 		);
 	}
 	
@@ -3878,7 +4176,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * project is parameterized.
 	 * <p>
 	 * As such, contrary to the other functions, this function must
-	 * <i>always</i> explore full inheritance. 
+	 * <i>always</i> explore full inheritance.
 	 */
 	@Override
 	public boolean isParameterized() {
@@ -3904,12 +4202,26 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return false;
 		}
 		
+		//Check for missing dependencies (recursively in all referenced projects)
+		if (!(this.getMissingDependencies().isEmpty())) {
+			return false;
+		}
+		
+		//Check for inheritance cycle
+		if (this.hasCyclicDependency()) {
+			return false;
+		}
+		
 		//Then, we check if there's a parameter inheritance issue with the
 		//user selected version
 		AbstractMap.SimpleEntry<Boolean, String> paramCheck =
 				this.getParameterSanity();
 		if (paramCheck.getKey() == false) {
-			log.fine(String.format("%s not buildable; Parameter inconsistency: %s", this.getFullName(), paramCheck.getValue()));
+			log.fine(String.format(
+					"%s not buildable; Parameter inconsistency: %s",
+					this.getFullName(),
+					paramCheck.getValue()
+			));
 			return false;
 		}
 		
@@ -3919,47 +4231,37 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	
 	
-	// === INHERITANCE AND VERSIONING HELPER CLASSES AND MEMBERS ===
-	
-	public static void setVersioningMap(Map<String, Long> map) {
-		StaplerRequest req = Stapler.getCurrentRequest();
-		//Saving the versioning map into the current request
-		if (req != null) {
-			req.setAttribute("versions", map);
-			//Removing the versioning buffer
-			req.removeAttribute("versionedObjectBuffer");
-		}
-	}
-	
-	public static void setVersioningMapInThread(Map<String, Long> map) {
-		//Setting the versioning for the current thread, in case the request is unavailable
-		ThreadAssocStore.getInstance().setValue("versions", map);
-	}
-	
-	public static void unsetVersioningMap() {
-		StaplerRequest req = Stapler.getCurrentRequest();
-		if (req != null) {
-			//Saving the versioning to the request
-			req.removeAttribute("versions");
-			//Removing the versioning buffer
-			req.removeAttribute("versionedObjectBuffer");
-		}
-		//Unsetting the versioning in the thread (in case it was set)
-		ThreadAssocStore.getInstance().clear("versions");
-	}
-	
-	
 	// === GUI ACCESS METHODS ===
 
 	public boolean getIsTransient() {
 		return this.isTransient;
 	}
 	
-	
 	public String getCreationClass() {
+		if (!needsCreationClass()) { return null; }
 		return this.creationClass;
 	}
 	
+	/**
+	 * This method decides, whether this class needs the
+	 * 'project type' / 'creation class' box.
+	 * <p>
+	 * If it returns true, the Groovy UI code will render a box with a drop-down
+	 * allowing the user to change the value of {@link #getCreationClass()}.
+	 * <p>
+	 * If false, the project type / creation class will always be set to and
+	 * return null.
+	 * <p>
+	 * Marked as protected, since only subclasses should need to access or
+	 * alter this value. External code should not need to know this at all.
+	 * <p>
+	 * Defaults to 'true', unless overridden.
+	 * 
+	 * @return true, if the project type is needed
+	 */
+	protected boolean needsCreationClass() {
+		return true;
+	}
 	
 	
 	// === RELATIONSHIP ACCESS METHODS ===
@@ -3981,7 +4283,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				new HashMap<String, ProjectGraphNode>();
 		
 		for (InheritanceProject ip : getProjectsMap().values()) {
-			String currName = ip.getName();
+			String currName = ip.getFullName();
 			ProjectGraphNode currNode = (map.containsKey(currName))
 					? map.get(currName)
 					: new ProjectGraphNode();
@@ -4083,7 +4385,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		Map<String, ProjectGraphNode> connGraph = getConnectionGraph();
 		
 		//Fetching the node for the current (this) project
-		ProjectGraphNode node = connGraph.get(this.getName());
+		ProjectGraphNode node = connGraph.get(this.getFullName());
 		if (node == null) { return map; }
 		
 		//Mates can be filled quite easily
@@ -4093,9 +4395,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			boolean isLeaf = (mateNode == null) ? true : mateNode.children.isEmpty();
 			if (p == null) { continue; }
 			//Checking if we've seen this mate already
-			if (!seenProjects.contains(p.getName())) {
+			if (!seenProjects.contains(p.getFullName())) {
 				map.put(p, new Relationship(Relationship.Type.MATE, 0, isLeaf));
-				seenProjects.add(p.getName());
+				seenProjects.add(p.getFullName());
 			}
 		}
 		
@@ -4109,12 +4411,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		cOpen.add(this);
 		while (!cOpen.isEmpty()) {
 			InheritanceProject ip = cOpen.pop();
-			if (ip == null || seenProjects.contains(ip.getName())) {
+			if (ip == null || seenProjects.contains(ip.getFullName())) {
 				continue;
 			}
-			seenProjects.add(ip.getName());
+			seenProjects.add(ip.getFullName());
 			
-			node = connGraph.get(ip.getName());
+			node = connGraph.get(ip.getFullName());
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String parent : node.parents) {
@@ -4138,12 +4440,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		cOpen.add(this);
 		while (!cOpen.isEmpty()) {
 			InheritanceProject ip = cOpen.pop();
-			if (ip == null || seenProjects.contains(ip.getName())) {
+			if (ip == null || seenProjects.contains(ip.getFullName())) {
 				continue;
 			}
-			seenProjects.add(ip.getName());
+			seenProjects.add(ip.getFullName());
 			
-			node = connGraph.get(ip.getName());
+			node = connGraph.get(ip.getFullName());
 			if (ip == null || node == null) { continue; }
 			//Adding all parents
 			for (String child : node.children) {
@@ -4180,7 +4482,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		for (Map.Entry<InheritanceProject, Relationship> entry : rels.entrySet()) {
 			Relationship rel = entry.getValue();
 			Vector<String> vec = new Vector<String>();
-			vec.add(entry.getKey().getName());
+			vec.add(entry.getKey().getFullName());
 			switch (rel.type) {
 				case PARENT:
 					vec.add(Messages.InheritanceProject_Relationship_Type_ParentDesc());
@@ -4219,7 +4521,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			fullScope = ipdp.getAllScopedParameterDefinitions();
 		} else {
 			String ownerName = (pdp.getOwner() != null)
-					? pdp.getOwner().getName() : "";
+					? pdp.getOwner().getFullName() : "";
 			fullScope = new LinkedList<ScopeEntry>();
 			for (ParameterDefinition pd : pdp.getParameterDefinitions()) {
 				fullScope.add(new ScopeEntry(ownerName, pd));
@@ -4244,7 +4546,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			String paramName = scope.param.getName();
 			String projName = scope.owner;
 			String detail = "";
-			Object def = scope.param.getDefaultParameterValue().getShortDescription();
+			Object def = scope.param.getDefaultParameterValue().getValue();
 			
 			
 			if (scope.param instanceof InheritableStringParameterDefinition) {
@@ -4271,7 +4573,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	// === SVGNode METHODS ===
 	
 	public String getSVGLabel() {
-		return this.getName();
+		return this.getFullName();
 	}
 
 	public String getSVGDetail() {
@@ -4374,12 +4676,142 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	
 	
-	// === MISC. HELPER METHODS ===
+	// === MISC. HELPER METHODS AND CLASSES ===
 	
+	public static class Dependency implements Comparable<Dependency> {
+		public final String ref;
+		public final List<String> trace;
+		
+		public Dependency(String ref, String... trace) {
+			this.ref = ref;
+			this.trace = (trace == null)
+					? Collections.<String>emptyList()
+					: Arrays.asList(trace);
+		}
+		
+		public Dependency(String ref, List<String> trace) {
+			this.ref = ref;
+			this.trace = new LinkedList<>(trace);
+		}
+
+		@Override
+		public int compareTo(Dependency other) {
+			String s = Joiner.on(":").join(this.trace);
+			s = (s.isEmpty()) ? this.ref : s + ":" + this.ref;
+			
+			String o = Joiner.on(":").join(other.trace);
+			o = (o.isEmpty()) ? other.ref : o + ":" + other.ref;
+			
+			return s.compareTo(o);
+		}
+	}
+	
+	/**
+	 * Checks if there are missing dependencies somewhere in the inheritance
+	 * or automated compound generation.
+	 * <p>
+	 * Returns the information about all the missing references as a
+	 * {@link Dependency} instance. This includes the full trackback from the
+	 * current project.
+	 * <p>
+	 * @return a list of missing {@link Dependency} instances. May be empty, but never null.
+	 * @see ProjectCreationEngine
+	 */
+	public final Collection<Dependency> getMissingDependencies() {
+		//Preparing the set of project names that were seen at least once
+		HashSet<AbstractProject<?, ?>> seen = new HashSet<>();
+		
+		//The output will be sorted according to the Dependency natural order
+		TreeSet<Dependency> missing = new TreeSet<>();
+		
+		//Creating the list of parent projects to still explore (and the trace of how we got there
+		LinkedList<Map.Entry<AbstractProject<?, ?>, List<String>>> open = new LinkedList<>();
+		
+		//And scheduling ourselves as the first to evaluate
+		Map.Entry<AbstractProject<?, ?>, List<String>> entry =
+				new AbstractMap.SimpleEntry<AbstractProject<?, ?>, List<String>>(
+						this, Collections.<String>emptyList()
+		);
+		open.push(entry);
+		
+		while (!(open.isEmpty())) {
+			entry = open.pop();
+			AbstractProject<?, ?> ap = entry.getKey();
+			List<String> trace = entry.getValue();
+			
+			//Check if we've looked at that project already
+			if (ap == null || seen.contains(ap)) { continue; }
+			seen.add(ap);
+			
+			//Expanding the trace, by the currently examined project
+			trace = new LinkedList<>(trace);
+			if (ap != this) { trace.add(ap.getFullName()); }
+			
+			//Convert to IP, if possible
+			InheritanceProject ip = (ap instanceof InheritanceProject)
+					? (InheritanceProject) ap : null;
+			
+			//Examine parent references
+			if (ip != null) {
+				for (AbstractProjectReference ref : ip.getParentReferences()) {
+					AbstractProject<?, ?> next = ref.getProject();
+					if (next == null) {
+						//Found a missing dep
+						missing.add(new Dependency(ref.getName(), trace));
+					} else {
+						//Scheduling that job for later examination
+						open.push(new AbstractMap.SimpleEntry<AbstractProject<?, ?>, List<String>>(
+								next, trace
+						));
+					}
+				}
+			}
+			
+			//Add jobs pointed-to by referencer instances from that job
+			for (String ref : getReferencers(ap)) {
+				AbstractProject<?, ?> next = Jenkins.getInstance().getItemByFullName(
+						ref, AbstractProject.class
+				);
+				if (next == null) {
+					//Found a missing dep
+					missing.add(new Dependency(ref, trace));
+				} else {
+					//Explore that job later
+					open.push(new AbstractMap.SimpleEntry<AbstractProject<?, ?>, List<String>>(
+							next, trace
+					));
+				}
+			}
+		}
+		
+		//Examine project matings -- only for local item
+		for (AbstractProjectReference ref : this.compatibleProjects) {
+			InheritanceProject next = ref.getProject();
+			if (next == null) {
+				//Found a missing dep
+				missing.add(new Dependency(
+						ref.getName(),
+						Collections.<String>emptyList()
+				));
+			}
+			//Mating references are not followed for missing parents, as
+			//this affects a child, instead of the local Project
+		}
+		
+		return missing;
+	}
 	
 	/**
 	 * Wrapper for {@link #hasCyclicDependency(String...)} with no new project
 	 * references added on top of the existing ones.
+	 * <p>
+	 * Note, that the result is cached and only refreshed when this job or its
+	 * parents change. This is done, because cycle checks are expensive and
+	 * this method is called often.
+	 * <p>
+	 * This means, that the result of this method is <b><i>not</i></b> version
+	 * aware. If you need an uncached and version-aware result, call
+	 * {@link #hasCyclicDependency(boolean, String...)} directly.
 	 */
 	public final boolean hasCyclicDependency() {
 		//TODO: Make this method version-aware
@@ -4390,12 +4822,23 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return (Boolean) obj;
 		}
 		
-		//Re-computing the result
-		String[] arr = {};
-		Boolean bufRes = this.hasCyclicDependency(arr);
+		//Re-compute the result
+		Boolean bufRes = this.hasCyclicDependency(true);
 		
 		onInheritChangeBuffer.set(this, "hasCyclicDependency", bufRes);
 		return bufRes;
+	}
+	
+	/**
+	 * Wrapper around {@link #hasCyclicDependency(boolean, String...), with
+	 * addExisting set to true.
+	 * 
+	 * @param whenTheseProjectsAdded
+	 * @return true, if there is a cyclic, diamond or repeated dependency among
+	 * this project's parents.
+	 */
+	public final boolean hasCyclicDependency(String[] whenTheseProjectsAdded) {
+		return this.hasCyclicDependency(true, whenTheseProjectsAdded);
 	}
 	
 	/**
@@ -4408,7 +4851,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * @return true, if there is a cyclic, diamond or repeated dependency among
 	 * this project's parents.
 	 */
-	public final boolean hasCyclicDependency(String... whenTheseProjectsAdded) {
+	public final boolean hasCyclicDependency(boolean addExisting, String... whenTheseProjectsAdded) {
 		/* TODO: While this method runs reasonably fast, it is run very often
 		 * As such, find a way to buffer the result across all projects and
 		 * only rebuild if necessary.
@@ -4421,36 +4864,35 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		 * inheritance.
 		 */
 		
-		//Preparing the set of project names that were seen at least once
-		HashSet<String> closed = new HashSet<String>();
-		
-		//Creating the list of parent projects to still explore
-		LinkedList<InheritanceProject> open = new LinkedList<InheritanceProject>();
-		//And scheduling ourselves as the first to evaluate
-		open.push(this);
-		
-		//And finally, creating a list of additional references the caller
-		//wishes to eventually add to THIS project
-		LinkedList<String> additionalRefs = new LinkedList<String>();
-		for (String pName : whenTheseProjectsAdded) {
-			//We need to ignore those, that we already refer to as parents
-			//Do note that this makes direct multiple inheritance impossible
-			//to detect in advance, but such errors should be obvious anyway
-			boolean isAlreadyReferenced = false;
-			for (AbstractProjectReference par : this.getParentReferences()) {
-				if (par.getName().equals(pName)) {
-					isAlreadyReferenced = true;
-					break;
-				}
+		//Preparing a Deque, that tracks the parents to be processed
+		Deque<InheritanceProject> open = new LinkedList<>();
+		if (whenTheseProjectsAdded != null) {
+			for (String ref : whenTheseProjectsAdded) {
+				InheritanceProject p = Jenkins.getInstance().getItemByFullName(
+						ref, InheritanceProject.class
+				);
+				//Possible cycle, by virtue of a missing dependency
+				if (p == null) { return true; }
+				open.add(p);
 			}
-			if (!isAlreadyReferenced) {
-				additionalRefs.add(pName);
+		}
+		if (addExisting) {
+			for (AbstractProjectReference par : this.getParentReferences()) {
+				InheritanceProject p = par.getProject();
+				//Possible cycle, by virtue of a missing dependency
+				if (p == null) { return true; }
+				open.add(p);
 			}
 		}
 		
-		//Processing the open stack, checking if we're already met that parent
-		//and if not, adding its parent to our open stack
-		while(open.isEmpty() == false) {
+		//Preparing the set of project names that were seen at least once
+		HashSet<String> closed = new HashSet<String>();
+		//We've always seen "ourselves"
+		closed.add(this.getFullName());
+		
+		
+		//Loop over all open parents, until all have been processed.
+		while (!open.isEmpty()) {
 			//Popping the first element
 			InheritanceProject p = open.pop();
 			//Checking if we've seen that parent already
@@ -4458,21 +4900,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				//Detected a cyclic dependency
 				return true;
 			}
-			// Otherwise, we add all its parents to our open set
+			// Otherwise, we add all its parents to our open set, to be explored
 			for (AbstractProjectReference ref : p.getParentReferences()) {
 				InheritanceProject refP = ref.getProject();
 				if (refP != null) {
 					open.push(refP);
-				}
-			}
-			//And if the current object is active, we also need to check the
-			//new future refs
-			if (p == this && !additionalRefs.isEmpty()) {
-				for (String ref : additionalRefs) {
-					InheritanceProject ip = InheritanceProject.getProjectByName(ref);
-					if (ip != null) {
-						open.push(ip);
-					}
 				}
 			}
 			closed.add(p.name);
@@ -4578,7 +5010,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 						log.warning(
 								"Detected invalid inheritance mode: " +
 								s.previousMode.toString() + " on " +
-								this.getName() + "->" + pd.getName()
+								this.getFullName() + "->" + pd.getName()
 						);
 						break;
 				}
@@ -4614,17 +5046,18 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Then, if the build is not abstract, we must check whether all values
 		//that carry defaults actually had defaults defined at some point
 		if (this.isAbstract == false) {
+			List<String> mandatoryParams = new ArrayList<>();
 			for (Map.Entry<String, SanityRestrictions> e : resMap.entrySet()) {
-				String name = e.getKey();
 				SanityRestrictions s = e.getValue();
-				
 				if (s.hasToHaveDefaultSet && !s.hadDefaultSet) {
-					return new AbstractMap.SimpleEntry<Boolean, String>(
-							false, "Parameter '" + name + "' did not" +
-							" have a default set. This is only allowed" +
-							" if the project is marked as abstract."
-					);
+					mandatoryParams.add(e.getKey());
 				}
+			}
+			
+			if (!mandatoryParams.isEmpty()) {
+				return new AbstractMap.SimpleEntry<Boolean, String>(false,
+						String.format(Messages.InheritanceProject_ErrorMsg_ParameterDefaultValue(),
+								StringUtils.join(mandatoryParams," ',' ")));
 			}
 		}
 		
@@ -4632,14 +5065,18 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return new AbstractMap.SimpleEntry<Boolean, String>(true, "");
 	}
 	
+	@Override
 	public String getPronoun() {
 		if (this.getIsTransient()) {
 			return Messages.InheritanceProject_TransientPronounLabel();
-		} else if (this.getCreationClass() != null) {
-			return this.getCreationClass();
-		} else {
-			return super.getPronoun();
 		}
+		//Use the Creation Class -- if any
+		String cClass = this.getCreationClass();
+		if (!StringUtils.isBlank(cClass)) {
+			return cClass;
+		}
+		//Fallback
+		return super.getPronoun();
 	}
 
 
@@ -4655,17 +5092,31 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	@Override
 	public List<Widget> getWidgets() {
 		List<Widget> widgets = super.getWidgets();
-		if (!this.isBuildable() && this.getLastBuild() == null) {
-			//Remove the history widgets
-			List<Widget> strippedOffWidgets = new ArrayList<Widget>();
-			for (Widget widget : widgets) {
-				if (!(widget instanceof HistoryWidget<?, ?>)) {
-					strippedOffWidgets.add(widget);
+		List<Widget> strippedOffWidgets = new ArrayList<Widget>();
+		BuildHistoryWidget<InheritanceProject> bhw = null;
+		//Remove the history widgets
+		for (Widget widget : widgets) {
+			if (!(widget instanceof HistoryWidget<?, ?>)) {
+				strippedOffWidgets.add(widget);
+			} else {
+				if (widget instanceof BuildHistoryWidget<?>) {
+					bhw = (BuildHistoryWidget<InheritanceProject>)widget;
 				}
 			}
+		}
+		if (!this.isBuildable() && this.getLastBuild() == null) {
 			return strippedOffWidgets;
 		} else {
-			return widgets;
+			if (bhw != null) {
+				ExtendedBuildHistoryWidget ibhw =
+						new ExtendedBuildHistoryWidget(bhw.owner, bhw.baseList, bhw.adapter);
+				strippedOffWidgets.add(ibhw);
+				return strippedOffWidgets;
+			} else {
+				//add back what we removed as a first step in the method
+				strippedOffWidgets.add(bhw);
+				return strippedOffWidgets;
+			}
 		}
 	}
 	
@@ -4721,40 +5172,45 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 
 	public Map<AbstractProjectReference, List<Builder>> getBuildersFor(
 			Map<String, Long> verMap, Class<?> clazz) {
-		//Set the current thread's versioning map
-		if (verMap != null && !verMap.isEmpty()) {
-			setVersioningMap(verMap);
-		}
-		//Loop over all parents and create a joined map of all builders
-		Map<AbstractProjectReference, List<Builder>> out =
-				new LinkedHashMap<AbstractProjectReference, List<Builder>>();
-		
-		List<AbstractProjectReference> refs =
-				new LinkedList<AbstractProjectReference>(
-						this.getAllParentReferences(SELECTOR.BUILDER)
-				);
-		
-		//Add a reference to ourselves
-		refs.add(new SimpleProjectReference(this.getFullName()));
-		
-		for (AbstractProjectReference apr : refs) {
-			InheritanceProject ip = apr.getProject();
-			if (ip == null) { continue; }
-			List<Builder> bLst = ip.getBuildersList(IMode.LOCAL_ONLY).toList();
-			if (clazz != null) {
-				List<Builder> bSubLst = new LinkedList<Builder>();
-				for (Builder b : bLst) {
-					if (b != null && clazz.isAssignableFrom(b.getClass())) {
-						bSubLst.add(b);
-					}
-				}
-				out.put(apr, bSubLst);
-			} else {
-				out.put(apr, bLst);
+		Map<String, Long> oldVerMap = VersionHandler.getVersions();
+		try {
+			//Set the current thread's versioning map
+			if (verMap != null && !verMap.isEmpty()) {
+				VersionHandler.initVersions(verMap);
 			}
+			
+			//Loop over all parents and create a joined map of all builders
+			Map<AbstractProjectReference, List<Builder>> out =
+					new LinkedHashMap<AbstractProjectReference, List<Builder>>();
+			
+			//Get all parents recursively, with "this" project spliced in at the
+			//correct position.
+			List<AbstractProjectReference> refs =
+					new LinkedList<AbstractProjectReference>(
+							this.getAllParentReferences(SELECTOR.BUILDER, true)
+					);
+			
+			for (AbstractProjectReference apr : refs) {
+				InheritanceProject ip = apr.getProject();
+				if (ip == null) { continue; }
+				List<Builder> bLst = ip.getBuildersList(IMode.LOCAL_ONLY).toList();
+				if (clazz != null) {
+					List<Builder> bSubLst = new LinkedList<Builder>();
+					for (Builder b : bLst) {
+						if (b != null && clazz.isAssignableFrom(b.getClass())) {
+							bSubLst.add(b);
+						}
+					}
+					out.put(apr, bSubLst);
+				} else {
+					out.put(apr, bLst);
+				}
+			}
+			return out;
+		} finally {
+			//re initialise with old versions map
+			VersionHandler.initVersions(oldVerMap);
 		}
-		
-		return out;
 	}
 
 	// === PROJECT DESCRIPTOR IMPLEMENTATION ===
@@ -4779,7 +5235,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	@Extension(ordinal = 1000)
 	public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
-	public static final class DescriptorImpl extends AbstractProjectDescriptor {
+	public static class DescriptorImpl extends AbstractProjectDescriptor {
 		private final HashSet<String> projectsToBeCreatedTransient =
 				new HashSet<String>();
 		
@@ -4790,6 +5246,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			InheritanceProject.createBuffers();
 		}
 		
+		@Override
 		public String getDisplayName() {
 			return Messages.InheritanceProject_DisplayName();
 		}
@@ -4798,6 +5255,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return "";
 		}
 
+		@Override
 		public InheritanceProject newInstance(ItemGroup parent, String name) {
 			//Checking if the given name is on the list of transient jobs
 			if (this.projectsToBeCreatedTransient.contains(name)) {

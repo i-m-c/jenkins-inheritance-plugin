@@ -49,14 +49,20 @@ if (my.isTransient) {
 if (app.labels.size() > 1 || app.clouds.size() > 0 || (lbl != null && lbl != app.selfLabel)) {
 	f.optionalBlock(
 			title: _("Restrict where this project can be run"),
-			help: "/help/project-config/slave.html",
 			name: "hasSlaveAffinity",
-			checked: lbl != null) {
-		f.entry(field: "assignedLabelString", title: _("Label Expression")) {
-			f.textbox(autoCompleteDelimChar: "")
+			checked: lbl != null,
+			field: "slaveAffinity",
+			inline: "true"
+	) {
+		f.entry(field: "label", title: _("Label Expression")) {
+			f.textbox(
+					autoCompleteDelimChar: " ",
+					value: my.getAssignedLabelString()
+			)
 		}
 	}
 }
+
 
 f.section(title: _("Advanced Project Options")) {
 	f.advanced() {

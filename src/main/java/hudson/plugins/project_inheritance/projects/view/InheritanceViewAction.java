@@ -1,23 +1,22 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.view;
 
 import hudson.Extension;
@@ -31,6 +30,7 @@ import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
+import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
 import hudson.plugins.project_inheritance.util.PathMapping;
 import hudson.tasks.Builder;
 import hudson.tasks.CommandInterpreter;
@@ -54,6 +54,7 @@ import jenkins.model.Jenkins;
 import org.apache.commons.io.FileUtils;
 import org.apache.tools.tar.TarEntry;
 import org.apache.tools.tar.TarOutputStream;
+import org.kohsuke.stapler.HttpResponse;
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
 
@@ -65,6 +66,11 @@ import com.google.common.io.Files;
  * 
  */
 public class InheritanceViewAction implements Action, Describable<InheritanceViewAction> {
+
+
+	private static final String LABEL_DISPLAY_NAME = "Full Build Flow";
+
+
 	private transient InheritanceBuild build;
 	
 
@@ -133,7 +139,7 @@ public class InheritanceViewAction implements Action, Describable<InheritanceVie
 	public String getDisplayName() {
 		InheritanceProject ip = this.getProject();
 		if (this.isApplicableFor(ip)) {
-			return "View/Download full build flow";
+			return LABEL_DISPLAY_NAME;
 		} else {
 			return null;
 		}
@@ -151,23 +157,34 @@ public class InheritanceViewAction implements Action, Describable<InheritanceVie
 	
 	// === REST API CALLS ===
 	
+	/**
+	 * Creates an {@link HttpResponse} that will send a TGZ containing build
+	 * scripts.
+	 * 
+	 * @return null, if the file could not be generated, otherwise a valid {@link HttpResponse}.
+	 */
 	public ReadOnlyConfigurationArchive doDownload() {
-		Map<String, Long> versions = (build != null) ? build.getProjectVersions() : null;
-			if (versions != null) {
-			InheritanceProject.setVersioningMap(versions);
+		Map<String, Long> versions =
+				(build != null) ? build.getProjectVersions() : null;
+		if (versions != null) {
+			VersionHandler.initVersions(versions);
 		}
-		List<Builder> builders =
-				this.getProject().getBuildersList(IMode.INHERIT_FORCED).toList();
 		try {
-			File archive = this.generateExecutableCompoundScript(
-					builders,
-					this.getProject().getName(),
-					this.getBuild().getBuildVariables()
-			);
-			return new ReadOnlyConfigurationArchive(archive);
-		} catch (IOException ex) {
-			//TODO: Log this error
-			return null;
+			List<Builder> builders =
+					this.getProject().getBuildersList(IMode.INHERIT_FORCED).toList();
+			try {
+				File archive = this.generateExecutableCompoundScript(
+						builders,
+						this.getProject().getFullName(),
+						this.getBuild().getBuildVariables()
+				);
+				return new ReadOnlyConfigurationArchive(archive);
+			} catch (IOException ex) {
+				//TODO: Log this error
+				return null;
+			}
+		} finally {
+			VersionHandler.clearVersions();
 		}
 	}
 	

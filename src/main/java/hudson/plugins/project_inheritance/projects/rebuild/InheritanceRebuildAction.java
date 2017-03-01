@@ -1,38 +1,23 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.rebuild;
-
-import hudson.model.Action;
-import hudson.model.ParameterValue;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.model.ParameterDefinition;
-import hudson.model.ParametersAction;
-import hudson.model.StringParameterDefinition;
-import hudson.model.StringParameterValue;
-import hudson.plugins.project_inheritance.projects.InheritanceBuild;
-import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
-import hudson.plugins.project_inheritance.util.Reflection;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -46,14 +31,25 @@ import java.util.Set;
 
 import javax.servlet.ServletException;
 
-import jenkins.util.TimeDuration;
-import net.sf.json.JSONArray;
-import net.sf.json.JSONException;
-import net.sf.json.JSONObject;
-
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+
+import hudson.model.AbstractBuild;
+import hudson.model.AbstractProject;
+import hudson.model.Action;
+import hudson.model.ParameterDefinition;
+import hudson.model.ParameterValue;
+import hudson.model.ParametersAction;
+import hudson.model.StringParameterDefinition;
+import hudson.model.StringParameterValue;
+import hudson.model.Descriptor.FormException;
+import hudson.plugins.project_inheritance.projects.InheritanceBuild;
+import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
+import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
+import hudson.plugins.project_inheritance.util.Reflection;
+import jenkins.util.TimeDuration;
 
 /**
  * This class implements the actions that are necessary to rebuild a
@@ -173,85 +169,97 @@ public class InheritanceRebuildAction implements Action {
 		
 		//Reloading the versions used by the build
 		Map<String, Long> versions = this.build.getProjectVersions();
-		if (versions != null) {
-			InheritanceProject.setVersioningMap(versions);
+		if (versions == null) {
+			versions = Collections.emptyMap();
 		}
-		
-		
-		//Building a map of parameter names to parameter values
-		HashMap<String, ParameterValue> map =
-				new HashMap<String, ParameterValue>();
-		
-		//Retrieving the build actions for that build
-		ParametersAction action =
-				this.build.getAction(hudson.model.ParametersAction.class);
-		
-		for (ParameterValue value : action.getParameters()) {
-			map.put(value.getName(), value);
-		}
-		
-		//We fetch the definitions set by the project
-		List<ParameterDefinition> pdLst = 
-				ip.getParameters(IMode.INHERIT_FORCED);
-		
-		List<ParameterDefinition> modLst =
-				new LinkedList<ParameterDefinition>();
-		
-		//Adjust their default values, to reflect those actually set
-		//for the previous job
-		Set<String> handledVars = new HashSet<String>();
-		for (ParameterDefinition pd : pdLst) {
-			//Check if that definition has the "hidden" property set
-			if (showHidden != null) {
-				Object o = Reflection.invokeIfPossible(pd, "getIsHidden");
-				boolean isHidden = (o != null && o instanceof Boolean && (Boolean)o);
-				if (showHidden && ! isHidden || !showHidden && isHidden) {
-					//Ignore this entry
+		VersionHandler.initVersions(versions);
+		try {
+			//Building a map of parameter names to parameter values
+			HashMap<String, ParameterValue> map =
+					new HashMap<String, ParameterValue>();
+			
+			//Retrieving the build actions for that build
+			ParametersAction action =
+					this.build.getAction(hudson.model.ParametersAction.class);
+			
+			for (ParameterValue value : action.getParameters()) {
+				if (value == null || value.getName() == null) { continue; }
+				
+				//Check if the value is permitted for rebuilding
+				if (!RebuildParameterFilter.isParameterAllowedByAll(value)) {
+					continue;
+				}
+				
+				//Add the parameter value to the rebuild
+				map.put(value.getName(), value);
+			}
+			
+			
+			//We fetch the definitions set by the project
+			List<ParameterDefinition> pdLst = 
+					ip.getParameters(IMode.INHERIT_FORCED);
+			
+			List<ParameterDefinition> modLst =
+					new LinkedList<ParameterDefinition>();
+			
+			//Adjust their default values, to reflect those actually set
+			//for the previous job
+			Set<String> handledVars = new HashSet<String>();
+			for (ParameterDefinition pd : pdLst) {
+				//Check if that definition has the "hidden" property set
+				if (showHidden != null) {
+					Object o = Reflection.invokeIfPossible(pd, "getIsHidden");
+					boolean isHidden = (o != null && o instanceof Boolean && (Boolean)o);
+					if (showHidden && ! isHidden || !showHidden && isHidden) {
+						//Ignore this entry
+						handledVars.add(pd.getName());
+						continue;
+					}
+				}
+				// Checking if we have an suitable action defined for that
+				ParameterValue pv = map.get(pd.getName());
+				if (pv == null) {
+					//Using regular default valued definition
+					modLst.add(pd);
 					handledVars.add(pd.getName());
 					continue;
 				}
+				//Otherwise, we fetch&add a copy with a new default value
+				modLst.add(pd.copyWithDefaultValue(pv));
+				handledVars.add(pv.getName());
 			}
-			// Checking if we have an suitable action defined for that
-			ParameterValue pv = map.get(pd.getName());
-			if (pv == null) {
-				//Using regular default valued definition
-				modLst.add(pd);
-				handledVars.add(pd.getName());
-				continue;
+			
+			//Now, at last, we create StringParameterValues for all variables not
+			//covered by ParameterDefinitions from the job (i.e. dynamically contributed vars)
+			//NOTE: Dynamically allocated variables are ALWAYS hidden
+			if (showHidden != null && showHidden) {
+				for (ParameterValue pv : map.values()) {
+					//Ignore params that were already added above
+					if (handledVars.contains(pv.getName())) { continue; }
+					//Ignore those, that are not strings
+					if (!(pv instanceof StringParameterValue)) { continue; }
+					StringParameterValue spv = (StringParameterValue) pv;
+					
+					modLst.add(new StringParameterDefinition(spv.getName(), spv.value));
+				}
 			}
-			//Otherwise, we fetch&add a copy with a new default value
-			modLst.add(pd.copyWithDefaultValue(pv));
-			handledVars.add(pv.getName());
+			
+			//Sort the modified list by name
+			Collections.sort(modLst, new Comparator<ParameterDefinition>() {
+				@Override
+				public int compare(ParameterDefinition o1, ParameterDefinition o2) {
+					if (o1 == null && o2 == null) { return 0; }
+					if (o1 == null) { return -1; }
+					if (o2 == null) { return 1; }
+					return o1.getName().compareTo(o2.getName());
+				}
+			});
+			
+			//And finally, we return the tweaked list of entries
+			return modLst;
+		} finally {
+			VersionHandler.clearVersions();
 		}
-		
-		//Now, at last, we create StringParameterValues for all variables not
-		//covered by ParameterDefinitions from the job (i.e. dynamically contributed vars)
-		//NOTE: Dynamically allocated variables are ALWAYS hidden
-		if (showHidden != null && showHidden) {
-			for (ParameterValue pv : map.values()) {
-				//Ignore params that were already added above
-				if (handledVars.contains(pv.getName())) { continue; }
-				//Ignore those, that are not strings
-				if (!(pv instanceof StringParameterValue)) { continue; }
-				StringParameterValue spv = (StringParameterValue) pv;
-				
-				modLst.add(new StringParameterDefinition(spv.getName(), spv.value));
-			}
-		}
-		
-		//Sort the modified list by name
-		Collections.sort(modLst, new Comparator<ParameterDefinition>() {
-			@Override
-			public int compare(ParameterDefinition o1, ParameterDefinition o2) {
-				if (o1 == null && o2 == null) { return 0; }
-				if (o1 == null) { return -1; }
-				if (o2 == null) { return 1; }
-				return o1.getName().compareTo(o2.getName());
-			}
-		});
-		
-		//And finally, we return the tweaked list of entries
-		return modLst;
 	}
 	
 	
@@ -264,29 +272,26 @@ public class InheritanceRebuildAction implements Action {
 	 */
 	public void doConfigSubmit(StaplerRequest req, StaplerResponse rsp)
 			throws ServletException, IOException,
-			InterruptedException {
+			InterruptedException, FormException {
 		
 		//Decoding the version map
-		Map<String, Long> verMap = InheritanceRebuildAction.decodeVersionMap(
-				req
-		);
+		Map<String, Long> verMap = VersionHandler.getFromFormRequest(req);
 		if (verMap == null) {
-			//TODO: Redirect to error page
-			rsp.sendRedirect(".");
+			//No versions passed in by user -- probably all projects versionless
+			verMap = VersionHandler.getFromProject(build.getProject());
+			//Note: verMap may still be null, after this
+			if (verMap == null) {
+				verMap = Collections.emptyMap();
+			}
 		}
 		
 		//Checking if a refresh is desired
 		if (req.hasParameter("doRefresh")) {
 			//Attaching the selected versions as a URL parameter
-			String verMapStr = 
-					InheritanceParametersDefinitionProperty
-					.encodeVersioningMap(verMap);
-			if (verMapStr == null || verMapStr.isEmpty()) {
-				//TODO: Redirect to error page
-				rsp.sendRedirect(".");
-			}
+			String verMapStr = VersionHandler.encodeUrlParameter(verMap);
 			String redirURL = String.format(
-					"?versions=\"%s\"",
+					"?%s=\"%s\"",
+					VersionHandler.VERSIONING_KEY,
 					verMapStr
 			);
 			rsp.sendRedirect(redirURL);
@@ -305,7 +310,7 @@ public class InheritanceRebuildAction implements Action {
 			return;
 		} else if (this.isApplicableFor(ip) == false) {
 			//Redirecting back to the job's page
-			rsp.sendRedirect(req.getContextPath() + "/job/" + ip.getName());
+			rsp.sendRedirect(ip.getAbsoluteUrl());
 			return;
 		}
 		//Check if we were passed sensible data
@@ -316,81 +321,30 @@ public class InheritanceRebuildAction implements Action {
 		}
 		
 		//Setting the versioning information
-		InheritanceProject.setVersioningMap(verMap);
-		
-		//Triggering the build; do note that this will trigger a forward
-		//on the request; unless the "rebuildNoRedirect" attribute is set
-		//Also do note that that is an Inheritance-Project specific action
-		req.setAttribute("rebuildNoRedirect", true);
-		TimeDuration delay = (build != null)
-				? new TimeDuration(build.getProject().getQuietPeriod())
-				: new TimeDuration(0);
-		ip.doBuild(
-				req, rsp, delay
-		);
-		
-		//Sending the user to the project's root page
-		rsp.sendRedirect(req.getContextPath() + "/job/" + ip.getName());
+		VersionHandler.initVersions(verMap);
+		try {
+			// set rebuild information as part of rebuild trigger
+			req.setAttribute("rebuildCause", this);
+
+			//Triggering the build; do note that this will trigger a forward
+			//on the request; unless the "rebuildNoRedirect" attribute is set
+			//Also do note that that is an Inheritance-Project specific action
+			req.setAttribute("rebuildNoRedirect", true);
+			TimeDuration delay = (build != null)
+					? new TimeDuration(build.getProject().getQuietPeriod())
+					: new TimeDuration(0);
+			ip.doBuild(
+					req, rsp, delay
+			);
+			
+			//Sending the user to the project's root page
+			rsp.sendRedirect(ip.getAbsoluteUrl());
+		} finally {
+			//Note: Should've been done by doBuild() above, but better safe than sorry
+			VersionHandler.clearVersions();
+		}
 	}
 
 	
-	public static Map<String, Long> decodeVersionMap(StaplerRequest req) {
-		JSONObject jForm;
-		try {
-			jForm = req.getSubmittedForm();
-		} catch (ServletException e) {
-			return null;
-		}
-		
-		
-		String[] projects = null;
-		try {
-			Object obj = jForm.get("project");
-			if (obj instanceof JSONArray) {
-				JSONArray a = (JSONArray)obj;
-				projects = new String[a.size()];
-				for (int i = 0; i < a.size(); i++) {
-					projects[i] = ((JSONArray)obj).getString(i);
-				}
-			} else if (obj instanceof String) {
-				projects = new String[1];
-				projects[0] = obj.toString();
-			}
-		} catch (JSONException ex) {
-			projects = null;
-		}
-
-		Long[] versions = null;
-		try {
-			Object obj = jForm.get("version");
-			if (obj instanceof JSONArray) {
-				JSONArray a = (JSONArray)obj;
-				versions = new Long[a.size()];
-				for (int i = 0; i < a.size(); i++) {
-					versions[i] = ((JSONArray)obj).getLong(i);
-				}
-			} else if (obj instanceof String) {
-				versions = new Long[1];
-				versions[0] = Long.valueOf(obj.toString());
-			}
-		} catch (JSONException ex) {
-			versions = null;
-		} catch (NumberFormatException ex) {
-			versions = null;
-		}
-		
-		if (projects == null || versions == null ||
-				versions.length != projects.length) {
-			return null;
-		}
-
-		//Decoding the version map from the submission
-		Map<String, Long> verMap = new HashMap<String, Long>();
-		
-		for (int i = 0; i < projects.length; i++ ) {
-			verMap.put(projects[i], versions[i]);
-		}
-		
-		return verMap;
-	}
+	
 }

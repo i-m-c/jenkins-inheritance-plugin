@@ -35,9 +35,6 @@ THE SOFTWARE.
 		xmlns:i="jelly:fmt"
 		xmlns:p="/lib/hudson/project"
 >
-	<f:invisibleEntry>
-		<f:readOnlyTextbox name="projectName" default="${it.name}"/>
-	</f:invisibleEntry>
 	<f:entry title="${%Name}" help="/help/parameter/name.html">
 		<f:textbox field="name" />
 	</f:entry>
@@ -50,42 +47,32 @@ THE SOFTWARE.
 			<f:textarea field="description" />
 		</f:entry>
 		
-		<!-- Then, we add the boxes for the inheritance-specific tasks -->
-		<f:entry title="${%Inheritance Mode}">
-			<f:select field="inheritanceMode" />
+		<!-- Add the box for the inheritance-mode -->
+		<f:entry title="${%Inheritance Mode}" field="inheritanceMode">
+			<f:select />
+		</f:entry>
+		
+		<!-- Add the box for the whitespace-handling-mode -->
+		<f:entry title="${%Whitespace Mode}" field="whitespaceMode">
+			<f:select />
 		</f:entry>
 		
 		<!-- Checkbox for "isHidden" property -->
-		<f:entry title="${%Hide behind button on build screen?}">
-			<f:checkbox field="isHidden" default="false"/>
-			<f:description>
-				If this is checked, the parameter will be hidden behind an
-				"advanced" button on the screen for starting a build.
-				For sanity's sake, you should set this for mandatory
-				variables.
-			</f:description>
-		</f:entry>
-		
-		<!-- Checkbox for automatic addition of spaces -->
-		<f:entry title="${%Automatically add spaces?}">
-			<f:checkbox field="autoAddSpaces" default="true"/>
-			<f:description>
-				If this is checked, the parameter will automatically have a space
-				prepended, if it extends a parameter from a parent project.
-			</f:description>
+		<f:entry title="${%Hide behind button on build screen?}" field="isHidden">
+			<f:checkbox default="false"/>
 		</f:entry>
 		
 		<!-- And the field, that determines if the parameter is mandatory -->
-		<f:entry title="${%Must have default?}">
-			<f:checkbox field="mustHaveDefaultValue"/>
+		<f:entry title="${%Must have default?}" field="mustHaveDefaultValue">
+			<f:checkbox/>
 			<f:description>
 				If this is checked, the parameter has to have a default value set
 				at some point during inheritance.  
 			</f:description>
 		</f:entry>
 		<!-- And the field to determine, whether or not a field may be empty on build -->
-		<f:entry title="${%Must be assigned?}">
-			<f:checkbox field="mustBeAssigned"/>
+		<f:entry title="${%Must be assigned?}" field="mustBeAssigned">
+			<f:checkbox/>
 			<f:description>
 				If this is checked, it is impossible to start a build when this
 				parameter does not have a value set.

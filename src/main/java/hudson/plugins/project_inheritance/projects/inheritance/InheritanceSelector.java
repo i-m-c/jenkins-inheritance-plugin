@@ -1,36 +1,36 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.inheritance;
 
-
-import hudson.ExtensionList;
-import hudson.ExtensionPoint;
-import hudson.model.Hudson;
-import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.scm.SCM;
 
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+
+import hudson.ExtensionList;
+import hudson.ExtensionPoint;
+import hudson.model.JobProperty;
+import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.scm.SCM;
+import jenkins.model.Jenkins;
 
 /**
  * Extension point that allows other plugins to decide how a particular type
@@ -102,21 +102,34 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	}
 	
 	/**
-	 * This method returns the supertype of which this class is handling some
-	 * or all subtypes. In other words; this <b>must</b> return the actual
-	 * type <code>T</code> used by the subclass as the generic type argument.
+	 * This method must return true, if the given Class is a valid supertype
+	 * of the generic class used by your type.
 	 * <p>
-	 * Expect to see lots of {@link ClassCastException}s if you violate this.
+	 * For example, if your selector handles a specific {@link JobProperty},
+	 * this method must return true if you encounter a {@link JobProperty}.
+	 * <p>
+	 * This is used to do a fast pre-selection of which selectors to consider
+	 * for the basic types offered by Jenkins (Properties, BuildSteps,
+	 * Publishers, etc. pp.).
+	 * <p>
+	 * Expect to see lots of {@link ClassCastException}s or your code not
+	 * even being called, if you violate this.
 	 * 
 	 * @return
 	 */
 	public abstract boolean isApplicableFor(Class<?> clazz);
 	
 	/**
-	 * This method is given an object and returns the mode
-	 * with which the object should be treated during inheritance
-	 * 
-	 * The default mode if no selector is matches is "ONCE"
+	 * This method decides which mode should be used for the given class,
+	 * <b>if your selector supports that type at all!</b>
+	 * <p>
+	 * The latter part is essential, since returning anything other than
+	 * {@link MODE#NOT_RESPONSIBLE} for a type that your selector can't
+	 * handle will result in {@link ClassCastException} or broken inheritance.
+	 * <p>
+	 * The default mode if no selector is matches is {@link MODE#USE_LAST},
+	 * meaning that the last object overwrites and hides all the others defined
+	 * earlier.
 	 */
 	public abstract MODE getModeFor(Class<?> clazz);
 	
@@ -279,7 +292,7 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	@SuppressWarnings("rawtypes")
 	public static ExtensionList<InheritanceSelector> all() {
 		ExtensionList<InheritanceSelector> isLst =
-				Hudson
+				Jenkins
 				.getInstance()
 				.getExtensionList(InheritanceSelector.class);
 		return isLst;

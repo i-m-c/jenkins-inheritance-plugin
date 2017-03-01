@@ -1,5 +1,5 @@
 <!--
- Copyright (c) 2011-2013, Intel Mobile Communications GmbH
+ Copyright (c) 2011-2015, Intel Mobile Communications GmbH
  
  
  This file is part of the Inheritance plug-in for Jenkins.
@@ -22,7 +22,5 @@
   This view is used to render the installed plugins page.
 -->
 <div>
-    This plugin adds inheritance between jobs to Jenkins. To learn how this
-    plugin is used, refer to
-    <a href="http://youtu.be/DNUI7DRi6XE">this YouTube video</a>.
+Plugin that adds inheritance between jobs to Jenkins.
 </div>

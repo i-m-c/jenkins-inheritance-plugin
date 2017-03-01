@@ -1,0 +1,105 @@
+/*
+ * Copyright (c) 2016-2017, Intel Deutschland GmbH
+ *
+ * This file is part of the Inheritance plug-in for Jenkins.
+ *
+ * The Inheritance plug-in is free software: you can redistribute it
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation in version 3
+ * of the License
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+/* This CSS was generated via: http://danielstern.ca/range.css/ */
+input[type=range].intel_ui {
+  -webkit-appearance: none;
+  width: 100%;
+  margin: 3.8px 0;
+}
+input[type=range].intel_ui:focus {
+  outline: none;
+}
+input[type=range].intel_ui::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 8.4px;
+  cursor: pointer;
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  background: #6482be;
+  border-radius: 1.3px;
+  border: 0.2px solid #010101;
+}
+input[type=range].intel_ui::-webkit-slider-thumb {
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  border: 1px solid #000000;
+  height: 16px;
+  width: 16px;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -4px;
+}
+input[type=range].intel_ui:focus::-webkit-slider-runnable-track {
+  background: #7690c6;
+}
+input[type=range].intel_ui::-moz-range-track {
+  width: 100%;
+  height: 8.4px;
+  cursor: pointer;
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  background: #6482be;
+  border-radius: 1.3px;
+  border: 0.2px solid #010101;
+}
+input[type=range].intel_ui::-moz-range-thumb {
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  border: 1px solid #000000;
+  height: 16px;
+  width: 16px;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+input[type=range].intel_ui::-ms-track {
+  width: 100%;
+  height: 8.4px;
+  cursor: pointer;
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+input[type=range].intel_ui::-ms-fill-lower {
+  background: #5274b6;
+  border: 0.2px solid #010101;
+  border-radius: 2.6px;
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+}
+input[type=range].intel_ui::-ms-fill-upper {
+  background: #6482be;
+  border: 0.2px solid #010101;
+  border-radius: 2.6px;
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+}
+input[type=range].intel_ui::-ms-thumb {
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  border: 1px solid #000000;
+  height: 16px;
+  width: 16px;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+  height: 8.4px;
+}
+input[type=range].intel_ui:focus::-ms-fill-lower {
+  background: #6482be;
+}
+input[type=range].intel_ui:focus::-ms-fill-upper {
+  background: #7690c6;
+}

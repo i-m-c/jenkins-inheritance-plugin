@@ -42,7 +42,15 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 		//Show a scrim while loading
 		div(class: "behavior-loading", _("LOADING"))
 		
+		//Add an invisible div element, that stores which validationErrors can be safely ignored
+		div(
+				style: "display:none",
+				class: "acceptable-error-url-data",
+				ProjectCreationEngine.instance.getAcceptableErrorUrls()
+		)
+		
 		//Load additional Javascript
+		st.adjunct(includes: adjunctPrefix + ".detectValidationErrors")
 		st.adjunct(includes: adjunctPrefix + ".confirmChangesPopup")
 		//Prompt the user to enter a version message
 		if (my.getCurrentVersionNotification().areAllVersionsUnstable()) {
@@ -52,7 +60,6 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 		}
 		saveButtonFunction = "return confirmChangesAndEnterVersion(this, '" + buttonMsg + "')"
 		
-				
 		//Now, add the actual form (copied from the default config.jelly of "Job")
 		ct.form(
 				name: "config", action: "configSubmit", method: "post",
@@ -61,9 +68,8 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 			descriptor = my.getDescriptor()
 			instance = my
 			
-			//Include the fields that are different between transients and normal projects
-			//For example: Warning messages, version selection, etc. pp.
-			include(my, "transient-job-fields")
+			//Show elements that should display in the page header (especially warnings)
+			include(my, "configure-header-warnings")
 			
 			if (my.isNameEditable()) {
 				if (my.pronoun != null && !my.pronoun.isEmpty()) {
@@ -77,10 +83,22 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 				}
 			}
 			
+			/* The app markup formatter may or may not have the "codeMirror*" methods.
+			 * In Jelly, this seems to not be a problem; but in Groovy it croaks.
+			 * As such, we must wrap the assignment try-catch
+			 */
+			try {
+				codemirrorConfig = app.markupFormatter.codeMirrorConfig;
+				codemirrorMode = app.markupFormatter.codeMirrorMode;
+			} catch (ex) {
+				codemirrorConfig = null;
+				codemirrorMode = null;
+			}
+			
 			f.entry(title: _("Description"), help: app.markupFormatter.helpUrl) {
 				f.textarea(
-						"codemirror-config": app.markupFormatter.codeMirrorConfig,
-						"codemirror-mode": app.markupFormatter.codeMirrorMode,
+						"codemirror-config": codemirrorConfig,
+						"codemirror-mode": codemirrorMode,
 						name: "description",
 						value: my.description,
 						previewEndpoint: "/markupFormatter/previewDescription"
@@ -114,10 +132,6 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 			if (h.hasPermission(it, my.CONFIGURE)) {
 				f.bottomButtonBar() {
 					f.submit(value: _("Save"))
-					pce = ProjectCreationEngine.instance
-					if (pce.getEnableApplyButton()) {
-						f.apply()
-					}
 				}
 			}
 		}

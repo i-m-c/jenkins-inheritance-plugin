@@ -38,7 +38,6 @@ ct = namespace(lib.CustomTagLib);
 request = Stapler.getCurrentRequest();
 if (request != null) {
 	request.setAttribute("FIELDS_READ_ONLY", !(ProjectCreationEngine.instance.currentUserMayRename()))
-	request.setAttribute("REFERENCE_FILTER", new MatingReferenceFilter(my))
 }
 
 f.section(title: _("ConfigureCompounds")) {
@@ -53,6 +52,7 @@ f.section(title: _("ConfigureCompounds")) {
 	)
 	
 	//List of projects to mate with
+	referenceFilter = new MatingReferenceFilter(my);
 	f.entry() {
 		f.hetero_list(
 				items: my.compatibleProjects,
@@ -61,7 +61,8 @@ f.section(title: _("ConfigureCompounds")) {
 				descriptors: AbstractProjectReference.all(
 						ParameterizedProjectReference.class
 				),
-				addCaption: _("AddCompound")
+				addCaption: _("AddCompound"),
+				capture: "referenceFilter"
 		)
 	}
 }

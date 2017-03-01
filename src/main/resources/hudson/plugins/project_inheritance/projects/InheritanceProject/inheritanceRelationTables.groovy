@@ -76,8 +76,8 @@ for (type in Relationship.Type.values()) {
 					if (relationsMap.get(project).type == type) {
 						tr() {
 							td(class: "pane forceWrap") {
-								a(href: rootURL + "/job/" + project.getName(),
-										project.getName()
+								a(href: rootURL + "/job/" + project.getFullName(),
+										project.getFullName()
 								)
 							}
 							td(class: "pane forceWrap", relationsMap.get(project).distance)
@@ -128,8 +128,8 @@ for (type in Relationship.Type.values()) {
 					if (relationsMap.get(project).type == type) {
 						tr() {
 							td(class: "pane forceWrap") {
-								a(href: rootURL + "/job/" + project.getName(),
-										project.getName()
+								a(href: rootURL + "/job/" + project.getFullName(),
+										project.getFullName()
 								)
 							}
 							if (type != Relationship.Type.CHILD) {

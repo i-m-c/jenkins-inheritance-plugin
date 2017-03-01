@@ -1,50 +1,23 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.creation;
-
-import static hudson.init.InitMilestone.JOB_LOADED;
-import hudson.BulkChange;
-import hudson.Extension;
-import hudson.Functions;
-import hudson.XmlFile;
-import hudson.init.InitMilestone;
-import hudson.init.Initializer;
-import hudson.model.AbstractDescribableImpl;
-import hudson.model.Describable;
-import hudson.model.ManagementLink;
-import hudson.model.Saveable;
-import hudson.model.TopLevelItem;
-import hudson.model.Descriptor;
-import hudson.model.Descriptor.FormException;
-import hudson.model.Label;
-import hudson.model.Queue;
-import hudson.model.labels.LabelAtom;
-import hudson.model.listeners.ItemListener;
-import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ProjectReference;
-import hudson.security.ACL;
-import hudson.util.FormValidation;
-import hudson.util.ListBoxModel;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,12 +25,12 @@ import java.lang.reflect.Field;
 import java.text.DecimalFormat;
 import java.util.AbstractMap;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -71,18 +44,39 @@ import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
 
-import jenkins.model.Jenkins;
-import net.sf.json.JSONException;
-import net.sf.json.JSONObject;
-
 import org.acegisecurity.Authentication;
 import org.acegisecurity.context.SecurityContext;
 import org.acegisecurity.context.SecurityContextHolder;
+import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+
+import com.google.common.base.Joiner;
+
+import hudson.BulkChange;
+import hudson.Extension;
+import hudson.Functions;
+import hudson.XmlFile;
+import hudson.model.AbstractDescribableImpl;
+import hudson.model.Describable;
+import hudson.model.Descriptor;
+import hudson.model.ManagementLink;
+import hudson.model.Saveable;
+import hudson.model.TopLevelItem;
+import hudson.model.Descriptor.FormException;
+import hudson.plugins.project_inheritance.projects.InheritanceProject;
+import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
+import hudson.plugins.project_inheritance.projects.references.ProjectReference;
+import hudson.security.ACL;
+import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
+import jenkins.model.Jenkins;
+import net.sf.json.JSONException;
+import net.sf.json.JSONObject;
 
 /**
  * This class encapsulates the properties and actions of the project creation
@@ -98,6 +92,8 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	private static final Logger log = Logger.getLogger(
 			ProjectCreationEngine.class.toString()
 	);
+	
+	
 	
 	// === STATIC MEMBER CLASSES ===
 	
@@ -266,108 +262,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		}
 	}
 	
-	/**
-	 * Restores the queue content during the start up.
-	 */
-	@Extension
-	public static class JenkinsStartupCompleteListener extends ItemListener {
-		public void onLoaded() {
-			//Does nothing; purely decorative; may acquire a use later on
-		}
-		
-		/**
-		 * This function will wait until it <b>thinks</b> all static jobs have
-		 * been loaded and then tries to generate the transiens before
-		 * letting Jenkins attain the {@link InitMilestone#JOB_LOADED} milestone.
-		 * <p>
-		 * Do note that this is just a time-based heuristic and is the only way
-		 * to reliably trigger <b>before</b> Jenkins calls
-		 * {@link Queue#init(Jenkins)} and restores aborted Runs from it.
-		 * <p>
-		 * But since that is unreliable, we trigger the recreation again via
-		 * {@link #onJenkinsJobsGuaranteedLoaded()}.
-		 */
-		@Initializer(before=JOB_LOADED,fatal=false)
-		public static void onJenkinsStart() {
-			//We must wait until all static jobs have been loaded
-			Jenkins j = Jenkins.getInstance();
-			
-			int currItems = 0;
-			while (true) {
-				//Sleeping a full second
-				try {
-					Thread.sleep(1000);
-				} catch (InterruptedException e) {
-					//We were probably told to shut down
-					break;
-				}
-				//Then, we fetch the current map of items (jobs)
-				Map<String,TopLevelItem> items = j.getItemMap();
-				int nextItems = items.size();
-				if (nextItems == currItems) {
-					//We assume we're done
-					break;
-				}
-				currItems = Math.max(currItems, nextItems);
-			}
-			
-			//Triggering the automatic loading of transients
-			if (ProjectCreationEngine.instance != null) {
-				ProjectCreationEngine.instance.notifyJenkinsStartupComplete();
-			} else {
-				//This should never happen
-				log.severe(
-					"Issue during loading of transient jobs; PCE not yet initialized!"
-				);
-			}
-		}
-		
-		/**
-		 * This method does the same as {@link #onJenkinsStart()}, except that
-		 * it has no reason to wait, since all static Jobs are guaranteed to
-		 * have been created by then. Unfortunately, Jenkins has most likely
-		 * already called {@link Queue#init(Jenkins)} by this point, so the
-		 * other function is also important.
-		 * <p>
-		 * In other words, this functions ensures the reliable creation of all
-		 * transient jobs; whereas the other one tries to promise a reliable
-		 * restoration of jobs that were stuck in the previous Queue.
-		 */
-		@Initializer(after=JOB_LOADED,fatal=false)
-		public static void onJenkinsJobsGuaranteedLoaded() {
-			//Triggering the automatic loading of transients
-			if (ProjectCreationEngine.instance != null) {
-				ProjectCreationEngine.instance.notifyJenkinsStartupComplete();
-			} else {
-				//This should never happen
-				log.severe(
-					"Issue during loading of transient jobs; PCE not yet initialized!"
-				);
-			}
-			//Now, that all jobs are present; we rebuild the Jenkins job
-			//dependency graph
-			Jenkins.getInstance().rebuildDependencyGraph();
-		}
-	}
 	
-	@Deprecated
-	public static enum TriggerInheritance {
-		INHERIT, NO_INHERIT_WARN, NO_INHERIT_NO_WARN;
-		
-		public String toString() {
-			switch (this) {
-				case INHERIT:
-					return "Inherit triggers";
-				case NO_INHERIT_WARN:
-					return "Do not inherit triggers, but print notification";
-				case NO_INHERIT_NO_WARN:
-					return "Do not inherit triggers, do not print notification";
-				default:
-					return "N/A";
-			}
-		}
-	}
-
 	
 	// === STATIC MEMBER FIELDS ===
 	
@@ -402,23 +297,10 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	protected boolean triggerOnStartup = true;
 	protected boolean copyOnRename = true;
 	protected boolean enableApplyButton = true;
-	protected String magicNodeLabelForTesting = null;
-	protected boolean unescapeEqualsCharInParams = false; 
+	
+	protected List<String> acceptableErrorUrls;
 	
 	protected RenameRestriction renameRestriction = RenameRestriction.ALLOW_ALL;
-	
-	/**
-	 * This field is only present for one version; as such it is immediately
-	 * marked as deprecated. It basically tells the system whether or not to
-	 * use inheritance for triggers, or not.
-	 * @deprecated only used for one version, to ease transition to trigger inheritance
-	 */
-	protected TriggerInheritance triggerInheritance = TriggerInheritance.NO_INHERIT_WARN;
-	
-	
-	//This value is deprecated; as it is nowadays assumed to be always true
-	@Deprecated
-	protected transient boolean allowMultipleCreation = true;
 	
 	protected transient Map<String, String> lastCreationState =
 			new ConcurrentHashMap<String, String>();
@@ -547,18 +429,6 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			}
 			
 			try {
-				this.magicNodeLabelForTesting = json.getString("magicNodeLabelForTesting");
-			} catch (JSONException ex) {
-				this.magicNodeLabelForTesting = null;
-			}
-			
-			try {
-				this.unescapeEqualsCharInParams = json.getBoolean("unescapeEqualsCharInParams");
-			} catch (JSONException ex) {
-				this.unescapeEqualsCharInParams = false;
-			}
-			
-			try {
 				this.renameRestriction = RenameRestriction.valueOf(
 						json.getString("renameRestriction")
 				);
@@ -567,11 +437,17 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			}
 			
 			try {
-				this.triggerInheritance = TriggerInheritance.valueOf(
-						json.getString("triggerInheritance")
-				);
+				List<String> acceptUrls = new LinkedList<>();
+				for (String line : json.getString("acceptableErrorUrls").split("\n")) {
+					line = line.trim();
+					if (StringUtils.isNotBlank(line)) {
+						acceptUrls.add(line);
+					}
+				}
+				this.acceptableErrorUrls = acceptUrls;
 			} catch (JSONException ex) {
-				this.triggerInheritance = TriggerInheritance.NO_INHERIT_WARN;
+				//Not null, because null would then return a default list, not an empty one
+				this.acceptableErrorUrls = Collections.emptyList();
 			}
 			
 			//Then, we read the hetero-list of creation classes and create them
@@ -672,7 +548,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				);
 			}
 			this.parents = parents;
-			this.variance = variance;
+			this.variance = (variance != null) ? variance.trim() : null;
 			this.reportMap = reportMap;
 			this.auth = auth;
 		}
@@ -686,7 +562,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			//Fetch the name & class of each parent
 			for (InheritanceProject ip : this.parents) {
 				if (ip == null) { continue; }
-				String pName = ip.getName();
+				String pName = ip.getFullName();
 				String cName = ip.getCreationClass();
 				if (pName == null || cName == null || cName.isEmpty()) { continue; }
 				parNames.add(pName);
@@ -775,7 +651,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				for (InheritanceProject par : this.parents) {
 					if (par == null) { continue; }
 					ip.addParentReference(
-							new ProjectReference(par.getName(), --i)
+							new ProjectReference(par.getFullName(), --i)
 					);
 				}
 				
@@ -805,7 +681,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				
 				//Load the additional properties
 				if (ip != null) {
-					ip.onLoad(ip.getParent(), ip.getName());
+					ip.onLoad(ip.getParent(), ip.getFullName());
 				}
 				
 				if (!isSane) {
@@ -962,7 +838,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	}
 	
 	public void doLeaveCreationResult() {
-		//Redirect back to the central managment page
+		//Redirect back to the central management page
 		try {
 			Jenkins j = Jenkins.getInstance();
 			String rootURL = j.getRootUrlFromRequest();
@@ -1016,8 +892,8 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	}
 	
 	public void notifyProjectDelete(InheritanceProject project) {
-		//Placeholder if ever necessary; you should not be able to delete a
-		//still referenced project
+		//TODO: When a product definition gets deleted, all jobs that
+		//reference it should be informed about this loss.
 	}
 	
 	
@@ -1043,22 +919,6 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	}
 	
 	
-	public String getMagicNodeLabelForTesting() {
-		return this.magicNodeLabelForTesting;
-	}
-	
-	public Label getMagicNodeLabelForTestingValue() {
-		String str = this.getMagicNodeLabelForTesting();
-		if (str == null) { return null; }
-		Set<LabelAtom> nonTestSet = Label.parse(str);
-		
-		Label out = null;
-		for (LabelAtom la : nonTestSet) {
-			out = (out == null) ? la : out.and(la);
-		}
-		return out;
-	}
-	
 	/**
 	 * @return whether or not the results of some expensive reflection calls
 	 * ({@link Class#isAssignableFrom(Class)}) should be cached.
@@ -1066,10 +926,6 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	public boolean getEnableReflectionCaching() {
 		//TODO: Make this configurable
 		return true;
-	}
-	
-	public boolean getUnescapeEqualsCharInParams() {
-		return this.unescapeEqualsCharInParams;
 	}
 	
 	public boolean getEnableCreation() {
@@ -1125,32 +981,35 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	
 	
 	/**
-	 * Always returns true, as disabling this functionality has been deprecated
+	 * Returns the list of error URLs that are safe to ignore when checking the
+	 * validation fields of the job configuration files.
 	 * 
-	 * @Deprecated since v1.5, this always returns true.
+	 * @see resources/hudson/plugins/project_inheritance/projects/InheritanceProject/adjunct/detectValidationErrors.js
+	 * 
+	 * @return the value of {@link #getAcceptableErrorUrlsList()} joined with
+	 * 		'\n' as the separator.
 	 */
-	@Deprecated
-	public boolean getAllowMultipleCreation() {
-		return true;
+	public String getAcceptableErrorUrls() {
+		return Joiner.on('\n').join(this.getAcceptableErrorUrlsList());
 	}
 	
 	/**
-	 * @see #triggerInheritance
-	 * @deprecated
+	 * Returns the list of error URLs that are safe to ignore when checking the
+	 * validation fields of the job configuration files.
+	 * 
+	 * 
+	 * @return the list of acceptable URLs. May be empty but never null.
+	 * 		Returns a default list when the backing field is null.
 	 */
-	public TriggerInheritance getTriggersAreInherited() {
-		if (this.triggerInheritance == null) {
-			return TriggerInheritance.NO_INHERIT_WARN;
+	public List<String> getAcceptableErrorUrlsList() {
+		if (this.acceptableErrorUrls == null) {
+			//Use a default list with 2 "known-bad" plugins that show warnings as errors
+			this.acceptableErrorUrls = new LinkedList<>(Arrays.asList(
+					"hudson.tasks.ArtifactArchiver",
+					"hudson.tasks.junit.JUnitResultArchiver"
+			));
 		}
-		return this.triggerInheritance;
-	}
-	
-	/**
-	 * @see #triggerInheritance
-	 * @deprecated
-	 */
-	public String getTriggerInheritance() {
-		return this.getTriggersAreInherited().name();
+		return this.acceptableErrorUrls;
 	}
 	
 	public List<CreationClass> getCreationClasses() {
@@ -1168,6 +1027,15 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	
 	public List<CreationMating> getMatings() {
 		return this.matings;
+	}
+	
+	public boolean isFirstInCreationMating(String creationClass) {
+		for (CreationMating creationMating : this.matings) {
+			if (creationMating.firstClass != null && creationMating.firstClass.equals(creationClass)) {
+				return true;
+			}
+		}
+		return false;
 	}
 	
 	public static List<Descriptor<CreationMating>> getMatingDescriptors() {
@@ -1262,7 +1130,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		
 		if (variance != null && !variance.isEmpty()) {
 			b.append('_');
-			b.append(variance);
+			b.append(variance.trim());
 		}
 		return b.toString();
 	}
@@ -1296,15 +1164,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			
 			return m;
 		}
-
-		@Deprecated
-		public ListBoxModel doFillTriggerInheritanceItems() {
-			ListBoxModel m = new ListBoxModel();
-			for (TriggerInheritance r : TriggerInheritance.values()) {
-				m.add(r.toString(), r.name());
-			}
-			return m;
-		}
+		
 		
 		@Override
 		public String getDisplayName() {

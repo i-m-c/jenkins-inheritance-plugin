@@ -1,12 +1,10 @@
-target
-work
-/archives
-/jobs.tar.gz
-/test_config
 .project
-.settings
 .classpath
-/bin
+.settings
 *.orig
 *.rej
+/bin
+/target
+/work
 *~
+

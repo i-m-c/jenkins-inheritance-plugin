@@ -1,4 +1,5 @@
 /**
+ * Copyright (c) 2016, Intel Deutschland GmbH
  * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
  * 
  * 
@@ -16,7 +17,7 @@
  * 
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import jenkins.model.Jenkins;
 import hudson.tasks.Builder;
@@ -69,7 +70,7 @@ def showBuildParametersTable() {
 		table(class:"bigtable pane sortable", style:"width:50%") {
 			thead() {
 				tr() {
-					th(class: "pane-header wider forceWrap", _("Parameter"))
+					th(class: "pane-header wider forceWrap", initialSortDir: "down", _("Parameter"))
 					th(class: "pane-header wider forceWrap", _("Value"))
 				}
 			}
@@ -180,9 +181,9 @@ def showBuildStepsList() {
 
 
 if (build != null) {
-	h1("Read-only view for build: " + project.displayName + " #" + build.getNumber())
+	h1(project.displayName + " #" + build.number + " Full Build Flow")
 } else {
-	h1("Read-only view for project: " + project.displayName)
+	h1(project.displayName + " Full Build Flow")
 }
 
 //The prefix for all sections and sub-blocks
@@ -216,7 +217,7 @@ f.form(name: "readonlyConfiguration",
 	
 	
 	//Fetch and display all parameters
-	f.section(title: _("All build parameters")) {
+	f.section(title: _("Parameters")) {
 		f.block() {
 			showBuildParametersTable()
 		}

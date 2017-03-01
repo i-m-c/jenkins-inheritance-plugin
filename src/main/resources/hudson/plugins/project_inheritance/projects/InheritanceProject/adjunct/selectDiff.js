@@ -1,3 +1,23 @@
+/*
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
+ * This file is part of the Inheritance plug-in for Jenkins.
+ *
+ * The Inheritance plug-in is free software: you can redistribute it
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation in version 3
+ * of the License
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 var selectForDiff = function(event) {
 	if (event == null) { return; }
 	//Fetch the target the user has actually clicked on, to ignore clicking on certain elements
@@ -38,6 +58,9 @@ var executeDiff = function(clName) {
 		if (val == undefined || val == null) { return; }
 		versions.push(val)
 	}
+	
+	//Sort the versions, so that low numbers come first
+	versions.sort();
 	
 	//Now, relocate to the diff computation url
 	window.location = "./showDiffOfVersions?left=" + versions[0] + "&right=" + versions[1];

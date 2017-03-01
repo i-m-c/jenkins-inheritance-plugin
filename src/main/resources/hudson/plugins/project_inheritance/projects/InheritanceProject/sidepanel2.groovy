@@ -1,6 +1,5 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
+ * Copyright (c) 2015-2016, Intel Deutschland GmbH
  * 
  * This file is part of the Inheritance plug-in for Jenkins.
  * 
@@ -18,6 +17,8 @@
  * License along with this library.	If not, see <http://www.gnu.org/licenses/>.
  */
 
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
+
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 
@@ -29,7 +30,10 @@ def url = h.getNearestAncestorUrl(request,my)
 l.tasks() {
 	if(my.getIsTransient() == false) {
 		if (my.configurable) {
-			if (h.hasPermission(my, my.CONFIGURE)) {
+			isFirstInCreation = ProjectCreationEngine
+				.instance
+				.isFirstInCreationMating(my.getCreationClass())
+			if (h.hasPermission(my, my.CONFIGURE) && isFirstInCreation) {
 				l.task(
 						icon: "images/24x24/setting.png",
 						title: _("CompoundCreation"),
@@ -59,7 +63,7 @@ l.tasks() {
 	
 	l.task(
 			icon: "plugin/project-inheritance/images/48x48/BinaryTree.png",
-			title: _("Show Parameter derivation"),
+			title: _("Parameter Derivation"),
 			href: url + "/showParameterDerivation"
 	)
 	
@@ -78,7 +82,7 @@ l.tasks() {
 	if (my.isBuildable()) {
 		l.task(
 				icon: "images/24x24/notepad.png",
-				title: _("View full build flow"),
+				title: _("Full Build Flow"),
 				href: url + "/view"
 		)
 	}

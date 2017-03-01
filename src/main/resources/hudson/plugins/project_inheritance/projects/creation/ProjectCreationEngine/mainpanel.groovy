@@ -35,27 +35,13 @@ l.main_panel() {
 		
 		helpURL = helpRoot + "/" + pce
 		
-		f.section(title: _("Global Inheritance Properties")) {
+		
+		f.section(title: _("Configuration Page Sanity Checks")) {
 			f.entry(
-					title: _("Magic Node Label for Testing"),
-					help: helpURL + "/MagicNodeLabel.html") {
-				f.textbox(field: "magicNodeLabelForTesting")
-			}
-			f.entry(
-					title: "Un-escape '%xy' in parameters",
-					help: helpURL + "/EnableUnescapeEqualsInParam.html") {
-				f.checkbox(field: "unescapeEqualsCharInParams")
-			}
-			f.entry(
-					title: _("Allow inheriting triggers"),
-					description:
-						"This determines whether triggers are inherited"
-						+ " or not. It is a new feature in v1.5.0 and as such defaults"
-						+ " to the old implementation. This option will be removed in"
-						+ " the next version. Depending on the triggers; a restart"
-						+ " might be needed for this to show an effect."
+					title: _("Acceptable error text URL patterns"),
+					field: "acceptableErrorUrls"
 			) {
-				f.select(field: "triggerInheritance")
+				f.textarea()
 			}
 		}
 		
@@ -90,7 +76,7 @@ l.main_panel() {
 		/* This section defines and shows which classes are available
 		 * for creation matching
 		 */
-		f.section(title: _("Project Classes")) {
+		f.section(title: _("Project Types")) {
 			f.entry(help: "${helpRoot}/${pce}/CreationClasses.html")
 			f.block() {
 				f.hetero_list(

@@ -3,7 +3,7 @@ The MIT License
 
 Copyright (c) 2004-2011, Sun Microsystems, Inc., Kohsuke Kawaguchi, Yahoo! Inc., Andrew Bayer
 
-Copyright (c) 2012, Martin Schröder, Intel Mobile Communications
+Copyright (c) 2012, Intel Mobile Communications
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -90,18 +90,18 @@ THE SOFTWARE.
 	On the other hand, HTML5 <input> permits floating-point numbers.
 	-->
 	
-	<!-- TODO: Find a way to include this in the page header. -->
-	<style type="text/css">
-		input.reducedWidth { width: 90%; }
-	</style>	
+	<!-- Include the CSS styling for custom range slides -->
+	<st:adjunct includes="form.range.style" />
 	
 	<div>
 		<input
-			id="rangeValue1" type="text" size="2"
+			type="text" size="3"
 			value="${attrs.value ?: instance[attrs.field] ?: attrs.default}"
+			onchange="this.parentNode.getElementsBySelector(&quot;input&quot;)[1].value=this.value"
 		/>
 		<m:input xmlns:m="jelly:hudson.util.jelly.MorphTagLibrary"
-			class="reducedWidth ${attrs.checkUrl!=null?'validated':''} ${attrs.clazz}"
+			class="intel_ui ${attrs.checkUrl!=null?'validated':''} ${attrs.clazz}"
+			style="width:95%"
 			name="${attrs.name ?: '_.'+attrs.field}"
 			value="${attrs.value ?: instance[attrs.field] ?: attrs.default}"
 			type="range"

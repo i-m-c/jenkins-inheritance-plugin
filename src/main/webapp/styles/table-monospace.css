@@ -1,6 +1,5 @@
 table.fixed {
     word-wrap: break-word;
-    overflow:hidden;
     width:95%;
     min-width:500px;
     table-layout: fixed;

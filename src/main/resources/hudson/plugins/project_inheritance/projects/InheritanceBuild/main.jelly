@@ -23,40 +23,9 @@
 		xmlns:st="jelly:stapler"
 		xmlns:l="/lib/layout"
 		xmlns:t="/lib/hudson"
-		xmlns:f="/lib/form">
-	
+		xmlns:f="/lib/form"
+>	
 	<l:main-panel>
-		<!-- A simple table that shows which version of which project were used. -->
-		<table style="margin-top:1em; margin-left:1em;">
-			<t:summary icon="/plugin/project-inheritance/images/48x48/BinaryTree.png">
-				<b>Projects and their versions used in this build:</b>
-				<table
-						class="pane sortable bigtable"
-						style="max-width:100%;margin-top:1em;">
-					<tr>
-						<th class="pane-header" initialSortDir="down">${%Project}</th>
-						<th class="pane-header" initialSortDir="down">${%Version}</th>
-						<!-- <th class="pane-header" initialSortDir="down">${%Description}</th> -->
-					</tr>
-					<j:forEach var="e" items="${it.getProjectVersions()}">
-						<tbody><tr>
-							<!-- Project Name -->
-							<td class="pane">
-								<a href="${rootURL}/job/${e.getKey()}">
-									<st:out value="${e.getKey()}"/>
-								</a>
-							</td>
-							
-							<!-- Version number -->
-							<td class="pane">
-								<a href="${rootURL}/job/${e.getKey()}/configure?version=${e.getValue()}">
-									<st:out value="${e.getValue()}"/>
-								</a>
-							</td>
-						</tr></tbody>
-					</j:forEach>
-				</table>
-			</t:summary>
-		</table>
+		<!-- Nothing to do here -->
 	</l:main-panel>
 </j:jelly>

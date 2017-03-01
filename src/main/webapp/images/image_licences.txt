@@ -1,13 +1,18 @@
-LGPLv3:
-	48x48:
-		format-line-spacing-double.png (http://www.oxygen-icons.org/ ; http://www.kde.org/)
+This file lists the licences and sources for the images contained in this folder.
+
+48x48:
+	BinaryTree.png (LGPLv3, Intel Germany GmbH)
+	format-line-spacing-double.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen/)
+	versions.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen)
 	
-	scalable:
-		svn-commit.svgz (http://www.oxygen-icons.org/ ; http://www.kde.org/)
+64x64:
+	BinaryTree.png (LGPLv3, Intel Germany GmbH)
+	run-build.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen)
+	versions.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen)
 	
-	original:
-		BinaryTree.vsd (exported to: vectorized/BinaryTree.svgz)
-
-
-
-All other images are derived from those mentioned above.
+original:
+	BinaryTree.vsd (LGPLv3, Intel Germany GmbH)
+	
+vectorized:
+	BinaryTree.svgz (LGPLv3, Intel Germany GmbH)
+	svn-commit.svgz (LGPLv3, https://techbase.kde.org/Projects/Oxygen)

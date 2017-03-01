@@ -1,0 +1,5 @@
+div.hyperlink {
+	cursor:pointer;
+	color: #204A87;
+	text-decoration: underline;
+}

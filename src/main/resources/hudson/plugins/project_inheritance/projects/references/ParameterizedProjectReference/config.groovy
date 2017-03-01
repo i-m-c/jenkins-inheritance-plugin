@@ -24,8 +24,6 @@ f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 ct = namespace(lib.CustomTagLib);
 
-helpRoot = "/plugin/project-inheritance/help/ProjectReference"
-
 //Check if the parent scope has set the read-only flag
 try {
 	isReadOnly = Constants.READ_ONLY
@@ -33,9 +31,7 @@ try {
 	isReadOnly = false
 }
 
-
 include(AbstractProjectReference, "config")
-
 
 f.entry(field: "variance", title: _("Variance")) {
 	if (isReadOnly) {
@@ -43,15 +39,6 @@ f.entry(field: "variance", title: _("Variance")) {
 	} else {
 		f.textbox(default: "")
 	}
-	f.description(
-			"This field is only used when you specify the same compatibility"
-			+ " with another project multiple times."
-			+ " Do note that this feature may have been deactivated in the"
-			+ " Project Creation Engine, in which case only the first"
-			+ " of compatibility defined here will be used and this field will"
-			+ " be ignored. This also happens, if the field is left empty on more"
-			+ " than one of the multiple mentions."
-	)
 }
 
 f.advanced(align: "left") {

@@ -1,0 +1,21 @@
+<div>
+Normally, job configuration pages can only be saved, if there are no errors
+present (the red text underneath input fields).<br/>
+This field allows you to specify full class names, whose errors should be
+ignored in this regard and allow a save, even if errors are present.
+<br/><br/>
+Each line is treated as a single pattern and stripped of whitespace.
+Empty lines are ignored. There are no comments permitted.
+<br/><br/>
+The patterns are matched against the 'checkUrl' attributes of the input fields
+and tested for whether the URL contains the given pattern. If at least one
+is matched, all errors raised by that field are ignored.
+<br/><br/>
+These 'checkUrl' attributes usually take a form of:
+<ul>
+	<li>descriptorByName/hudson.tasks.ArtifactArchiver/checkArtifacts</li>
+</ul>
+As such, giving the full class name is usually enough to precisely ignore only
+these error fields. You can always check the 'checkurl' values with the
+'Inspect this element' functionality of your browser of choice.
+</div>

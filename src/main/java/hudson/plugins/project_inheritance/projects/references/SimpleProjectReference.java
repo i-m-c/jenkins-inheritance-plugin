@@ -1,30 +1,27 @@
 /**
- * Copyright (c) 2011-2013, Intel Mobile Communications GmbH
- * 
- * 
+ * Copyright (c) 2015-2017, Intel Deutschland GmbH
+ * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ *
  * This file is part of the Inheritance plug-in for Jenkins.
- * 
+ *
  * The Inheritance plug-in is free software: you can redistribute it
  * and/or modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation in version 3
  * of the License
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package hudson.plugins.project_inheritance.projects.references;
 
-import hudson.Extension;
-import net.sf.json.JSONObject;
-
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.StaplerRequest;
+
+import hudson.Extension;
 
 
 /**
@@ -39,8 +36,8 @@ import org.kohsuke.stapler.StaplerRequest;
 public class SimpleProjectReference extends AbstractProjectReference {
 
 	@DataBoundConstructor
-	public SimpleProjectReference(String name) {
-		super(name);
+	public SimpleProjectReference(String targetJob) {
+		super(targetJob);
 	}
 	
 	
@@ -48,21 +45,7 @@ public class SimpleProjectReference extends AbstractProjectReference {
 	public static class SimpleProjectReferenceDescriptor extends ProjectReferenceDescriptor {
 		@Override
 		public String getDisplayName() {
-			return "Simple Project Reference";
-			//return Messages.StringParameterDefinition_DisplayName();
+			return Messages.SimpleProjectReference_DisplayName();
 		}
-
-		@Override
-		public AbstractProjectReference newInstance(
-				StaplerRequest req, JSONObject formData) throws FormException {
-			return req.bindJSON(SimpleProjectReference.class, formData);
-		}
-		
-		/*
-		@Override
-		public String getHelpFile() {
-			return "/help/parameter/string.html";
-		}
-		*/
 	}
 }

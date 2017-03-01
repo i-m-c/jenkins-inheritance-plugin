@@ -1,0 +1,18 @@
+<div>
+This field selects, how this parameter is altered, when a child project overrides
+its value. For example, you may provide a variable "A" here with the value
+"Foo", while a child also defines "A", but with the value "Bar".
+<p>
+The mode that you select here will influence the final value of the parameter, 
+when you build the child:
+<ul>
+	<li>If you select "Overwritable", the build will just get the value "Bar"</li>
+	<li>If you select "Extensible", the build will get the value "FooBar"
+		(or "Foo Bar", depending on the "Whitespace Mode" below)</li>
+	<li>If you select "Fixed", then the build will fail, since this project
+		prohibited changing the value.</li>
+</ul>
+Do note, that this field only has an effect on the <b>child</b> parameter &mdash;
+not the other way around. In other words, this mode decides what will happen
+in the future, not what happens "now" to the current or earlier overrides.
+</div>

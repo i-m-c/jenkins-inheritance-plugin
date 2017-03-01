@@ -42,7 +42,15 @@ l.layout(
 	
 	f.breadcrumb_config_outline()
 	
+	//Add an invisible div element, that stores which validationErrors can be safely ignored
+	div(
+			style: "display:none",
+			class: "acceptable-error-url-data",
+			ProjectCreationEngine.instance.getAcceptableErrorUrls()
+	)
+	
 	//Load additional Javascript
+	st.adjunct(includes: adjunctPrefix + ".detectValidationErrors")
 	st.adjunct(includes: adjunctPrefix + ".confirmChangesPopup")
 	//Prompt the user to enter a version message
 	if (my.getCurrentVersionNotification().areAllVersionsUnstable()) {
@@ -60,7 +68,7 @@ l.layout(
 			descriptor = my.descriptor
 			instance = my
 			
-			include(my, "transient-job-fields")
+			include(my, "configure-header-warnings")
 			
 			ct.colored_block(backCol: "LightGoldenRodYellow ", borderCol: "navy") {
 				f.section(title: _("Parameters")) {}
@@ -84,9 +92,6 @@ l.layout(
 					div(id: "bottom-sticker") {
 						div(class: "bottom-sticker-inner") {
 							f.submit(value: _("Save"))
-							if (ProjectCreationEngine.instance.getEnableApplyButton()) {
-								f.apply()
-							}
 						}
 					}
 				}
