@@ -46,7 +46,7 @@ License along with this library.  If not, see <http://www.gnu.org/licenses />.
 		<dependency>
 			<groupId>com.sonyericsson.hudson.plugins.rebuild</groupId>
 			<artifactId>rebuild</artifactId>
-			<version>1.16</version>
+			<version>1.28</version>
 		</dependency>
 		
 		<dependency>
