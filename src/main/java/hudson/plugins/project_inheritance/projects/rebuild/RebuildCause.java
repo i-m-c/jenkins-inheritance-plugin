@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -19,13 +20,12 @@
  */
 package hudson.plugins.project_inheritance.projects.rebuild;
 
+import java.util.Objects;
+
 import hudson.model.Cause.UserIdCause;
 
 /**
- * Wrapper around {@link UserIdCause} with some additonal parameters
- * 
- * @author jagmohan khulbe
- * @version 0.1
+ * Wrapper around {@link UserIdCause} with some additional parameters
  */
 public class RebuildCause extends UserIdCause {
 
@@ -80,5 +80,13 @@ public class RebuildCause extends UserIdCause {
 	public String toString() {
 		return "RebuildCause [rebuildBuildId=" + rebuildBuildId + ", urlRebuildBuildId="
 				+ urlRebuildBuildId + "]";
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public int hashCode() {
+		return Objects.hash(rebuildBuildId, urlRebuildBuildId);
 	}
 }

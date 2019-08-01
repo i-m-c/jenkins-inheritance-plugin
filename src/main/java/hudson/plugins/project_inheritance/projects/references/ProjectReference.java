@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -65,6 +66,9 @@ public class ProjectReference extends SimpleProjectReference {
 	
 	/**
 	 * Usability constructor, in case all priorities are identical
+	 * 
+	 * @param targetJob the job this reference points to
+	 * @param priority the default priority for inheritance of all properties
 	 */
 	public ProjectReference(String targetJob, int priority) {
 		this(targetJob, priority, priority, priority, priority, priority);

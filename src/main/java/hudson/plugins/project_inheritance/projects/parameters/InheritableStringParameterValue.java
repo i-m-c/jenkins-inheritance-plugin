@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -24,34 +25,31 @@ import org.kohsuke.stapler.DataBoundConstructor;
 
 import hudson.model.StringParameterValue;
 
+/**
+ * Deprecated class -- remove following 2.1 public release.
+ * <p>
+ * Use the normal {@link StringParameterValue} instead.
+ * @author mhschroe
+ * @deprecated since v2.1
+ */
+@Deprecated
 public class InheritableStringParameterValue extends StringParameterValue {
 	private static final long serialVersionUID = 8213596823348305910L;
 
-	private boolean mustHaveValueSet = false;
+	@SuppressWarnings("unused")
+	private transient boolean mustHaveValueSet = false;
 	
 	@DataBoundConstructor
 	public InheritableStringParameterValue(String name, String value) {
 		super(StringUtils.trim(name), value);
 	}
 
-	public InheritableStringParameterValue(String name, String value,
-			String description) {
+	public InheritableStringParameterValue(String name, String value, String description) {
 		super(StringUtils.trim(name), value, description);
 	}
-
-	public void setMustHaveValueSet(boolean mustHaveValueSet) {
-		this.mustHaveValueSet = mustHaveValueSet;
-	}
 	
-	public boolean getMustHaveValueSet() {
-		return mustHaveValueSet;
+	public Object readResolve() {
+		//ISPVs are deprecated -- convert them into normal SPVs
+		return new StringParameterValue(this.getName(), this.value);
 	}
-	
-	public boolean isSane() {
-		if (mustHaveValueSet && (this.value == null || this.value.isEmpty())) {
-			return false;
-		}
-		return true;
-	}
-	
 }

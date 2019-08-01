@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -36,7 +37,7 @@ import org.w3c.dom.Element;
 
 /**
  * This is the abstract base class for rendering an SVG graph out of the basic
- * {@link Graph<SVGNode>} description.
+ * {@link Graph} description.
  * 
  * @author mhschroe
 
@@ -111,7 +112,7 @@ public abstract class SVGGraphRenderer {
 	/**
 	 * This method returns all drawables defined by the current graph.
 	 * 
-	 * @return the {@link SVGPrimitive}s that should go below the <svg> root.
+	 * @return the {@link SVGPrimitive}s that should go below the &lt;svg&gt; root.
 	 */
 	public abstract Collection<SVGPrimitive> getElements();
 	

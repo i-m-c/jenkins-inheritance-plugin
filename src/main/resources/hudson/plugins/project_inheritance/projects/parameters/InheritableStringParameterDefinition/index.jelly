@@ -33,42 +33,6 @@ THE SOFTWARE.
 		xmlns:i="jelly:fmt"
 		xmlns:p="/lib/hudson/project"
 >
-	<!-- Determine the fully derived value of the parameter -->
-	<j:invoke
-		var="finalValue"
-		method="getDerivedValue"
-		on="${it}"
-	>
-		<!-- Default value parameter -->
-		<j:arg
-			type="java.lang.String"
-			value="${it.defaultValue}"
-		/>
-		<!-- NoThrow parameter -->
-		<j:arg
-			type="boolean"
-			value="true"
-		/>
-	</j:invoke>
-	
-	<!--
-		Determine the local-only value of the parameter, as extensible
-		params might've been extended before and we don't need that extension
-	-->
-	<j:invoke
-		var="localValue"
-		method="getLocalValue"
-		on="${it}"
-	>
-		<!-- Default value parameter -->
-		<j:arg
-			type="java.lang.String"
-			value="${it.defaultValue}"
-		/>
-	</j:invoke>
-	
-	
-	
 	<!-- If the parameter is set to fixed; do not display it -->
 	<j:choose>
 		<j:when test="${it.getInheritanceModeAsVar().isFixed()}">
@@ -77,30 +41,23 @@ THE SOFTWARE.
 			<f:invisibleEntry title="${it.name}" description="${it.description}">
 				<div name="parameter" description="${it.description}">
 					<input type="hidden" name="name" value="${it.name}" />
-					<f:textbox name="value" value="${localValue}" />
+					<f:textbox name="value" value="${it.defaultValue}" />
 				</div>
 			</f:invisibleEntry>
 		</j:when>
 		<j:otherwise>
 			<!-- This is used for non-fixed parameters -->
 			
-			<f:entry title="${it.name}" description="${it.getDefinitionLocationDescription()}">
+			<f:entry title="${it.name}" description="Inherited via: ${it.getLocationStringViaStapler()}">
 				<div name="parameter">
 					<input type="hidden" name="name" value="${it.name}" />
-					<f:textbox name="value" value="${localValue}" />
+					<f:textbox name="value" value="${it.defaultValue}" />
 				</div>
 			</f:entry>
 			
 			<j:if test="${it.mustBeAssigned}">
 				<f:entry>
 					<span style="color:darkred">The variable above needs to have a value set.</span>
-				</f:entry>
-			</j:if>
-			
-			<j:if test="${finalValue != null &amp;&amp; !finalValue.isEmpty() &amp;&amp; !finalValue.equals(localValue)}">
-				<f:entry>
-					Final value after expansion :
-					<span style="color:navy">${finalValue}</span>
 				</f:entry>
 			</j:if>
 			<f:entry>

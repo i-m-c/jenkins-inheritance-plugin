@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -19,13 +20,9 @@
  */
 package hudson.plugins.project_inheritance;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -52,7 +49,6 @@ import hudson.model.Job;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParameterValue;
 import hudson.model.ParametersAction;
-import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Result;
 import hudson.model.StringParameterValue;
 import hudson.model.TopLevelItem;
@@ -69,12 +65,12 @@ import hudson.plugins.project_inheritance.projects.parameters.InheritableStringP
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.WhitespaceMode;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
 import hudson.plugins.project_inheritance.projects.references.SimpleProjectReference;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference.ProjectReferenceDescriptor;
 import hudson.plugins.project_inheritance.projects.references.filters.MatingReferenceFilter;
 import hudson.plugins.project_inheritance.util.MockItemGroup;
 import hudson.plugins.project_inheritance.utils.DummyListener;
+import hudson.plugins.project_inheritance.utils.XmlProject;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.SlaveComputer;
 import hudson.util.ListBoxModel;
@@ -90,75 +86,6 @@ public class TestInheritanceMain {
 	 * The jenkins instance spawned for every test method
 	 */
 	@Rule public JenkinsRule jRule = new JenkinsRule();
-	
-	
-	/*package*/ static class XmlProject {
-		public final InheritanceProject project;
-		public final String xmlFile;
-		
-		public XmlProject(String name) throws IOException {
-			this(name, null);
-		}
-		
-		public XmlProject(String name, String xmlFile) throws IOException {
-			this.xmlFile = xmlFile;
-			//Create the project -- optionally from the given XML
-			Jenkins j = Jenkins.getInstance();
-			project = (InheritanceProject) j.createProject(
-					InheritanceProject.DESCRIPTOR, name
-			);
-		}
-		
-		public void loadFromXml() throws IOException {
-			if (xmlFile != null) {
-				Source s = new StreamSource(new FileInputStream(new File(xmlFile)));
-				project.updateByXml(s);
-			}
-		}
-		
-		public void setParameter(InheritableStringParameterDefinition pd) throws IOException {
-			ParametersDefinitionProperty pdp = this.project.getProperty(
-					ParametersDefinitionProperty.class, IMode.LOCAL_ONLY
-			);
-			if (pdp == null) {
-				pdp = new ParametersDefinitionProperty(pd);
-				this.project.addProperty(pdp);
-			} else {
-				List<ParameterDefinition> defs = pdp.getParameterDefinitions();
-				Iterator<ParameterDefinition> iter = defs.iterator();
-				//Remove definitions that are in the way
-				while (iter.hasNext()) {
-					ParameterDefinition param = iter.next();
-					if (param.getName().equals(pd.getName())) {
-						iter.remove();
-					}
-				}
-				defs.add(pd);
-			}
-			this.project.removeProperty(ParametersDefinitionProperty.class);
-			this.project.addProperty(pdp);
-		}
-		
-		public void setParameter(String name, String value) throws IOException {
-			this.setParameter(new InheritableStringParameterDefinition(
-					name, value
-			));
-		}
-		
-		public void addParent(String pName, String variance, ParameterDefinition... defs) {
-			AbstractProjectReference ref;
-			if (defs != null && defs.length > 0) {
-				ref = new ParameterizedProjectReference(pName, variance, Arrays.asList(defs));
-			} else {
-				ref = new SimpleProjectReference(pName);
-			}
-			this.project.addParentReference(ref, false);
-		}
-		
-		public boolean dropParent(String pName) {
-			return this.project.removeParentReference(pName);
-		}
-	}
 	
 	
 	private void printInfo(String info) {
@@ -226,6 +153,8 @@ public class TestInheritanceMain {
 	public void testGeneralProperties() throws IOException, ServletException {
 		printInfo("testGeneralProperties()");
 		
+		Jenkins j = jRule.jenkins;
+		
 		//Creating a parent and child project
 		XmlProject parent = new XmlProject("parent");
 		XmlProject child = new XmlProject("child");
@@ -249,10 +178,10 @@ public class TestInheritanceMain {
 		//Test if renaming keeps references intact
 		printInfo("Testing renaming of projects...");
 		parent.project.renameTo("parent-renamed");
-		TopLevelItem it = Jenkins.getInstance().getItem("parent-renamed");
+		TopLevelItem it = j.getItem("parent-renamed");
 		Assert.assertEquals("Project renaming failed", it, parent.project);
 		
-		for (TopLevelItem item : Jenkins.getInstance().getItems()) {
+		for (TopLevelItem item : j.getItems()) {
 			if (!(item instanceof InheritanceProject)) {
 				continue;
 			}
@@ -672,6 +601,7 @@ public class TestInheritanceMain {
 	@Test
 	public void testCompoundCreation() throws IOException {
 		printInfo("testCompoundCreation()");
+		Jenkins j = jRule.jenkins;
 		
 		XmlProject left = new XmlProject("LeftJob");
 		XmlProject right = new XmlProject("RightJob");
@@ -742,12 +672,12 @@ public class TestInheritanceMain {
 		
 		Assert.assertTrue("PCE report did not contain the 'LeftJob_RightJob' job", report.containsKey("LeftJob_RightJob"));
 		
-		TopLevelItem it = Jenkins.getInstance().getItem("LeftJob_RightJob");
+		TopLevelItem it = j.getItem("LeftJob_RightJob");
 		Assert.assertTrue("PCE should have created the 'LeftJob_RightJob' job", it != null);
 		
 		//Loop over the result, check if such a job was created, and if it's valied
 		for (String pName : report.keySet()) {
-			it = Jenkins.getInstance().getItem(pName);
+			it = j.getItem(pName);
 			if (it == null) { continue; }
 			Assert.assertEquals("PCE created invalid job", "LeftJob_RightJob", it.getFullName());
 		}
@@ -762,7 +692,7 @@ public class TestInheritanceMain {
 		printInfo("testWorkspacePathAllocation()");
 		
 		//Fetch the jenkins instance; which is a valid build host
-		Jenkins j = Jenkins.getInstance();
+		Jenkins j = jRule.jenkins;
 		
 		//Create a dummy project with a strange name
 		XmlProject job = new XmlProject("foobar");
@@ -799,7 +729,7 @@ public class TestInheritanceMain {
 		printInfo("testLabelCaching()");
 		
 		//Fetch the jenkins instance; which is a valid build host
-		Jenkins j = Jenkins.getInstance();
+		Jenkins j = jRule.jenkins;
 		//Set its label to a test value
 		j.setLabelString("test:foo");
 		
@@ -853,13 +783,13 @@ public class TestInheritanceMain {
 		
 		//Create inheritance jobs
 		String jobName = "inheritanceJobName";
-		InheritanceProject inhProj = Jenkins.getInstance().createProject(InheritanceProject.class, jobName);
+		InheritanceProject inhProj = jRule.jenkins.createProject(InheritanceProject.class, jobName);
 		InheritanceProject inhProjFull = new InheritanceProject(mockItemGroup, jobName, false);
-		Jenkins.getInstance().add(mockItemGroup, mockItemGroup.getFullName());
+		jRule.jenkins.add(mockItemGroup, mockItemGroup.getFullName());
 		mockItemGroup.addItem(inhProjFull);
 		
 		//Check that the constructed paths are reflecting Jenkins/mockItemGroup/inheritanceJob
-		ItemGroup<?> jenkinsItemGroup = Jenkins.getInstance().getItemGroup();
+		ItemGroup<?> jenkinsItemGroup = jRule.jenkins.getItemGroup();
 		ItemGroup<?> mockItemGroupParent = mockItemGroup.getParent();
 		ItemGroup<?> inheritanceProjectParent = inhProjFull.getParent();
 		
@@ -874,6 +804,43 @@ public class TestInheritanceMain {
 		//Check the expected job results
 		Assert.assertEquals(inheritanceProjectFromJenkinsFull, inhProjFull);
 		Assert.assertEquals(inheritanceProjectFromJenkins, inhProj);
+	}
+	
+	/**
+	 * Tests no cyclic dependency present when a non-existing parent is added.
+	 * Missing dependency should still be present
+	 *
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
+	@Test
+	public void testNoCyclicDependencyWhenParentMissing() throws IOException, InterruptedException {
+		XmlProject child = new XmlProject("Child");
+		
+		//Verify that no missing or cyclic dependency present
+		Assert.assertTrue(
+				"Project \"Child\" should not have a missing dependency",
+				child.project.getMissingDependencies().isEmpty()
+		);
+		Assert.assertFalse(
+				"Project \"Child\" should not have a cyclic dependency",
+				child.project.hasCyclicDependency()
+		);
+		
+		//Add non-existing project name as parent
+		child.addParent("Parent", null);
+		
+		//Verify that missing dependency present
+		Assert.assertFalse(
+				"Project \"Child\" should have a missing dependency, since parent is missing",
+				child.project.getMissingDependencies().isEmpty()
+		);
+		
+		//Verify that no cyclic dependency present
+		Assert.assertFalse(
+				"Project \"Child\" should not have a cyclic dependency even if parent is missing",
+				child.project.hasCyclicDependency()
+		);
 	}
 	
 	// === HELPER METHODS ===

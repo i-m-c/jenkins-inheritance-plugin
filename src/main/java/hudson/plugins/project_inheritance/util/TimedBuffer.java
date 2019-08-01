@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -125,7 +126,10 @@ public class TimedBuffer<O, K> {
 	}
 	
 	/**
-	 * This method removes all keys and values associated with the given object.
+	 * This method removes all keys (and thus values) associated with the
+	 * given object.
+	 * 
+	 * @param obj the key to clear
 	 */
 	public void clear(O obj) {
 		lock.writeLock().lock();
@@ -146,6 +150,8 @@ public class TimedBuffer<O, K> {
 	/**
 	 * This method clears all values associated with the given key across all
 	 * objects.
+	 * 
+	 * @param key the value to clear
 	 */
 	public void clearAll(K key) {
 		lock.writeLock().lock();

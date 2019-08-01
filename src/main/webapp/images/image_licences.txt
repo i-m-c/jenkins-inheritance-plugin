@@ -1,18 +1,12 @@
 This file lists the licences and sources for the images contained in this folder.
 
-48x48:
-	BinaryTree.png (LGPLv3, Intel Germany GmbH)
-	format-line-spacing-double.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen/)
-	versions.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen)
-	
-64x64:
-	BinaryTree.png (LGPLv3, Intel Germany GmbH)
-	run-build.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen)
-	versions.png (LGPLv3, https://techbase.kde.org/Projects/Oxygen)
-	
-original:
-	BinaryTree.vsd (LGPLv3, Intel Germany GmbH)
-	
-vectorized:
-	BinaryTree.svgz (LGPLv3, Intel Germany GmbH)
-	svn-commit.svgz (LGPLv3, https://techbase.kde.org/Projects/Oxygen)
+Filename                       | Licence | Owner / Source
+-------------------------------+---------+------------------------------------
+BinaryTree.png                 | LGPLv3  | Intel Deutschland GmbH
+BinaryTree.vsd                 | LGPLv3  | Intel Deutschland GmbH
+BinaryTree.svgz                | LGPLv3  | Intel Deutschland GmbH
+format-line-spacing-double.png | LGPLv3  | https://techbase.kde.org/Projects/Oxygen
+gear.png                       | LGPLv3  | https://techbase.kde.org/Projects/Oxygen
+svn-commit.svgz                | LGPLv3  | https://techbase.kde.org/Projects/Oxygen
+tools-wizard.png               | LGPLv3  | https://techbase.kde.org/Projects/Oxygen
+versions.png                   | LGPLv3  | https://techbase.kde.org/Projects/Oxygen

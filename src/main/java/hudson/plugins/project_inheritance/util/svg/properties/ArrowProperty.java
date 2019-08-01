@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -32,8 +33,6 @@ public class ArrowProperty {
 	 * Constructor to set all arrow properties. Do note that start and end
 	 * are the only mutable properties.
 	 * 
-	 * @param start the starting point.
-	 * @param end the end point.
 	 * @param stroke the colour and width of the stroke.
 	 * @param fillHead whether or not to fill the head
 	 * @param headLen how long the arrow head tips should be removed from the end point.

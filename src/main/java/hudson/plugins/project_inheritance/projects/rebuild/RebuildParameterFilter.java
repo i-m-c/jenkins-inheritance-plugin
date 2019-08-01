@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -66,7 +67,7 @@ public abstract class RebuildParameterFilter implements ExtensionPoint {
 	 * the project itself defines it. All that is removed, is the user-defined
 	 * value of the parameter from the previous build.
 	 * 
-	 * @param val the value to verify.
+	 * @param value the value to verify.
 	 * @return true, if the parameter is permitted to be used in a rebuild. False otherwise.
 	 */
 	public abstract boolean isParameterAllowed(ParameterValue value);
@@ -89,7 +90,7 @@ public abstract class RebuildParameterFilter implements ExtensionPoint {
 	}
 	
 	public static List<RebuildParameterFilter> all() {
-		return Jenkins.getInstance().getExtensionList(
+		return Jenkins.get().getExtensionList(
 				RebuildParameterFilter.class
 		);
 	}

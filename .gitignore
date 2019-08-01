@@ -1,10 +1,35 @@
-.project
+#
+# Eclipse stuff
+#
 .classpath
-.settings
-*.orig
-*.rej
-/bin
-/target
-/work
-*~
+.project
+eclipse-launch
+target-eclipse
 
+#
+# Maven stuff
+#
+target
+work
+
+#
+# IntelliJ files
+#
+*.iml
+*.iws
+*.ipr
+.idea
+
+#
+# Netbeans
+#
+nbactions.xml
+
+#
+# Miscellanea
+#
+hooks
+*.log
+*.pyc
+.settings
+*~

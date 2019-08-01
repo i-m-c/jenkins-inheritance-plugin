@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2018-2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -21,27 +22,26 @@ package hudson.plugins.project_inheritance.projects.parameters;
 
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.logging.Logger;
 
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
 
 import hudson.Extension;
-import hudson.model.AbstractProject;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParameterValue;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.StringParameterDefinition;
 import hudson.model.StringParameterValue;
+import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
@@ -50,9 +50,6 @@ import net.sf.json.JSONObject;
 public class InheritableStringParameterDefinition extends StringParameterDefinition {
 	private static final long serialVersionUID = 5458085487475338803L;
 
-	private static final Logger log = Logger.getLogger(
-			InheritableStringParameterDefinition.class.toString()
-	);
 	
 	public static enum IModes {
 		OVERWRITABLE, EXTENSIBLE, FIXED;
@@ -84,7 +81,8 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		 * TODO: Find a way to fix that for file:
 		 * src\main\resources\hudson\plugins\project_inheritance\projects\...
 		 * ...parameters\InheritableStringParameterDefinition\index.jelly
-		 * @return
+		 * 
+		 * @return true, if the mode is equal to {@link #FIXED}
 		 */
 		public boolean isFixed() {
 			return this == IModes.FIXED;
@@ -123,28 +121,8 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	
 	/**
 	 * The way how this parameter handles whitespace characters.
-	 * 
-	 * Should be made final, once {@link #autoAddSpaces} is removed.
 	 */
-	private WhitespaceMode whitespaceMode;
-	
-	/**
-	 * Whether or not to automatically add spaces when mode is "Overwritable"
-	 * <p>
-	 * Has been deprecated in favour of the more flexible {@link #whitespaceMode}.
-	 * <p>
-	 * Remove in next release.
-	 */
-	@Deprecated
-	private boolean autoAddSpaces;
-	
-	/**
-	 * This field stores a reference to the property that created this
-	 * definition. This is necessary, because the property also contains the
-	 * necessary full scope of parameter definitions to properly derive
-	 * a final value in terms of inheritance. 
-	 */
-	private transient InheritanceParametersDefinitionProperty rootProperty = null;
+	private final WhitespaceMode whitespaceMode;
 	
 	/**
 	 * This field stores the project variance name that this parameter comes
@@ -154,7 +132,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	 * <p>
 	 * This field is meant to be purely informational, as the actual values
 	 * for the parameters are fetched using
-	 * {@link InheritanceParametersDefinitionProperty#getScopedParameterDefinition(String)}.
+	 * {@link ParameterSelector#getScopedParameterDefinition(InheritanceProject, String)}.
 	 */
 	public transient String variance = null;
 	
@@ -224,21 +202,9 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 				other.getWhitespaceModeAsVar(),
 				other.getIsHidden()
 		);
-		this.rootProperty = other.rootProperty;
 		this.variance = other.variance;
 	}
 	
-	public Object readResolve() {
-		//Check if a whitespace mode is present
-		if (whitespaceMode == null) {
-			if (autoAddSpaces) {
-				whitespaceMode = WhitespaceMode.ADD_IF_EXTENSION;
-			} else {
-				whitespaceMode = WhitespaceMode.KEEP;
-			}
-		}
-		return this;
-	}
 	
 	/**
 	 * This function creates a new {@link ParameterDefinition} that carries
@@ -248,14 +214,12 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	 * from multiple projects/parents. Such a parameter may be derived either
 	 * as: Fixed, Overwritable or Extensible.
 	 * <p>
-	 * The first and second one are trivial cases where the default value is
-	 * used as is. The problem lies in dealing with an extensible parameter, as
-	 * in that case a prefix of the given default value may need to be stripped.
-	 * <p>
-	 * <b>Do note</b> that this is automatically done when you call
-	 * {@link #getDerivedValue(String, boolean)}, but <b>not</b> when you call
-	 * {@link #produceDerivedValue(String)}. If you need to access this
-	 * behaviour from some place else, call {@link #stripInheritedPrefixFromValue()}
+	 * This function does not care for this at all. If you need a fully
+	 * materialised version of this parameter, use:
+	 * {@link #getMergeWithOther(ParameterDefinition)}.
+	 * 
+	 * @param defaultValue the value to be assigned to the copy as a default.
+	 * Must be a {@link StringParameterValue}.
 	 */
 	@Override
 	public ParameterDefinition copyWithDefaultValue(ParameterValue defaultValue) {
@@ -265,7 +229,7 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		}
 		
 		StringParameterValue spv = ((StringParameterValue) defaultValue);
-		String value = spv.value;
+		String value = spv.getValue().toString();
 		
 		//Creating the PD to return
 		InheritableStringParameterDefinition ispd =
@@ -280,62 +244,42 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 				this.getIsHidden()
 			);
 		ispd.variance = this.variance;
-		ispd.setRootProperty(this.rootProperty);
 		return ispd;
 	}
 	
-	
-	
-	public void setRootProperty(InheritanceParametersDefinitionProperty root) {
-		this.rootProperty = root;
-	}
-	
-	public InheritanceParametersDefinitionProperty getRootProperty() {
-		return this.rootProperty;
-	}
-
 	@Override
 	public String toString() {
-		StringBuilder b = new StringBuilder();
-		//b.append(super.toString());
-		b.append("[");
-		b.append(this.getName());
-		
-		String loc = this.getLocationString();
-		if (loc != null) {
-			b.append("; from: ");
-			b.append(loc);
-		}
-		
-		b.append("]");
-		return b.toString();
+		return String.format("[%s]", this.getName());
 	}
 	
-	public String getLocationString() {
+	/**
+	 * This method returns the chain of project names that contribute to the
+	 * final value of the current parameter.
+	 * 
+	 * @param root the project to start looking from.
+	 * @return a string. May be empty, but never null.
+	 */
+	public String getLocationString(InheritanceProject root) {
 		StringBuilder b = new StringBuilder();
-		if (this.rootProperty != null) {
-			//Fetching the full scope
-			List<ScopeEntry> fullScope = 
-					rootProperty.getScopedParameterDefinition(this.getName());
-			String owner = null;
-			for (ScopeEntry scope : fullScope) {
-				if (scope.param == this) {
-					owner = scope.owner;
-					break;
+		
+		//Fetching the full scope
+		ParameterSelector pSel = ParameterSelector.instance;
+		List<ScopeEntry> fullScope = pSel.getScopedParameterDefinition(
+				root, this.getName()
+		);
+		
+		boolean first = true;
+		for (ScopeEntry scope : fullScope) {
+			if (StringUtils.equals(scope.param.getName(), this.getName())) {
+				if (!first) {
+					b.append('\u2192'); //Right-arrow
+				} else {
+					first = false;
 				}
+				b.append(scope.owner);
 			}
-			if (owner != null) {
-				b.append(owner);
-			} else if (this.rootProperty.getOwner() != null) {
-				b.append("?->");
-				b.append(this.rootProperty.getOwner().getFullName());
-			} else {
-				b.append("!->BROKEN");
-				
-			}
-		} else {
-			b.append("!->UNKNOWN");
 		}
+		
 		if (this.variance != null) {
 			b.append("; variance: '");
 			b.append(this.variance);
@@ -344,22 +288,14 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 		return b.toString();
 	}
 	
-	public String getDefinitionLocationDescription() {
-		StringBuilder b = new StringBuilder();
-		//b.append(super.toString());
-		b.append("[from: ");
+	public String getLocationStringViaStapler() {
+		StaplerRequest req = Stapler.getCurrentRequest();
+		if (req == null) { return ""; }
+		InheritanceProject root = req.findAncestorObject(InheritanceProject.class);
+		if (root == null) { return ""; }
 		
-		String loc = this.getLocationString();
-		if (loc != null) {
-			b.append(loc);
-		}
-		
-		b.append("] ");
-		b.append(this.getDescription());
-		return b.toString();
+		return this.getLocationString(root);
 	}
-	
-	
 	
 	// === GENERAL FIELD ACCESS ===
 	
@@ -400,293 +336,162 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 	}
 	
 	
-	
 	// === VALUE DERIVATION ===
+	
+	public InheritableStringParameterDefinition getMergeWithOther(ParameterDefinition past) {
+		if (!(past instanceof InheritableStringParameterDefinition)) {
+			//Non-inheritable values are always overwritten
+			return this;
+		}
+		InheritableStringParameterDefinition iPast =
+				(InheritableStringParameterDefinition) past;
+		
+		/* NOTE: Due to the way merging works, iPast can never be an
+		 * InheritableStringParameterReferenceDefinition.
+		 * As such, the "reference lookup" can only be from the current
+		 * to the past instance.
+		 */
+		
+		//The past version defines the way the value is generated
+		final String newVal;
+		switch (iPast.getInheritanceModeAsVar()) {
+			case OVERWRITABLE:
+				newVal = this.getDefaultValue();
+				break;
+			
+			case FIXED:
+				//Use the past value (note: The job will error out later anyway)
+				newVal = iPast.getDefaultValue();
+				break;
+			
+			case EXTENSIBLE:
+				StringBuilder v = new StringBuilder(iPast.getDefaultValue());
+				if (iPast.getWhitespaceModeAsVar() == WhitespaceMode.ADD_IF_EXTENSION) {
+					v.append(" ");
+				}
+				v.append(this.getDefaultValue());
+				newVal = v.toString();
+				break;
+				
+			default:
+				throw new IllegalArgumentException(
+						"Unknown mode: " + iPast.getInheritanceModeAsVar()
+				);
+		}
+		
+		//Determining the other flags based on whether a reference is used or not
+		String newDesc;
+		boolean newMustHaveDefaultValue, newMustBeAssigned, newIsHidden;
+		IModes newInheritanceMode;
+		WhitespaceMode newWhitespaceMode;
+		if (this instanceof InheritableStringParameterReferenceDefinition) {
+			newMustHaveDefaultValue = iPast.getMustHaveDefaultValue();
+			newMustBeAssigned = iPast.getMustBeAssigned();
+			newIsHidden = iPast.getIsHidden();
+			newInheritanceMode = iPast.getInheritanceModeAsVar();
+			newWhitespaceMode = iPast.getWhitespaceModeAsVar();
+			newDesc = iPast.getDescription();
+		} else {
+			newMustHaveDefaultValue = this.getMustHaveDefaultValue() || iPast.getMustHaveDefaultValue();
+			newMustBeAssigned = this.getMustBeAssigned() || iPast.getMustBeAssigned();
+			newIsHidden = this.getIsHidden() || iPast.getIsHidden();
+			newInheritanceMode = this.getInheritanceModeAsVar();
+			newWhitespaceMode = this.getWhitespaceModeAsVar();
+			newDesc = (StringUtils.isNotBlank(this.getDescription()))
+					? this.getDescription()
+					: iPast.getDescription();
+		}
+		
+		//Return the new ISPD
+		return new InheritableStringParameterDefinition(
+				this.getName(),
+				newVal,
+				newDesc,
+				newInheritanceMode,
+				newMustHaveDefaultValue,
+				newMustBeAssigned,
+				newWhitespaceMode,
+				newIsHidden
+		);
+	}
 	
 	/**
 	 * This function is invoked, when the user creates the value from an HTML
 	 * form request. This happens, for example, when a build is triggered
 	 * through the GUI instead of through the CLI.
 	 * <p>
-	 * This function is what makes an inheritable parameter inheritable at all.
-	 * Here, the value entered by the user is combined with the values of its
-	 * parents. This may mean:
-	 * <ul>
-	 * <li>overwriting the parent's value,</li>
-	 * <li>ensuring that a particular value is correctly set (if mandatory),
-	 * <li>that it does not overwrite a fixed value or</li>
-	 * <li>appending the parameter to its parent.</li>
-	 * </ul>
-	 * A complicating fact is that by default, a {@link ParameterDefinition}
-	 * is not informed for what kind of job is is being used, as that is not
-	 * a necessary piece of information in Vanilla-Jenkins.
-	 * 
-	 * @see {@link #baseProject}.
+	 * Note that this function does not actually ensure the inheritance
+	 * of the values. It expects, that the {@link ParameterSelector} class
+	 * has already handled this via {@link #getMergeWithOther(ParameterDefinition)}
+	 * during the creation of the {@link ParametersDefinitionProperty} instance.
+	 * <p>
+	 * Also, the check if the derivation was successful is not done here either.
+	 * It is assumed that the {@link InheritanceBuild} checks this when the
+	 * job starts, by calling
+	 * {@link InheritanceParametersDefinitionProperty#checkParameterSanity(InheritanceBuild, hudson.model.BuildListener)}.
 	 */
 	@Override
 	public ParameterValue createValue(StaplerRequest req, JSONObject jo) {
-		//First, we produce a temporary SPV from the JSON request
-		StringParameterValue value = req.bindJSON(
-				StringParameterValue.class, jo
-		);
-		if (value == null) {
-			//No such parameter name at all
-			return null;
-		}
-		//Then, we check if we can get a properly derived value
-		try {
-			StringParameterValue dValue =
-					this.produceDerivedValue(value.value);
-			//Checking if that worked
-			if (dValue == null) {
-				return value;
-			} else {
-				return dValue;
+		ParameterValue pv = super.createValue(req, jo);
+		if (pv instanceof StringParameterValue) {
+			//Strip the value (if needed) and return either the original or the mod
+			String val = ((StringParameterValue)pv).getValue().toString();
+			String nextVal = this.trimValue(val);
+			if (val != nextVal) {
+				return new StringParameterValue(pv.getName(), nextVal);
 			}
-		} catch (IllegalArgumentException ex) {
-			log.warning("Could not create inheritable string parameter: " + ex.toString());
-			return value;
 		}
+		return pv;
 	}
-
+	
+	/**
+	 * Same as {@link #createValue(StaplerRequest, JSONObject)}, only with
+	 * a simple assignment of the value, which happens when the user uses
+	 * the API directly, instead of going through the WebUI.
+	 * <p>
+	 * {@inheritDoc}
+	 */
 	public ParameterValue createValue(String value) {
-		try {
-			StringParameterValue spv = this.produceDerivedValue(value);
-			if (spv == null) {
-				return super.createValue(value);
-			} else {
-				return spv;
-			}
-		} catch (IllegalArgumentException ex) {
-			log.warning("Could not create inheritable string parameter: " + ex.toString());
-			return super.createValue(value);
-		}
-	}
-	
-	private StringParameterValue produceDerivedValue(String userEnteredValue)
-			throws IllegalArgumentException {
-		if (this.rootProperty == null) {
-			//No inheritance-compatible parent defined; no point in inheritance
-			log.warning(
-				"No root property defined for the param: " + this.getName()
-			);
-			return null;
-		}
-		
-		//Then, we enumerate all the other PDs from the root property and
-		//derive the proper value
-		List<ScopeEntry> fullScope =
-				this.rootProperty.getScopedParameterDefinition(this.getName());
-		
-		if (fullScope == null) {
-			return new InheritableStringParameterValue(
-					this.getName(), userEnteredValue, this.getDescription()
-			);
-		}
-		
-		
-		String value = "";
-		IModes currMode = IModes.OVERWRITABLE;
-		boolean mustHaveValueSet = false;
-		
-		Iterator<ScopeEntry> iter = fullScope.iterator();
-		while(iter.hasNext()) {
-			ScopeEntry scope = iter.next();
-			if (!(scope.param instanceof InheritableStringParameterDefinition)) {
-				continue;
-			}
-			//Copy the ISPD and assign "our" root property as its parent, to
-			//make sure that it can properly discover its parents
-			InheritableStringParameterDefinition ispd =
-					(InheritableStringParameterDefinition)
-					scope.param.copyWithDefaultValue(
-							scope.param.getDefaultParameterValue()
-					);
-			ispd.setRootProperty(this.rootProperty);
-			
-			//The last value from the scope gets overwritten by the user-entered value
-			String ispdVal = (!iter.hasNext())
-					? userEnteredValue
-					: ispd.getDefaultValue();
-			
-			if (ispdVal == null) {
-				continue;
-			}
-			
-			mustHaveValueSet |= ispd.getMustBeAssigned();
-			
-			//Adjust for whitespaces
-			WhitespaceMode wsMode = ispd.getWhitespaceModeAsVar();
-			if (wsMode == WhitespaceMode.TRIM) {
-				ispdVal = StringUtils.trim(ispdVal);
-			}
-			
-			switch(currMode) {
-				case OVERWRITABLE:
-					value = ispdVal;
-					break;
-					
-				case EXTENSIBLE:
-					if (wsMode == WhitespaceMode.ADD_IF_EXTENSION) {
-						value += " ";
-					}
-					value += ispdVal;
-					break;
-					
-				case FIXED:
-					//This should NOT have happened. A value that was fixed
-					//may not be overridden later on
-					String msg =
-							"Not allowed to alter fixed parameter " +
-							scope.param.getName();
-					log.warning(msg);
-					throw new IllegalArgumentException(msg);
-				
-				default:
-					log.severe(String.format(
-							"Detected unknown inheritance mode: %s",
-							currMode.toString()
-					));
-					continue;
-			}
-			currMode = ispd.getInheritanceModeAsVar();
-		}
-		
-		//Now, we can create the new value
-		InheritableStringParameterValue ispv = new InheritableStringParameterValue(
-				this.getName(), value, this.getDescription()
+		return new StringParameterValue(
+				this.getName(), this.trimValue(value)
 		);
-		ispv.setMustHaveValueSet(mustHaveValueSet);
-		
-		return ispv;
 	}
 	
-	public String getDerivedValue(String userEnteredValue, boolean noThrow)
-			throws IllegalArgumentException {
-		try {
-			//Remove any prefix from parents, in case of a rebuild
-			String val = this.stripInheritedPrefixFromValue(userEnteredValue);
-			//Generate a full value based on that
-			StringParameterValue spv = this.produceDerivedValue(val);
-			if (spv == null) {
-				return null;
-			}
-			return spv.value;
-		} catch (IllegalArgumentException ex) {
-			if (noThrow) { return null; }
-			throw ex;
-		}
-		
-	}
-	
-	public String getLocalValue(String userEnteredValue) {
-		return this.stripInheritedPrefixFromValue(userEnteredValue);
-	}
-	
-	public String getDefaultValue() {
-		return super.getDefaultValue();
-	}
-	
-	public String stripInheritedPrefixFromValue(String value) {
-		if (value == null || value.isEmpty() || this.rootProperty == null) {
-			return value;
-		}
-		
-		//Fetching the ordered list of all PDs in the inheritance scope
-		//Avoiding copying, as we might be called from within copyWithDefaultValue
-		List<ScopeEntry> fullScope =
-				this.rootProperty.getScopedParameterDefinition(this.getName());
-		if (fullScope == null || fullScope.isEmpty()) {
-			//No inherited entries to care for
-			return value;
-		}
-		
-		String newVal = value;
-		
-		//Itering over all parent PDs to drop prefixes
-		Iterator<ScopeEntry> sIter = fullScope.iterator();
-		while (sIter.hasNext()) {
-			ScopeEntry scope = sIter.next();
-			if (scope.param == null || !(scope.param instanceof InheritableStringParameterDefinition)) {
-				continue;
-			} else if (scope.param == this) {
-				//Reached the current node, aborting prefix stripping
-				break;
-			}
-			InheritableStringParameterDefinition ispd =
-					(InheritableStringParameterDefinition) scope.param;
-			
-			//We ignore the last entry, as it the one the user actually overwrote
-			if (!sIter.hasNext()) { break; }
-			
-			//Checking the mode of inheritance
-			switch (ispd.getInheritanceModeAsVar()) {
-				case EXTENSIBLE:
-					break;
-				default:
-					//Reverting to the initial value, as no extension took place
-					newVal = value;
-					continue;
-			}
-			
-			//Stripping the front part of the string
-			String defVal = ispd.getDefaultValue().trim();
-			if (newVal.startsWith(defVal)) {
-				newVal = newVal.substring(defVal.length()).trim();
+	/**
+	 * Helper to trim the value of a parameter -- if activated in this def.
+	 * 
+	 * @param value the value to trim -- if null, this will return the empty string.
+	 * @return the trimmed value -- or the value itself if not trimmed.
+	 */
+	private String trimValue(String value) {
+		if (value == null) { return ""; }
+		if (this.whitespaceMode == WhitespaceMode.TRIM) {
+			//Remove whitespace (use strip, as trim is too aggressive)
+			String nextVal = StringUtils.stripToEmpty(value);
+			if (value.length() != nextVal.length()) {
+				//Trimming was done
+				return nextVal;
 			}
 		}
-		
-		//Returning the newly discovered value
-		return newVal;
-	}
-	
-	public void setDefaultValue(String defaultValue) {
-		super.setDefaultValue(defaultValue);
+		//No trimming was done
+		return value;
 	}
 	
 	/**
 	 * Returns the default value for this parameter.
 	 * <p>
-	 * It will always return the locally defined value, and not a derived one
-	 * you'd get via {@link #createValue(String)} or
-	 * {@link #createValue(StaplerRequest)}, to be compatible with how the
-	 * configure page is retrieving the locally defined value.
-	 * <p>
-	 * Unfortunately, this conflicts with the way jobs are being scheduled.
-	 * There are at least 3 different ways for this:
-	 * <ol>
-	 * 	<li>Spawned via an HTTP/CLI request with parameters assigned</li>
-	 * 	<li>Spawned via a parameterised trigger</li>
-	 * 	<li>Spawned via direct call to
-	 * 		{@link AbstractProject#scheduleBuild(hudson.model.Cause)} or other
-	 * 		methods.</li>.
-	 * </ol>
-	 * The first two pass through {@link #createValue(String)} or
-	 * {@link #createValue(StaplerRequest)}. Unfortunately, the last one
-	 * calls this method here directly, because there only is the default value
-	 * of the parameter to consider.<br/>
-	 * As such, Jenkins code simply calls this method, instead of createValue.
-	 * <p>
-	 * This causes a significant complication, in that this function would
-	 * need to figure out via slow reflection, through which code path it was
-	 * called.<br/>
-	 * Due to these performance reasons, we do not use reflection here and
-	 * return the locally defined version.
-	 * <p>
-	 * <b>Always be aware of this locality of the value when using this method here.</b>
-	 * <br/>
-	 * Please bear in mind, that the returned value will <b>not</b> be an
-	 * {@link InheritableStringParameterValue}, but a regular {@link StringParameterValue},
-	 * to further denote the locality.
+	 * The only difference to the super function is that it makes sure the
+	 * value is properly trimmed.
 	 * 
-	 * @see InheritanceProject#scheduleBuild2(int, hudson.model.Cause, java.util.Collection)
-	 * 
-	 * @return the local default value for this parameter definition as an
-	 * {@link InheritableStringParameterValue}
+	 * @return the local default value for this parameter definition.
 	 */
 	@Override
 	public StringParameterValue getDefaultParameterValue() {
-		return super.getDefaultParameterValue();
+		return new StringParameterValue(
+				this.getName(),
+				this.trimValue(this.getDefaultValue()),
+				this.getDescription()
+		);
 	}
 	
 
@@ -729,15 +534,9 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			
 			//Then, we check the parameters of each such linked project
 			for (InheritanceProject proj : references) {
-				//Fetch all parameters from the given project 
-				ParametersDefinitionProperty pdp =
-						proj.getProperty(ParametersDefinitionProperty.class, IMode.INHERIT_FORCED);
-				if (!(pdp instanceof InheritanceParametersDefinitionProperty)) {
-					continue;
-				}
-				InheritanceParametersDefinitionProperty ipdp =
-						(InheritanceParametersDefinitionProperty) pdp;
-				List<ScopeEntry> scope = ipdp.getScopedParameterDefinition(name);
+				//Fetch all parameters from the given project in their correct scope
+				ParameterSelector pSel = ParameterSelector.instance;
+				List<ScopeEntry> scope = pSel.getScopedParameterDefinition(project, name);
 				if (scope == null) { continue; }
 				for (ScopeEntry entry : scope) {
 					//Searching for the parameter that applies
@@ -842,5 +641,4 @@ public class InheritableStringParameterDefinition extends StringParameterDefinit
 			return refs;
 		}
 	}
-
 }

@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2018-2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -22,11 +23,16 @@ package hudson.plugins.project_inheritance.projects;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
+
+import org.apache.commons.lang.StringUtils;
 
 import hudson.FilePath;
 import hudson.model.Build;
@@ -36,13 +42,13 @@ import hudson.model.Job;
 import hudson.model.Messages;
 import hudson.model.Node;
 import hudson.model.ParameterValue;
-import hudson.model.ParametersAction;
 import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.StringParameterValue;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterValue;
+import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
+import hudson.plugins.project_inheritance.util.BuildDiscardPreventer;
 import hudson.plugins.project_inheritance.util.NodeFileSeparator;
 import hudson.plugins.project_inheritance.util.PathMapping;
 import hudson.plugins.project_inheritance.util.Resolver;
@@ -52,6 +58,8 @@ import hudson.slaves.WorkspaceList.Lease;
 
 public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild> {
 	private static final Logger LOGGER = Logger.getLogger(InheritanceBuild.class.getName());
+	
+	private static final Pattern truncatePattern = Pattern.compile("(?i)<truncate\\s*/>");
 	
 	protected transient Map<String, Long> projectVersions;
 	
@@ -63,6 +71,33 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 		super(project, buildDir);
 	}
 	
+	@Override
+	public @CheckForNull String getWhyKeepLog() {
+		String fromSuper = super.getWhyKeepLog();
+		if (fromSuper != null) { return fromSuper; }
+		
+		for (BuildDiscardPreventer bdp : BuildDiscardPreventer.all()) {
+			String msg = bdp.getWhyKeepLog(this);
+			if (msg != null) { return msg; }
+		}
+		//Can be safely deleted
+		return null;
+	}
+	
+	@Override
+	public @Nonnull String getTruncatedDescription() {
+		//Fetch the full description
+		String desc = this.getDescription();
+		if (StringUtils.isEmpty(desc)) { return ""; }
+		//Try to find a <truncate/> tag
+		Matcher m = truncatePattern.matcher(desc);
+		if (m.find()) {
+			//Truncate tag was found, trusting the user's choice
+			return desc.substring(0, m.start());
+		}
+		//Otherwise, revert to the regular behaviour
+		return super.getTruncatedDescription();
+	}
 	
 	public synchronized void save() throws IOException {
 		super.save();
@@ -152,9 +187,9 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 	 * This method schedules the execution of this build object.
 	 * <p>
 	 * It suppresses the unchecked conversion warning, because the parent
-	 * class {@link Build} makes use of the {@link BuildExecution} object
-	 * which fakes its way to be compatible with both the deprecated {@link Runner}
-	 * class and the new {@link RunExecution} class.
+	 * class {@link Build} makes use of the {@link hudson.model.Build.BuildExecution}
+	 * class which fakes its way to be compatible with both the deprecated
+	 * Runner class and the new {@link hudson.model.Run.RunExecution} class.
 	 * </p>
 	 */
 	@Override
@@ -172,8 +207,33 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 		super.execute(new InheritanceBuildExecution());
 	}
 	
+	/**
+	 * This exception is raised, when an {@link Error} had to be converted
+	 * into an {@link Exception} to work around a Jenkins file handle leak in
+	 * {@link Run}.execute().
+	 * <p>
+	 * When {@link BuildExecution#cleanUp(BuildListener)} raises an error
+	 * instead of an exception, the build logger (its underlying file stream)
+	 * is closed in Run.execute(), but its overlaying listener is not closed.
+	 * <p>
+	 * When the GC does not finalize those objects because it has enough
+	 * memory, an open file handle might be leaked.
+	 * <p>
+	 * This needs to be fixed upstream in Jenkins, but until then it must be
+	 * worked-around by converting the Error into an Exception.
+	 * <p>
+	 * One source of such an Error can be {@link WorkspaceList}.release().
+	 */
+	public static class HadToConvertErrorException extends Exception {
+		private static final long serialVersionUID = 4793047694447530842L;
+		
+		public HadToConvertErrorException(Throwable error) {
+			super(error);
+		}
+	}
 	
 	protected class InheritanceBuildExecution extends BuildExecution {
+		
 		@Override
 		protected Result doRun(BuildListener listener) throws Exception {
 			/* Please note: The version MUST have been set up by the
@@ -184,32 +244,17 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			if (!(run instanceof InheritanceBuild)) {
 				listener.fatalError(
 						"InheritanceBuildExecution was not started by an"
-						+ " InheritanceBuild. Versioning and Inheritance"
+						+ " InheritanceBuild. Versioning and inheritance"
 						+ " can't be trusted."
 				);
 				throw new RunnerAbortedException();
 			}
 			
-			/* Check if all the parameters were set right; and somebody did not
-			 * forget to set a parameter correctly.
-			 */
-			for (ParameterValue pv : this.getParameterValues()) {
-				if (!(pv instanceof InheritableStringParameterValue)) {
-					continue;
-				}
-				InheritableStringParameterValue ispv =
-						(InheritableStringParameterValue) pv;
-				//Check if a value should've been set, but was not
-				if (!ispv.getMustHaveValueSet()) { continue; }
-				if (ispv.value == null || ispv.value.isEmpty()) {
-					//We detected an invalid value
-					listener.fatalError(String.format(
-							"Parameter '%s' has no value, but was required to be set. Aborting!",
-							ispv.getName()
-							));
-					throw new RunnerAbortedException();
-				}
-			}
+			//Check if all the parameters were set right
+			InheritanceParametersDefinitionProperty.checkParameterSanity(
+					this.getBuild(),
+					listener
+			);
 			
 			/* Call the regular build response; note: an InterruptedException may
 			 * be raised to the caller in case of a job abort.
@@ -228,6 +273,16 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 				//Log the abort, but not the exception
 				LOGGER.log(Level.INFO, run + " aborted");
 				return result;
+			}
+		}
+		
+		@Override
+		public void cleanUp(@Nonnull BuildListener listener) throws Exception {
+			try {
+				super.cleanUp(listener);
+			} catch (Error error) {
+				//See JavaDoc of HTCEE
+				throw new HadToConvertErrorException(error);
 			}
 		}
 		
@@ -250,15 +305,19 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 		@Override
 		protected Lease decideWorkspace(Node n, WorkspaceList wsl) throws InterruptedException, IOException {
 			//Check if a parameter itself sets the workspace path
-			for (ParameterValue pv : this.getParameterValues()) {
+			Collection<ParameterValue> values =
+					InheritanceParametersDefinitionProperty.getParameterValues(
+							this.getBuild()
+					);
+			for (ParameterValue pv : values) {
 				if (!(pv instanceof StringParameterValue)) {
 					continue;
 				}
 				StringParameterValue spv = (StringParameterValue) pv;
 				if (spv.getName().equalsIgnoreCase("WORKSPACE_REUSE_PATH")) {
-					//Fetch the workspace (do not care about locking)
+					//Fetch the workspace and do not care about locking, as it is handled externally
 					return Lease.createDummyLease(
-							new FilePath(n.getChannel(), spv.value)
+							new FilePath(n.getChannel(), spv.getValue().toString())
 					);
 				}
 			}
@@ -289,23 +348,6 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			
 			//We have the path; create a variable Lease
 			return wsl.allocate(ws, getBuild());
-		}
-		
-		
-		protected Collection<ParameterValue> getParameterValues() {
-			Map<String, ParameterValue> map = new HashMap<String, ParameterValue>();
-			Run<?,?> run = this.getBuild();
-			List<ParametersAction> actions =
-					run.getActions(ParametersAction.class);
-			
-			for (ParametersAction pa : actions) {
-				for (ParameterValue pv : pa.getParameters()) {
-					if (pv == null || pv.getName() == null) { continue; }
-					map.put(pv.getName(), pv);
-				}
-			}
-			
-			return map.values();
 		}
 	}
 }

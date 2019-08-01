@@ -19,7 +19,7 @@
  */
 
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
-import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
+import hudson.plugins.project_inheritance.projects.view.BuildFlowScriptAction;
 
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
@@ -47,6 +47,6 @@ l.layout(title: my.displayName) {
 	
 	//Main panel with lots of plugin-contributed data
 	l.main_panel() {
-		include(InheritanceViewAction, "view")
+		include(BuildFlowScriptAction, "view")
 	}
 }

@@ -17,10 +17,10 @@
  You should have received a copy of the GNU Lesser General Public
  License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 -->
-
 <!--
   This view is used to render the installed plugins page.
 -->
+<?jelly escape-by-default='true'?>
 <div>
 Plugin that adds inheritance between jobs to Jenkins.
 </div>

@@ -16,7 +16,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
-License along with this library.  If not, see <http://www.gnu.org/licenses />.
+License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
@@ -24,50 +24,122 @@ License along with this library.  If not, see <http://www.gnu.org/licenses />.
 	<parent>
 		<groupId>org.jenkins-ci.plugins</groupId>
 		<artifactId>plugin</artifactId>
-		<!-- which version of Jenkins is this plugin built against? -->
-		<version>1.625.3</version>
+		<!--
+			Note: The jenkins parent version is no longer bound to this pom.
+			Instead, the version is now selected via the "jenkins.version"
+			property.
+		-->
+		<version>3.2</version>
 	</parent>
 	
 	<name>Project Inheritance Plugin</name>
 	<groupId>hudson.plugins</groupId>
 	<artifactId>project-inheritance</artifactId>
-	<version>2.0.1-SNAPSHOT</version>
+	<version>19.08.01-SNAPSHOT</version>
 	<packaging>hpi</packaging>
 	<!-- Link to wiki -->
 	<url>https://wiki.jenkins-ci.org/display/JENKINS/inheritance-plugin</url>
-	
-	<properties>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-	</properties>
 
+	<properties>
+		<java.level>8</java.level>
+		<jenkins.version>2.107.3</jenkins.version>
+		
+		<animal-sniffer-maven-plugin.version>1.16</animal-sniffer-maven-plugin.version>
+		<diffutils.version>1.2.1</diffutils.version>
+		<maven-compiler-plugin.version>3.7.0</maven-compiler-plugin.version>
+		<matrix-project.version>1.13</matrix-project.version>
+		<rebuild.version>1.29</rebuild.version>
+		<slf4j-api.version>1.7.22</slf4j-api.version>
+		<jcl-over-slf4j.version>1.7.25</jcl-over-slf4j.version>
+		<log4j-over-slf4j.version>1.7.25</log4j-over-slf4j.version>
+		<slf4j-api.version>1.7.25</slf4j-api.version>
+		<slf4j-jdk14.version>1.7.25</slf4j-jdk14.version>
+	</properties>
 
 	<!-- Load the needed dependencies - keep this clean for OSS release -->
 	<dependencies>
 		<dependency>
 			<groupId>com.sonyericsson.hudson.plugins.rebuild</groupId>
 			<artifactId>rebuild</artifactId>
-			<version>1.16</version>
+			<version>${rebuild.version}</version>
 		</dependency>
 		
 		<dependency>
 			<groupId>com.googlecode.java-diff-utils</groupId>
 			<artifactId>diffutils</artifactId>
-			<version>1.2.1</version>
+			<version>${diffutils.version}</version>
+		</dependency>
+		
+		<!--
+			Needed for test-cases by the rebuild plugin (and others), that do
+			not declare it, since it used to be implied in Jenkins < 2.2, but
+			is now optional.
+			The scope is "test", since it's not actually needed for compilation,
+			only running tests.
+		-->
+		<dependency>
+			<groupId>org.jenkins-ci.plugins</groupId>
+			<artifactId>matrix-project</artifactId>
+			<version>${matrix-project.version}</version>
+			<scope>test</scope>
+			<exclusions>
+				<exclusion>
+					<groupId>org.jenkins-ci</groupId>
+					<artifactId>symbol-annotation</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		
+		<!-- Plugin versions included to avoid maven upper-bound version errors -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>${slf4j-api.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>jcl-over-slf4j</artifactId>
+			<version>${jcl-over-slf4j.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-jdk14</artifactId>
+			<version>${slf4j-jdk14.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>log4j-over-slf4j</artifactId>
+			<version>${log4j-over-slf4j.version}</version>
 		</dependency>
 	</dependencies>
 
 
-	<!-- Build phase -->
+	<!-- -->
 	<build>
 		<plugins>
-			<!-- Use only Java 7 language features. -->
+			<!-- Require at least Java 8 -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>${maven-compiler-plugin.version}</version>
 				<configuration>
-					<source>1.7</source>
-					<target>1.7</target>
+					<source>1.8</source>
+					<target>1.8</target>
+				</configuration>
+			</plugin>
+
+		
+		<!-- Must upgrade animal-sniffer to deal with Java 9 without crash -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>animal-sniffer-maven-plugin</artifactId>
+				<version>${animal-sniffer-maven-plugin.version}</version>
+				<configuration>
+					<signature>
+						<groupId>org.codehaus.mojo.signature</groupId>
+						<artifactId>java18</artifactId>
+						<version>1.0</version>
+					</signature>
 				</configuration>
 			</plugin>
 		</plugins>
@@ -90,8 +162,7 @@ License along with this library.  If not, see <http://www.gnu.org/licenses />.
 		<url>https://github.com/i-m-c/jenkins-inheritance-plugin</url>
 		<connection>scm:git:github.com/i-m-c/jenkins-inheritance-plugin.git</connection>
 		<developerConnection>scm:git:git@github.com:i-m-c/jenkins-inheritance-plugin.git</developerConnection>
-	  <tag>HEAD</tag>
-  </scm>
+	</scm>
 	
 	<!-- Set up repository locations for Jenkins and its plugins -->
 	<repositories>

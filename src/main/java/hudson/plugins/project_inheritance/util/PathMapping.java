@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -20,6 +21,8 @@
 package hudson.plugins.project_inheritance.util;
 
 import java.io.File;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.AbstractMap;
 import java.util.Set;
 import java.util.TreeMap;
@@ -51,6 +54,14 @@ public class PathMapping {
 					"%s%s%s", target, dstSep, src
 			);
 			map.put(fullSrc, fullDst);
+		}
+	}
+	
+	public static final String getSafePath(String in) {
+		try {
+			return URLEncoder.encode(in, "utf8");
+		} catch (UnsupportedEncodingException ex) {
+			return in;
 		}
 	}
 	
@@ -113,7 +124,8 @@ public class PathMapping {
 	 * @param targetPath targetPath is calculated to this file
 	 * @param basePath basePath is calculated from this file
 	 * @param pathSeparator directory separator. The platform default is not assumed so that we can test Unix behaviour when running on Windows (for example)
-	 * @return
+	 * 
+	 * @return a relativized path. May be empty, but never null.
 	 */
 	public static String getRelativePath(String targetPath, String basePath, String pathSeparator) {
 		// Normalize the paths

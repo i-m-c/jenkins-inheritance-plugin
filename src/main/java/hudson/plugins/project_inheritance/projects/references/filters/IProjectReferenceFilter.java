@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -21,6 +22,7 @@ package hudson.plugins.project_inheritance.projects.references.filters;
 
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference.ProjectReferenceDescriptor;
 
 /**
  * This interface defines methods needed to filter a list of Jenkins jobs.
@@ -34,7 +36,7 @@ import hudson.plugins.project_inheritance.projects.references.AbstractProjectRef
  * the "select" combobox to specify the reference.
  * <p>
  * Just override this interface, and pass the object into
- * {@link hudson.plugins.project_inheritance.projects.references.AbstractProjectReference.ProjectReferenceDescriptor#doFillNameItems(String)}
+ * {@link ProjectReferenceDescriptor#doFillNameItems(String, String)}
  * 
  * @author mhschroe
  *

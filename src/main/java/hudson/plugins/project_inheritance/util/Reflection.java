@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -19,16 +20,16 @@
  */
 package hudson.plugins.project_inheritance.util;
 
-import hudson.model.Hudson;
-import hudson.plugins.project_inheritance.projects.InheritanceBuild;
-import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
-
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import hudson.plugins.project_inheritance.projects.InheritanceBuild;
+import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
+import jenkins.model.Jenkins;
 
 public class Reflection {
 	
@@ -94,7 +95,7 @@ public class Reflection {
 			//Do note that it is synchronised and thus a possible bottleneck
 			ClassLoader cl;
 			try {
-				cl = Hudson.getInstance().getPluginManager().uberClassLoader;
+				cl = Jenkins.get().getPluginManager().uberClassLoader;
 			} catch (NullPointerException ex) {
 				//This can (or should) only happen if not on the server or during shutdown
 				return null;
@@ -226,10 +227,10 @@ public class Reflection {
 	}
 	
 	/**
-	* Wrapper for {@link #calledFromClass(Class, int)}, with the maxDepth set
+	* Wrapper for {@link #calledFromClass(int, Class...)}, with the maxDepth set
 	* to {@value #MAX_STACK_DEPTH}.
 	* 
-	* @param clazz  the class to search for.
+	* @param classes the classes to search for.
 	* @return true, if the method was called from the given class.
 	*/
 	public static boolean calledFromClass(Class<?>... classes) {
@@ -245,7 +246,7 @@ public class Reflection {
 	 * {@link InheritanceBuild} class.
 	 * </p>
 	 * 
-	 * @param clazz the class to search for
+	 * @param classes the class to search for
 	 * @param maxDepth the maximum depth to search in the call stack.
 	 * 		If 0 or negative, explore the full stack.
 	 * @return true, if the method was called from the given class.
@@ -309,7 +310,7 @@ public class Reflection {
 	
 	
 	/**
-	 * Wrapper for {@link #calledFromMethod(Class, String, int)}, with the
+	 * Wrapper for {@link #calledFromMethod(Class, int, String...)}, with the
 	 * maxDepth set to {@value #MAX_STACK_DEPTH}.
 	 * 
 	 * @param clazz the class to search for. This must be an exact match.

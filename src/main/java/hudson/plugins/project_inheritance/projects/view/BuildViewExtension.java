@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -96,7 +97,7 @@ public abstract class BuildViewExtension implements ExtensionPoint {
 			AbstractProject<?, ?> project, StaplerRequest req
 	) throws ServletException {
 		List<Action> actions = new LinkedList<Action>();
-		for (BuildViewExtension ext : Jenkins.getInstance().getExtensionList(BuildViewExtension.class)) {
+		for (BuildViewExtension ext : Jenkins.get().getExtensionList(BuildViewExtension.class)) {
 			actions.addAll(ext.onBuild(project, req));
 		}
 		//Merge ParametersActions together
@@ -127,6 +128,8 @@ public abstract class BuildViewExtension implements ExtensionPoint {
 	 * <p>
 	 * This can happen when triggering jobs that do not have parameters, and
 	 * thus trigger a build purely via an HTTP GET without a form.
+	 * 
+	 * @param req the user-request
 	 * 
 	 * @return the JSON form, or null if none is present (or the request was not a POST)
 	 */

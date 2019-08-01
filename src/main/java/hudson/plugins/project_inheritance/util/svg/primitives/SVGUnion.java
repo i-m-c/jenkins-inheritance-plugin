@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -99,7 +100,7 @@ public class SVGUnion implements SVGPrimitive {
 	}
 	
 	/**
-	 * Returns an unmodifiable collection of the underlying set of elements.
+	 * @return an unmodifiable collection of the underlying set of elements.
 	 */
 	public Collection<SVGPrimitive> getElements() {
 		return Collections.unmodifiableCollection(elements);

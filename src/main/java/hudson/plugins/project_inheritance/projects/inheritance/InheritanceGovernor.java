@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -39,6 +40,7 @@ import hudson.tasks.BuildStep;
 import hudson.tasks.BuildTrigger;
 import hudson.triggers.Trigger;
 import hudson.util.DescribableList;
+import jenkins.model.ParameterizedJobMixIn;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -205,7 +207,26 @@ public abstract class InheritanceGovernor<T> {
 	}
 	
 	private final List<InheritanceProject> getFullScopeOrdered(
-			InheritanceProject root, HashSet<String> seen) {
+			InheritanceProject root, Set<String> seen) {
+		return getFullScopeOrdered(root, orderMode, seen);
+	}
+	
+	/**
+	 * Returns the list of parents of a given job (including the given root),
+	 * ordered according to the given selector.
+	 * 
+	 * @param root the job to get parents for.
+	 * @param order the order to use.
+	 * @param seen a set of names of projects which have already been included.
+	 *  If null, an empty set is used.
+	 * 
+	 * @return the list of parents, including the given root. As such, is never
+	 * empty or null.
+	 */
+	public static final List<InheritanceProject> getFullScopeOrdered(
+			InheritanceProject root, SELECTOR order, Set<String> seen
+	) {
+		if (seen == null) { seen = new HashSet<String>(); }
 		List<InheritanceProject> all = new LinkedList<InheritanceProject>();
 		if (root == null) { return all; }
 		
@@ -218,15 +239,15 @@ public abstract class InheritanceGovernor<T> {
 		List<InheritanceProject> priors = new LinkedList<InheritanceProject>();
 		List<InheritanceProject> latters = new LinkedList<InheritanceProject>();
 		
-		for (AbstractProjectReference apr : root.getParentReferences(orderMode)) {
+		for (AbstractProjectReference apr : root.getParentReferences(order)) {
 			if (apr == null) { continue; }
 			InheritanceProject ip = apr.getProject();
 			if (ip == null) { continue; }
-			int prio = PrioComparator.getPriorityFor(apr, orderMode);
+			int prio = PrioComparator.getPriorityFor(apr, order);
 			if (prio <= 0) {
-				priors.addAll(getFullScopeOrdered(ip, seen));
+				priors.addAll(getFullScopeOrdered(ip, order, seen));
 			} else {
-				latters.addAll(getFullScopeOrdered(ip, seen));
+				latters.addAll(getFullScopeOrdered(ip, order, seen));
 			}
 		}
 		
@@ -298,8 +319,12 @@ public abstract class InheritanceGovernor<T> {
 	 * 
 	 * @see #reduceFromFullInheritance(Deque)
 	 * @see #reduceByMerge(Deque, Class, InheritanceProject)
-	 * @param list
-	 * @return
+	 * 
+	 * @param <R> the type of the values in the given list.
+	 * @param list the raw list to scan
+	 * @param listType the type of elements in the list
+	 * @param caller the project for which the merge is done
+	 * @return a list of items resulting from the merge
 	 */
 	protected static <R> List<R> reduceByMergeWithDuplicates(Deque<List<R>> list, Class<?> listType, InheritanceProject caller) {
 		List<R> merge = new LinkedList<R>();
@@ -335,9 +360,12 @@ public abstract class InheritanceGovernor<T> {
 	 * In contrast to {@link #reduceByMergeWithDuplicates(Deque, Class, InheritanceProject)},
 	 * it will remove duplicate entries based on the class-objects.
 	 * 
+	 * @param <R> the type of the values in the given list.
+	 * @param list the list to reduce
+	 * @param listType the type of the list elements
+	 * @param caller the project for which the list is being generated
+	 * @return a reduced list. May be empty but never null.
 	 * @see #reduceFromFullInheritance(Deque)
-	 * @param list
-	 * @return
 	 */
 	protected static <R> List<R> reduceByMerge(Deque<List<R>> list, Class<?> listType, InheritanceProject caller) {
 		List<R> merge = reduceByMergeWithDuplicates(list, listType, caller);
@@ -476,7 +504,8 @@ public abstract class InheritanceGovernor<T> {
 		if (Reflection.calledFromClass(
 				Build.class, BuildCommand.class,
 				Queue.class, BuildTrigger.class,
-				Trigger.class, BuildStep.class
+				Trigger.class, BuildStep.class,
+				ParameterizedJobMixIn.class
 			) ||
 			Reflection.calledFromMethod(
 					InheritanceProject.class,
@@ -498,9 +527,9 @@ public abstract class InheritanceGovernor<T> {
 	 * and that is when Jenkins expects to access the original, raw fields
 	 * of this class to directly manipulate them during reconfiguration.
 	 * <p>
-	 * Do note that both {@link #inheritanceLookupRequired()} and this
-	 * function need to return false for the raw lists to be returned by
-	 * {@link #getVersionedObjectsFrom(InheritanceProject, String)}.
+	 * Do note that both {@link #inheritanceLookupRequired(InheritanceProject)}
+	 * and this function need to return false for the raw lists to be returned
+	 * by {@link #getVersionedField(InheritanceProject, Long)}.
 	 * 
 	 * @return true if versioning for the various fields is needed.
 	 */

@@ -105,16 +105,6 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 				)
 			}
 			
-			if (my.supportsLogRotator()) {
-				f.optionalBlock(
-						help: "/help/project-config/log-rotation.html",
-						title: _("Discard Old Builds"),
-						name: "logrotate", inline: "true",
-						checked: my.buildDiscarder!=null) {
-					f.dropdownDescriptorSelector(field: "buildDiscarder", title: _("Strategy"))
-				}
-			}
-			
 			ct.colored_block(backCol: "LightGoldenRodYellow ", borderCol: "navy") {
 				f.section(title: _("Properties")) {}
 				ct.blankEntry();

@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -39,6 +40,8 @@ import com.google.common.cache.CacheBuilder;
 
 import hudson.DescriptorExtensionList;
 import hudson.RelativePath;
+import hudson.init.TermMilestone;
+import hudson.init.Terminator;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
 import hudson.model.Job;
@@ -63,12 +66,27 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	 * <p>
 	 * Also, the timeout avoids that rarely referenced objects pollute the
 	 * map.
+	 * <p>
+	 * Important note: In Unit-tests, the values in here survive in between
+	 * test cases, since the JVM and ClassLoader are not torn down. As such,
+	 * this class needs to hook into the Jenkins shutdown and clean the lookup
+	 * on shutdown.
 	 */
 	private static final Cache<String, InheritanceProject> nameLookup =
 			CacheBuilder.newBuilder()
-					.expireAfterAccess(5, TimeUnit.MINUTES)
+					.expireAfterWrite(5, TimeUnit.MINUTES)
 					.weakValues()
 					.build();
+	
+	/**
+	 * This method makes sure the name lookup does not survive Jenkins tear-down
+	 * in-between Unittests or Jenkins soft-restarts.
+	 */
+	@Terminator(before=TermMilestone.COMPLETED)
+	public static void onJenkinsStop() {
+		nameLookup.invalidateAll();
+		nameLookup.cleanUp();
+	}
 	
 	
 	public AbstractProjectReference(String targetJob) {
@@ -91,8 +109,8 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	
 	/**
 	 * Returns the project associated with this reference. In contrast to the
-	 * public field {@link AbstractProjectReference#project}, this will try to make
-	 * sure that the object is actually assigned.
+	 * public field {@link AbstractProjectReference#getProject()}, this will
+	 * try to make sure that the object is actually assigned.
 	 * 
 	 * @return the associated {@link InheritanceProject}, or null in case the
 	 * name could not be resolved at this moment.
@@ -130,7 +148,7 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	// === DESCRIPTOR MEMBERS AND CLASSES ===
 	
 	/**
-	 * Returns all the registered {@link ParameterDefinition} descriptors that
+	 * @return all the registered {@link ParameterDefinition} descriptors that
 	 * construct classes derived from this abstract base class.
 	 */
 	public static DescriptorExtensionList<AbstractProjectReference,ProjectReferenceDescriptor> all() {
@@ -141,14 +159,15 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	}
 	
 	/**
-	 * Returns all the registered {@link ParameterDefinition} descriptors that
+	 * @param clazz the class to filter for
+	 * @return all the registered {@link ParameterDefinition} descriptors that
 	 * construct classes derived from this abstract base class.
 	 */
 	public static DescriptorExtensionList<AbstractProjectReference,ProjectReferenceDescriptor> all(
 			Class<AbstractProjectReference> clazz
 	) {
 		if (clazz == null) { clazz = AbstractProjectReference.class; }
-		Jenkins j = Jenkins.getInstance();
+		Jenkins j = Jenkins.get();
 		
 		DescriptorExtensionList<AbstractProjectReference, ProjectReferenceDescriptor>
 			dList, ret;
@@ -181,9 +200,12 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	}
 	
 	/**
-	 * This method returns the same list as {@link #all()}, with all those
-	 * classes removed that do <b>not</b> match the given regular expression
+	 * @return the same list as {@link #all()}, with all those classes removed
+	 * that do <b>not</b> match the given regular expression
 	 * on the class name.
+	 * 
+	 * @param classNameExp the regular expression for the class name
+	 * 
 	 */
 	//public static DescriptorExtensionList<AbstractProjectReference,ProjectReferenceDescriptor> all(String classNameExp) {
 	public static List<ProjectReferenceDescriptor> all(String classNameExp) {
@@ -213,13 +235,13 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 	public static ProjectReferenceDescriptor getDescriptor(
 			Class<? extends AbstractProjectReference> clazz) {
 		return (ProjectReferenceDescriptor)
-				Jenkins.getInstance()
+				Jenkins.get()
 				.getDescriptorOrDie(clazz);
 	}
 	
 	public ProjectReferenceDescriptor getDescriptor() {
 		return (ProjectReferenceDescriptor)
-				Jenkins.getInstance()
+				Jenkins.get()
 				.getDescriptorOrDie(getClass());
 	}
 	
@@ -332,8 +354,8 @@ public abstract class AbstractProjectReference implements Describable<AbstractPr
 		 * Public, instead of protected/private, because the Unittests make
 		 * use of this one.
 		 * 
-		 * @param targetJob
-		 * @param filter
+		 * @param targetJob the job under configuration
+		 * @param filter the filter of the list of jobs
 		 * @return a list of names of compatible jobs. May be empty, but never null.
 		 */
 		public ListBoxModel internalFillNameItems(String targetJob, IProjectReferenceFilter filter) {

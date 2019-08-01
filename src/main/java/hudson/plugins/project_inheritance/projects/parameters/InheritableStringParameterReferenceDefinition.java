@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2018-2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -26,9 +27,12 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.apache.commons.lang.StringUtils;
+import org.kohsuke.stapler.Ancestor;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.StaplerRequest;
 
 import hudson.Extension;
 import hudson.RelativePath;
@@ -42,7 +46,8 @@ import hudson.model.StringParameterValue;
 import hudson.model.TopLevelItem;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
@@ -83,7 +88,8 @@ public class InheritableStringParameterReferenceDefinition extends
 	
 	@Initializer(before=InitMilestone.PLUGINS_STARTED)
 	public static void initializeXStream() {
-		InheritableParameterReferenceConverter conv = new InheritableParameterReferenceConverter();
+		InheritableParameterReferenceConverter conv =
+				new InheritableParameterReferenceConverter();
 		
 		final XStream2[] xs = {
 				Jenkins.XSTREAM2, Run.XSTREAM2, Items.XSTREAM2
@@ -105,25 +111,20 @@ public class InheritableStringParameterReferenceDefinition extends
 	 * of the variable, but it is essential to find the value of the flags that
 	 * can only be defined on a true parameter, like {@link #getMustBeAssigned()}.
 	 * 
+	 * @param root the project that uses the current
+	 * 
 	 * @return the actual {@link InheritableStringParameterDefinition} that this
 	 * reference ultimately points to. Skips all other
 	 * {@link InheritableStringParameterReferenceDefinition} in between them.
 	 */
-	public InheritableStringParameterDefinition getParent() {
-		InheritanceParametersDefinitionProperty ipdp = this.getRootProperty();
-		if (ipdp == null) {
-			return null;
-		}
-		
-		//Fetch the owner of this reference
-		String selfOwner = ipdp.getOwner().getFullName();
-		
-		List<ScopeEntry> scope = ipdp.getAllScopedParameterDefinitions();
+	public InheritableStringParameterDefinition getParent(InheritanceProject root) {
+		ParameterSelector pSel = ParameterSelector.instance;
+		List<ScopeEntry> scope = pSel.getScopedParameterDefinition(root, this.getName());
 		ListIterator<ScopeEntry> iter = scope.listIterator(scope.size());
 		while (iter.hasPrevious()) {
 			ScopeEntry entry = iter.previous();
 			//Refuse to return ourselves or siblings
-			if (entry.param == null || entry.owner == selfOwner || entry.param == this) {
+			if (entry.param == null || entry.param == this) {
 				continue;
 			}
 			if (!(entry.param instanceof InheritableStringParameterDefinition)) {
@@ -139,6 +140,31 @@ public class InheritableStringParameterReferenceDefinition extends
 		return null;
 	}
 	
+	/**
+	 * This works like {@link #getParent(InheritanceProject)}, only that
+	 * it tries to grab the current Project from the current stapler request.
+	 * <p>
+	 * If it can't, null is returned. This means that this method will only
+	 * work when called from a UI call and at no other time.
+	 * 
+	 * @return the definition this reference points to, or null in case of
+	 * the project or reference not being found.
+	 */
+	public InheritableStringParameterDefinition getParent() {
+		//Check for a Stapler Request ancestor
+		StaplerRequest req = Stapler.getCurrentRequest();
+		if (req == null) { return null; }
+		for (Ancestor a : req.getAncestors()) {
+			Object obj = a.getObject();
+			if (obj instanceof InheritanceProject) {
+				return this.getParent((InheritanceProject) obj);
+			}
+		}
+		//No ancestor found.
+		return null;
+	}
+	
+	
 	@Override
 	public ParameterDefinition copyWithDefaultValue(ParameterValue defaultValue) {
 		if (!(defaultValue instanceof StringParameterValue)) {
@@ -147,12 +173,11 @@ public class InheritableStringParameterReferenceDefinition extends
 		}
 		
 		StringParameterValue spv = ((StringParameterValue) defaultValue);
-		String value = spv.value;
+		String value = spv.getValue().toString();
 		InheritableStringParameterReferenceDefinition isprd =
 				new InheritableStringParameterReferenceDefinition(
 						this.getName(), value
 				);
-		isprd.setRootProperty(this.getRootProperty());
 		return isprd;
 	}
 	
@@ -258,6 +283,7 @@ public class InheritableStringParameterReferenceDefinition extends
 		 * @param name the currently pointed-to task. If null or blank, it is ignored.
 		 * @param project the project on whose config page the parameter is generated. If null, it is ignored.
 		 * @param targetJob another job reference, if the parent container has a 'targetJob' field.
+		 * @param parents the parents from the current form data
 		 * 
 		 * @return a list of parameters. Will always contain at least the passed
 		 * in name, but may be empty, if that name is blank/null.
@@ -281,7 +307,7 @@ public class InheritableStringParameterReferenceDefinition extends
 			//Then, check if the container class (usually a ProjectReference)
 			//made use of a 'targetJob' field, and if so, add it to the candidates
 			if (targetJob != null) {
-				TopLevelItem item = Jenkins.getInstance().getItem(targetJob);
+				TopLevelItem item = Jenkins.get().getItem(targetJob);
 				if (item instanceof InheritanceProject) {
 					references.add((InheritanceProject)item);
 				}
@@ -292,7 +318,7 @@ public class InheritableStringParameterReferenceDefinition extends
 				String[] jobs = parents.split(",");
 				for (String job : jobs) {
 					if (StringUtils.isBlank(job)) { continue; }
-					TopLevelItem item = Jenkins.getInstance().getItem(job.trim());
+					TopLevelItem item = Jenkins.get().getItem(job.trim());
 					if (item instanceof InheritanceProject) {
 						references.add((InheritanceProject)item);
 					}

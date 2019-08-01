@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -58,37 +59,38 @@ public final class InheritanceListActionFactory
 	private final InheritanceListService service =
 			new CachingInheritanceListService();
 
-    public InheritanceListActionFactory() {
-        log.info(String.format(
-        		"Extension %s instantiated", this.getClass().getSimpleName()
-        ));
-    }
+	public InheritanceListActionFactory() {
+		log.info(String.format(
+				"Extension %s instantiated", this.getClass().getSimpleName()
+		));
+	}
 
 
-    /**
-     * Creates and returns one single <code>{@link
-     * InheritanceListAction}</code> that will be added to the
-     * given job.
-	 *
-	 * <p>The returned <code>{@link InheritanceListAction}</code>
+	/**
+	 * Creates and returns one single <code>{@link
+	 * InheritanceListAction}</code> that will be added to the
+	 * given job.
+	 * <p>
+	 * The returned <code>{@link InheritanceListAction}</code>
 	 * will be added by Jenkins to the given job as a transient
-	 * action. Transient actions are not persisted.</p>
-	 *
+	 * action. Transient actions are not persisted.
+	 * </p><p>
 	 * The purpose of the returned <code>{@link
 	 * InheritanceListAction}</code> is to add a section to the job
 	 * detail page with an inheritance diagram in case the job is of
-	 * type inheritance project.</p>
-	 *
-	 * <p>This method is automatically called by Jenkins during the
-	 * initialisation of a job object.</p>
+	 * type inheritance project.
+	 * </p><p>
+	 * This method is automatically called by Jenkins during the
+	 * initialisation of a job object.
+	 * </p>
 	 *
 	 * @param target The job for which we are to create our action.
 	 *
 	 * @return A collection with one single <code>{@link
 	 * InheritanceListAction}</code> instance.
-     */
-    @Override
-    public Collection<? extends Action> createFor(
+	 */
+	@Override
+	public Collection<? extends Action> createFor(
 			@SuppressWarnings("rawtypes") final AbstractProject target
 	) {
 		Collection<Action> result;
@@ -107,8 +109,8 @@ public final class InheritanceListActionFactory
 		} else {
 			result = Collections.emptyList();
 		}
-        return result;
-    }
+		return result;
+	}
 
 
 	/**

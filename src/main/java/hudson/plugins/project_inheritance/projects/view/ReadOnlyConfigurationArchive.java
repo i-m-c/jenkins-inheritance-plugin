@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -28,6 +29,7 @@ import java.net.URLConnection;
 
 import javax.servlet.ServletException;
 
+import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.HttpResponse;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
@@ -35,10 +37,16 @@ import org.kohsuke.stapler.StaplerResponse;
 
 
 public class ReadOnlyConfigurationArchive implements HttpResponse {
+	private final String name;
 	private final File file;
 
-	public ReadOnlyConfigurationArchive(File file) {
+	public ReadOnlyConfigurationArchive(String name, File file) {
 		this.file = file;
+		if (StringUtils.isBlank(name)) {
+			this.name = file.getName();
+		} else {
+			this.name = name;
+		}
 	}
 	
 	private void close() {
@@ -47,10 +55,9 @@ public class ReadOnlyConfigurationArchive implements HttpResponse {
 		}
 	}
 	
-	public void doIndex( StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
+	public void doIndex(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
 		URLConnection con = connect();
-		//rsp.setHeader("Content-Disposition", "attachment; filename=" + file.getAbsolutePath());
-		rsp.setHeader("Content-Disposition", "attachment; filename=" + file.getName());
+		rsp.setHeader("Content-Disposition", "attachment; filename=" + name);
 		InputStream in = con.getInputStream();
 		rsp.serveFile(
 				req,

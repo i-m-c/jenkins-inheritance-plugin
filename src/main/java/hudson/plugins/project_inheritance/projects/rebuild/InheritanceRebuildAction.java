@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2018-2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -28,6 +29,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 import javax.servlet.ServletException;
 
@@ -43,6 +45,7 @@ import hudson.model.ParameterValue;
 import hudson.model.ParametersAction;
 import hudson.model.StringParameterDefinition;
 import hudson.model.StringParameterValue;
+import hudson.model.TextParameterDefinition;
 import hudson.model.Descriptor.FormException;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
@@ -167,11 +170,17 @@ public class InheritanceRebuildAction implements Action {
 			return new LinkedList<ParameterDefinition>();
 		}
 		
-		//Reloading the versions used by the build
-		Map<String, Long> versions = this.build.getProjectVersions();
-		if (versions == null) {
-			versions = Collections.emptyMap();
-		}
+		//Try loading versions from the URL
+		Map<String, Long> reqVersions = VersionHandler.getFromRequest();
+		//Get the versions from the build
+		Map<String, Long> bldVersions = this.build.getProjectVersions();
+		
+		//Produce the final versions, with the request overriding the project if present
+		Map<String, Long> versions = new TreeMap<>();
+		if (bldVersions != null) { versions.putAll(bldVersions); }
+		if (reqVersions != null) { versions.putAll(reqVersions); }
+		
+		//Announce this merged version list to all future calls
 		VersionHandler.initVersions(versions);
 		try {
 			//Building a map of parameter names to parameter values
@@ -224,8 +233,22 @@ public class InheritanceRebuildAction implements Action {
 					handledVars.add(pd.getName());
 					continue;
 				}
-				//Otherwise, we fetch&add a copy with a new default value
-				modLst.add(pd.copyWithDefaultValue(pv));
+				
+				if (pd instanceof TextParameterDefinition) {
+					/* Multiline text parameters have a bug -- they do not
+					 * correctly override copyWithDefaultValue, thus returning
+					 * a StringParameterDefinition. Bad mojo.
+					 */
+					Object val = pv.getValue();
+					modLst.add(new TextParameterDefinition(
+							pd.getName(),
+							(val instanceof String) ? (String)val : val.toString(),
+							pd.getDescription()
+					));
+				} else {
+					//Otherwise, we fetch&add a copy with a new default value
+					modLst.add(pd.copyWithDefaultValue(pv));
+				}
 				handledVars.add(pv.getName());
 			}
 			
@@ -240,7 +263,7 @@ public class InheritanceRebuildAction implements Action {
 					if (!(pv instanceof StringParameterValue)) { continue; }
 					StringParameterValue spv = (StringParameterValue) pv;
 					
-					modLst.add(new StringParameterDefinition(spv.getName(), spv.value));
+					modLst.add(new StringParameterDefinition(spv.getName(), spv.getValue().toString()));
 				}
 			}
 			
@@ -269,6 +292,14 @@ public class InheritanceRebuildAction implements Action {
 	 * 
 	 * It is called by the form submission dialog defined in the
 	 * "index.jelly" file for this class.
+	 * 
+	 * @param req the user request
+	 * @param rsp the response to the user
+	 * 
+	 * @throws ServletException in case of server error
+	 * @throws IOException in case of saving error
+	 * @throws InterruptedException in case of interrupted wait
+	 * @throws FormException in case of bad form data input
 	 */
 	public void doConfigSubmit(StaplerRequest req, StaplerResponse rsp)
 			throws ServletException, IOException,

@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2018-2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -19,6 +20,8 @@
  */
 package hudson.plugins.project_inheritance.projects.creation;
 
+import static javax.servlet.http.HttpServletResponse.SC_FORBIDDEN;
+
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -27,9 +30,11 @@ import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -63,10 +68,13 @@ import hudson.XmlFile;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
+import hudson.model.Item;
+import hudson.model.Job;
 import hudson.model.ManagementLink;
 import hudson.model.Saveable;
 import hudson.model.TopLevelItem;
 import hudson.model.Descriptor.FormException;
+import hudson.model.listeners.ItemListener;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
 import hudson.plugins.project_inheritance.projects.references.ParameterizedProjectReference;
@@ -262,7 +270,39 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		}
 	}
 	
-	
+	@Extension
+	public static class RenameWatcher extends ItemListener {
+		@Override
+		public void onDeleted(Item item) {
+			ListIterator<ProjectTemplate> iter =
+					ProjectCreationEngine.instance.getTemplates().listIterator();
+			while (iter.hasNext()) {
+				ProjectTemplate t = iter.next();
+				if (t.getName().equalsIgnoreCase(item.getFullName())) {
+					iter.remove();
+				}
+			}
+		}
+		
+		@Override
+		public void onRenamed(Item item, String oldName, String newName) {
+			//Apply the rename to the templates, too
+			ListIterator<ProjectTemplate> iter =
+					ProjectCreationEngine.instance.getTemplates().listIterator();
+			while (iter.hasNext()) {
+				ProjectTemplate t = iter.next();
+				if (t.getName().equalsIgnoreCase(oldName)) {
+					iter.set(new ProjectTemplate(
+							newName, t.getShortDescription()
+					));
+				}
+			}
+			
+			try {
+				ProjectCreationEngine.instance.save();
+			} catch (IOException e) {}
+		}
+	}
 	
 	// === STATIC MEMBER FIELDS ===
 	
@@ -298,6 +338,12 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	protected boolean copyOnRename = true;
 	protected boolean enableApplyButton = true;
 	
+	/**
+	 * TODO: Remove after rollout of 19.05.01
+	 * @deprecated since 19.05.01
+	 */
+	protected transient final Boolean enableLeakedLogCleaner = null;
+	
 	protected List<String> acceptableErrorUrls;
 	
 	protected RenameRestriction renameRestriction = RenameRestriction.ALLOW_ALL;
@@ -307,6 +353,13 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	
 	protected final transient Executor creationExecutor =
 			Executors.newFixedThreadPool(1);
+	
+	/**
+	 * The list of jobs to be used as templates for the {@link ProjectWizard}.
+	 */
+	protected List<ProjectTemplate> templates = 
+			new LinkedList<>();
+	
 	
 	// === CONSTRUCTORS ===
 	
@@ -335,6 +388,13 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				log.severe("Could not read PCE configuration from disk: " + e.toString());
 			}
 		}
+	}
+	
+	public Object readResolve() {
+		if (this.templates == null) {
+			this.templates = new LinkedList<>();
+		}
+		return this;
 	}
 	
 	private boolean copyFrom(ProjectCreationEngine other) {
@@ -390,8 +450,9 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	public synchronized void doConfigSubmit(
 			StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException, FormException {
-		BulkChange bc = new BulkChange(this);
-		try {
+		Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+		
+		try (BulkChange bc = new BulkChange(this)) {
 			//We assume that reading the configuration is valid
 			boolean result = true;
 			
@@ -451,28 +512,23 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			}
 			
 			//Then, we read the hetero-list of creation classes and create them
-			try {
-				Object obj = json.get("creationClasses");
-				if (obj == null) {
-					throw new JSONException("No such key: creationClasses");
-				}
-				List<CreationClass> refs = 
+			Object obj = json.get("creationClasses");
+			if (obj != null) {
+				List<CreationClass> refs =
 						CreationClass.DescriptorImpl.newInstancesFromHeteroList(
 						req, obj, getCreationClassesDescriptors()
 				);
 				this.creationClasses.clear();
 				this.creationClasses.addAll(refs);
-			} catch (JSONException ex) {
+			} else {
 				this.creationClasses.clear();
 			}
 			
-			//And do the same with the matings
-			try {
-				Object obj = json.get("matings");
-				if (obj == null) {
-					throw new JSONException("No such key: matings");
-				}
-				List<CreationMating> refs =
+			
+			//Read the matings config
+			obj = json.get("matings");
+			if (obj != null) {
+				List<CreationMating> mates =
 						CreationMating.DescriptorImpl.newInstancesFromHeteroList(
 						req, obj, getMatingDescriptors()
 				);
@@ -480,7 +536,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				//Removing doubles
 				HashMap<String, CreationMating> unifier =
 						new HashMap<String, ProjectCreationEngine.CreationMating>();
-				for (CreationMating mating : refs) {
+				for (CreationMating mating : mates) {
 					if (mating.firstClass == null ||
 							mating.firstClass.isEmpty() ||
 							mating.secondClass == null ||
@@ -492,11 +548,33 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 							",second:" + mating.secondClass;
 					unifier.put(key, mating);
 				}
-				
 				this.matings.clear();
 				this.matings.addAll(unifier.values());
-			} catch (JSONException ex) {
+			} else {
 				this.matings.clear();
+			}
+			
+			
+			// Read the templates config
+			obj = json.get("templates");
+			if (obj != null) {
+				List<ProjectTemplate> templates = req.bindJSONToList(ProjectTemplate.class, obj);
+				this.templates.clear();
+				this.templates.addAll(templates);
+				
+				//Loop over the templates and remove duplicates
+				HashSet<String> seen = new HashSet<>();
+				Iterator<ProjectTemplate> iter = this.templates.iterator();
+				while (iter.hasNext()) {
+					String name = iter.next().getName();
+					if (seen.add(name) == false) {
+						//The name was already seen before, it is safe to drop this
+						iter.remove();
+						continue;
+					}
+				}
+			} else {
+				this.templates.clear();
 			}
 			
 			if (result) {
@@ -506,7 +584,8 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				// back to config
 				rsp.sendRedirect("project_creation");
 			}
-		} finally {
+			
+			//And commit the change, so that save() is called
 			bc.commit();
 		}
 	}
@@ -531,11 +610,10 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		 * Creates a runner that creates a single output project that inherits
 		 * its parameters from the given projects.
 		 * 
-		 * @param parents
-		 * @param second
-		 * @param variance
-		 * @param reportMap
-		 * @param auth
+		 * @param parents the list of parents in their natural order
+		 * @param variance the unique variance to be used for the compound
+		 * @param reportMap the map used to report creation success/fail
+		 * @param auth the authentication to use for creation
 		 */
 		public ProjectDerivationRunner(
 				InheritanceProject[] parents,
@@ -602,7 +680,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			
 			//Fetch the map of already existing projects
 			Map<String, TopLevelItem> itemMap =
-					Jenkins.getInstance().getItemMap();
+					Jenkins.get().getItemMap();
 			
 			SecurityContext oldAuthContext = null;
 			
@@ -632,7 +710,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 				InheritanceProject ip = null;
 			
 				//Use that constructor to create a suitable transient job
-				item = Jenkins.getInstance().createProject(
+				item = Jenkins.get().createProject(
 						InheritanceProject.DESCRIPTOR, pName 
 				);
 				if (item == null || !(item instanceof InheritanceProject)) {
@@ -715,6 +793,9 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	
 	/**
 	 * Triggers creation of automatically generated projects; if enabled.
+	 * <p>
+	 * Note: This does not check if the user has enough permissions to create
+	 * jobs. It is up to the caller to ensure that.
 	 * 
 	 * @return a map containing the results of the generation with entries:
 	 *         (project-name, human-readable-result)
@@ -820,30 +901,22 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	 * call {@link #triggerCreateProjects()}.
 	 */
 	public void doCreateProjects() {
-		//Trigger the project creation
-		this.lastCreationState = this.triggerCreateProjects();
-		
-		Jenkins j = Jenkins.getInstance();
-		String rootURL = j.getRootUrlFromRequest();
-		
-		//Redirect to the status page for job creation
 		try {
 			StaplerResponse rsp = Stapler.getCurrentResponse();
-			rsp.sendRedirect(rootURL + "/project_creation/showCreationResults");
-		} catch (IOException ex) {
-			//Ignore
-		} catch (NullPointerException ex) {
-			//Ignore
-		}
-	}
-	
-	public void doLeaveCreationResult() {
-		//Redirect back to the central management page
-		try {
-			Jenkins j = Jenkins.getInstance();
+			
+			//Only permit running this when the user has jobCreate rights
+			if (!Jenkins.get().hasPermission(Job.CREATE)) {
+				rsp.sendError(SC_FORBIDDEN, "User lacks the Job.CREATE permission");
+			}
+			
+			//Trigger the project creation
+			this.lastCreationState = this.triggerCreateProjects();
+			
+			Jenkins j = Jenkins.get();
 			String rootURL = j.getRootUrlFromRequest();
-			StaplerResponse rsp = Stapler.getCurrentResponse();
-			rsp.sendRedirect(rootURL + "/manage");
+			
+			//Redirect to the status page for job creation
+			rsp.sendRedirect(rootURL + "/project_creation/showCreationResults");
 		} catch (IOException ex) {
 			//Ignore
 		} catch (NullPointerException ex) {
@@ -984,7 +1057,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	 * Returns the list of error URLs that are safe to ignore when checking the
 	 * validation fields of the job configuration files.
 	 * 
-	 * @see resources/hudson/plugins/project_inheritance/projects/InheritanceProject/adjunct/detectValidationErrors.js
+	 * See: resources/hudson/plugins/project_inheritance/projects/InheritanceProject/adjunct/detectValidationErrors.js
 	 * 
 	 * @return the value of {@link #getAcceptableErrorUrlsList()} joined with
 	 * 		'\n' as the separator.
@@ -1047,9 +1120,20 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
  		return matingDescriptors;
  	}
 	
+	/**
+	 * @return the list of templates. May be empty, but never null
+	 */
+	public List<ProjectTemplate> getTemplates() {
+		if (this.templates == null) {
+			return Collections.emptyList();
+		} else {
+			return this.templates;
+		}
+	}
+	
 	
 	protected File getConfigFile() {
-		File root = Jenkins.getInstance().getRootDir();
+		File root = Jenkins.get().getRootDir();
 		return new File(root, "config_project_creation.xml");
 	}
 
@@ -1147,7 +1231,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	// === DESCRIPTOR FIELDS AND METHODS ===
 	
 	public Descriptor<ProjectCreationEngine> getDescriptor() {
-		return (ProjectCreationEngineDescriptor) Jenkins.getInstance().getDescriptorOrDie(
+		return (ProjectCreationEngineDescriptor) Jenkins.get().getDescriptorOrDie(
 				ProjectCreationEngine.class
 		);
 	}

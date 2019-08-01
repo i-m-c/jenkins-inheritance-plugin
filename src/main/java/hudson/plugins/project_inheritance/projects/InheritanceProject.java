@@ -1,6 +1,8 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2018-2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
+ *
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -30,6 +32,8 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.Normalizer;
+import java.text.Normalizer.Form;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,6 +54,7 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.Vector;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -65,9 +70,10 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import org.apache.commons.httpclient.HttpStatus;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
+import org.jenkins.ui.icon.Icon;
+import org.jenkins.ui.icon.IconSet;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
@@ -87,6 +93,8 @@ import hudson.BulkChange;
 import hudson.Extension;
 import hudson.Functions;
 import hudson.Util;
+import hudson.init.InitMilestone;
+import hudson.init.Initializer;
 import hudson.model.AbstractProject;
 import hudson.model.Action;
 import hudson.model.Cause;
@@ -119,14 +127,16 @@ import hudson.model.queue.SubTask;
 import hudson.model.queue.SubTaskContributor;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Relationship.Type;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
+import hudson.plugins.project_inheritance.projects.causes.BuildCauseOverride;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine;
 import hudson.plugins.project_inheritance.projects.creation.ProjectCreationEngine.CreationClass;
 import hudson.plugins.project_inheritance.projects.inheritance.InheritanceGovernor;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterReferenceDefinition;
 import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty.ScopeEntry;
 import hudson.plugins.project_inheritance.projects.rebuild.InheritanceRebuildAction;
 import hudson.plugins.project_inheritance.projects.rebuild.RebuildCause;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
@@ -138,8 +148,8 @@ import hudson.plugins.project_inheritance.projects.references.ProjectReference.P
 import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
 import hudson.plugins.project_inheritance.projects.versioning.VersionChangeListener;
 import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
+import hudson.plugins.project_inheritance.projects.view.BuildFlowScriptAction;
 import hudson.plugins.project_inheritance.projects.view.BuildViewExtension;
-import hudson.plugins.project_inheritance.projects.view.InheritanceViewAction;
 import hudson.plugins.project_inheritance.util.Helpers;
 import hudson.plugins.project_inheritance.util.MockItemGroup;
 import hudson.plugins.project_inheritance.util.ThreadAssocStore;
@@ -157,6 +167,7 @@ import hudson.scm.SCM;
 import hudson.security.ACL;
 import hudson.security.Permission;
 import hudson.security.PermissionScope;
+import hudson.tasks.ArtifactArchiver;
 import hudson.tasks.BuildStep;
 import hudson.tasks.BuildWrapper;
 import hudson.tasks.Builder;
@@ -171,6 +182,7 @@ import hudson.widgets.BuildHistoryWidget;
 import hudson.widgets.HistoryWidget;
 import hudson.widgets.Widget;
 import jenkins.model.BuildDiscarder;
+import jenkins.model.BuildDiscarderProperty;
 import jenkins.model.Jenkins;
 import jenkins.scm.SCMCheckoutStrategy;
 import jenkins.util.TimeDuration;
@@ -187,7 +199,7 @@ import net.sf.json.JSONObject;
  *
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
-public class InheritanceProject	extends Project<InheritanceProject, InheritanceBuild>
+public class InheritanceProject extends Project<InheritanceProject, InheritanceBuild>
 		implements TopLevelItem, Comparable<Project>, SVGNode {
 	
 	private static final Logger log = Logger.getLogger(
@@ -357,6 +369,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * This class ensures that this buffer is cleared whenever the project or
 	 * its parents are changed.
 	 * 
+	 * @see #createBuffers()
 	 * @see #clearBuffers(InheritanceProject)
 	 */
 	protected static TimedBuffer<InheritanceProject, String> onInheritChangeBuffer = null;
@@ -365,6 +378,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * Same as {@link #onSelfChangeBuffer}, but this buffer is cleared only
 	 * when the project itself is changed.
 	 * 
+	 * @see #createBuffers() 
 	 * @see #clearBuffers(InheritanceProject)
 	 */
 	protected static TimedBuffer<InheritanceProject, String> onSelfChangeBuffer = null;
@@ -373,6 +387,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * Same as {@link #onSelfChangeBuffer}, but this buffer is cleared when
 	 * <i>any</i> project is changed or loaded anew.
 	 * 
+	 * @see #createBuffers()
 	 * @see #clearBuffers(InheritanceProject)
 	 */
 	protected static TimedBuffer<InheritanceProject, String> onChangeBuffer = null;
@@ -384,6 +399,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			PermissionScope.ITEM
 	);
 	
+	/**
+	 * This blank static initializer method will ensure that the class is loaded on start-up 
+	 * and that the VERSION_CONFIG permission is created.
+	 */
+	@Initializer(after=InitMilestone.STARTED)
+	public static void createConfigureVersionsPermission() {}
 	
 	// === PRIVATE/PROTECTED MEMBER FIELDS ===
 	
@@ -438,7 +459,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 *	 The referenced project is compatible with this project
 	 *	 (see {@link #creationClass}),
 	 *   </li>
-	 *   <li>all parameters are correctly set,</i>
+	 *   <li>all parameters are correctly set,</li>
 	 *   <li>no circular, diamond or multiple inheritance is created,</li>
 	 *   <li>the resulting project is buildable and</li>
 	 *   <li>the newly created job does not already exist.</li>
@@ -470,6 +491,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			compatibleProjects =
 					new LinkedList<AbstractProjectReference>();
 		}
+		
 		return this;
 	}
 	
@@ -499,7 +521,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	public String getIconFileName() {
-		return "/plugin/project-inheritance/images/64x64/run-build.png";
+		return "/plugin/project-inheritance/images/64x64/gear.png";
 	}
 	
 	@Override
@@ -536,7 +558,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		HashMap<String, InheritanceProject> pMap =
 				new HashMap<String, InheritanceProject>();
-		for (InheritanceProject p : Jenkins.getInstance().getAllItems(InheritanceProject.class)) {
+		for (InheritanceProject p : Jenkins.get().getAllItems(InheritanceProject.class)) {
 			if (p == null) { continue; }
 			pMap.put(p.getFullName(), p);
 		}
@@ -555,7 +577,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 */
 	public static @CheckForNull InheritanceProject getProjectByName(String name) {
 		if (StringUtils.isEmpty(name)) { return null; }
-		return Jenkins.getInstance().getItemByFullName(
+		return Jenkins.get().getItemByFullName(
 				name, InheritanceProject.class
 		);
 	}
@@ -686,6 +708,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			this.parameterizedWorkspace = Util.fixEmptyAndTrim(
 					req.getParameter("parameterizedWorkspace.directory")
 			);
+			
+			if(this.parameterizedWorkspace != null) {
+				//Normalize input to Unicode Form NKFC. See: http://www.unicode.org/reports/tr36/
+				this.parameterizedWorkspace = Normalizer.normalize(this.parameterizedWorkspace, Form.NFKC);
+			};
 		} else {
 			this.parameterizedWorkspace = null;
 		}
@@ -857,17 +884,73 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//And then fixing all named references
 		for (InheritanceProject p : getProjectsMap().values()) {
-			for (AbstractProjectReference ref : p.getParentReferences()) {
-				if (ref.getName().equals(oldName)) {
-					ref.switchProject(this);
-				}
+			//Define boolean to check whether the project is modified by the rename
+			boolean modified = false;
+			
+			//Change all versions in the project itself (ignoring versions)
+			for (AbstractProjectReference ref : p.getRawParentReferences()) {
+				if (!ref.getName().equals(oldName)) { continue; }
+				ref.switchProject(this);
+				modified = true;
 			}
+			
+			//Do the same for the compatible projects for automatic job creation (ignoring versions)
 			for (AbstractProjectReference ref : p.compatibleProjects) {
-				if (ref.getName().equals(oldName)) {
-					ref.switchProject(this);
-				}
+				if (!ref.getName().equals(oldName)) { continue; }
+				ref.switchProject(this);
+				modified = true;
+			}
+			
+			//Save if modified
+			if (modified) { p.save(); }
+			//Do not reset modified because change in object -> change in version
+			
+			//Change references in the version store also
+			VersionedObjectStore verStore = p.getVersionedObjectStore();
+			if (verStore == null) { continue; }
+			
+			//Change for parent references
+			modified |= changeVersionedProjectReferences(
+					verStore, "parentReferences",oldName, newName
+			);
+			
+			//Change for compatible projects
+			modified |= changeVersionedProjectReferences(
+					verStore, "compatibleProjects",oldName, newName
+			);
+			
+			//Save the changed versionStore, if needed
+			if (modified) {
+				p.saveVersionedObjectStore();
 			}
 		}
+	}
+	
+	private boolean changeVersionedProjectReferences(
+			VersionedObjectStore verStore,
+			String keyInVersionStore,
+			String oldName,
+			String newName
+	) {
+		boolean modified = false;
+		
+		//Iterate over all versions
+		Iterator it = verStore.getAllVersions().iterator();
+		while (it.hasNext()) {
+			Version v = (Version) it.next();
+			
+			//Get the old references
+			LinkedList<AbstractProjectReference> referencesInVersionStore =
+					(LinkedList)verStore.getObject(v, keyInVersionStore);
+			
+			//Loop through the parent references and change to new parent reference
+			for (AbstractProjectReference ref : referencesInVersionStore) {
+				if (!ref.getName().equals(oldName)) { continue; }
+				ref.switchProject(newName);
+				modified = true;
+			}
+		}
+		return modified;
 	}
 	
 	/**
@@ -886,7 +969,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * example calling this in proper UnitTests.
 	 * 
 	 * @param ref the reference to add
-	 * @param noDuplicateCheck set to false, if no duplication check shall be done.
+	 * @param duplicateCheck if set to false, no duplication check shall be done.
 	 * 		This is only useful in Unit-tests and nowhere else.
 	 */
 	public void addParentReference(AbstractProjectReference ref, boolean duplicateCheck) {
@@ -1051,7 +1134,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Make sure that the new properties mirror the current stable version
 		// -- not the one that was created last.
 		if (ip.getLatestVersion() == ip.getStableVersion()) {
-			//Nothing to do, the two versions are identical
+			//The stable and config.xml version are identical
+			//Save a new version, marking from which job this one was copied
+			this.dumpConfigToNewVersion(String.format(
+					"Copied from: %s", ip.getFullName()
+			));
+			//Then just return, as no further job modification is needed
 			return;
 		}
 		
@@ -1065,7 +1153,12 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 					ex.getMessage()
 			));
 		}
-	};
+		
+		//Save a new version, marking from which job this one was copied
+		this.dumpConfigToNewVersion(String.format(
+				"Copied from: %s", ip.getFullName()
+		));
+	}
 	
 	/**
 	 * This method tells this class and all its superclass's which directory
@@ -1232,7 +1325,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		Object obj = Items.XSTREAM2.fromXML(selfXml);
 		if (!(obj instanceof InheritanceProject)) {
 			throw new HttpStatusException(
-					HttpStatus.SC_INTERNAL_SERVER_ERROR,
+					SC_INTERNAL_SERVER_ERROR,
 					"Error, could not (de-)serialize project"
 			);
 		}
@@ -1260,7 +1353,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				mod.copyVersionedSettingsFrom(this);
 			} catch (IOException ex) {
 				throw new HttpStatusException(
-						HttpStatus.SC_INTERNAL_SERVER_ERROR,
+						SC_INTERNAL_SERVER_ERROR,
 						"Failed to produce XML for stable version", ex
 				);
 			}
@@ -1270,12 +1363,22 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		} finally {
 			//Purge the temporary item group with fire
 			mig.clean();
+			//Delete all caches created for this object
+			onChangeBuffer.clear(mod);
+			onInheritChangeBuffer.clear(mod);
+			onSelfChangeBuffer.clear(mod);
+			
+			//And purge the inheritance buffer for "this" too, since the page
+			//might've been called with a "version" flag which breaks stuff
+			onInheritChangeBuffer.clear(this);
 		}
 	}
 	
 	/**
 	 * This method displays the configuration as a complete XML dump.
 	 * 
+	 * @param req the user-request
+	 * @param rsp the response sent as a reply
 	 * @return raw XML string
 	 */
 	public String doGetConfigAsXML(StaplerRequest req, StaplerResponse rsp) {
@@ -1390,7 +1493,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	/**
 	 * This method dumps the version store as serialized XML.
-	 * @return
+	 * @return the versions as an XML file. May be empty, but never null.
 	 */
 	public String doGetVersionsAsXML() {
 		if (this.versionStore == null) {
@@ -1402,7 +1505,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * This method dumps the version store as serialized,
 	 * GZIP compressed, Base64 encoded XML.
-	 * @return
+	 * @return the a Base64 encoded GZIP stream
 	 */
 	public String doGetVersionsAsCompressedXML() {
 		if (this.versionStore == null) {
@@ -1529,7 +1632,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 
 	/**
-	 * Returns the versioning notification based on the current user desired version.
+	 * @return the versioning notification based on the current user desired version.
+	 * 
 	 * @see VersionedObjectStore#getUserNotificationFor(Long)
 	 */
 	public VersionsNotification getCurrentVersionNotification() {
@@ -1622,7 +1726,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			if (hasColour) {
 				b.append("</span>");
 			}
-			b.append("<br/>");
+			b.append("<br>");
 		}
 		
 		return b.toString();
@@ -1635,6 +1739,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * This method may be used by projects extending from this class, to
 	 * modify the build, shortly before it is passed over to scheduling.
+	 * 
+	 * @param req the user request
+	 * @param rsp the response to return
+	 * @throws IOException in case of error
+	 * @throws ServletException in case of error
 	 */
 	protected void onBuild(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException {
@@ -1644,6 +1753,10 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * This method may be used by projects extending from this class, to
 	 * modify the build, shortly before it is actually submitted into the Queue.
+	 * 
+	 * @param quietPeriod the number of seconds to delay the build. 
+	 * @param c the cause for this build
+	 * @param actions the actions added to the build
 	 */
 	protected void onScheduleBuild2(
 			int quietPeriod, Cause c, Collection<? extends Action> actions) {
@@ -1668,7 +1781,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * Do note that the {@link ParametersAction} objects that store the actual
 	 * values will be created by
-	 * {@link ParametersDefinitionProperty#_doBuild(StaplerRequest, StaplerResponse)}
+	 * {@link ParametersDefinitionProperty#_doBuild(StaplerRequest, StaplerResponse, TimeDuration)}
 	 * later on. Also do note that we can't extend
 	 * {@link ParametersDefinitionProperty} or {@link ParametersAction}, because
 	 * {@link AbstractProject} only checks for exact class matches.
@@ -1726,14 +1839,23 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		//TODO: Check if this ACL check actually does the same as the commented
 		//instruction below
-		ACL acl = Jenkins.getInstance().getACL();
+		ACL acl = Jenkins.get().getACL();
 		acl.checkPermission(BUILD);
 		//BuildAuthorizationToken.checkPermission(this, getAuthToken(), req, rsp);
 		
 		// if a build is parameterized, let that take over
 		ParametersDefinitionProperty pp = getProperty(ParametersDefinitionProperty.class);
 		if (pp != null) {
-			pp._doBuild(req, rsp, delay);
+			//FIXME: The BuildViewExtension needs to be handled even when PP is a standard PDP
+			
+			//Determine whether to show the parameter entry form, or trigger a build
+			if (!req.getMethod().equals("POST")) {
+				// show the parameter entry form.
+				req.getView(pp, "index.jelly").forward(req, rsp);
+				return;
+			} else {
+				pp._doBuild(req, rsp, delay);
+			}
 			return;
 		}
 		
@@ -1755,7 +1877,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Add the cause action
 		actions.add(this.getBuildCauseOverride(req));
 		
-		Jenkins.getInstance().getQueue().schedule2(
+		Jenkins.get().getQueue().schedule2(
 				this, delay.getTime(), actions
 		);
 		
@@ -1784,9 +1906,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * @param req the incoming request from the user.
 	 * @param rsp the response that shall be sent to the user
 	 * 
-	 * @throws IOException
-	 * @throws ServletException
-	 * @throws FormException
+	 * @throws IOException in case of saving issues
+	 * @throws ServletException in case of server error
+	 * @throws FormException in case of invalid input form data
 	 */
 	public void doBuildSpecificVersion(StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException, FormException {
@@ -1937,13 +2059,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		//Appending parameter-based versioning overrides
 		for (ParametersAction pa : pActions) {
 			ParameterValue pv = pa.getParameter(
-					InheritanceParametersDefinitionProperty.VERSION_PARAM_NAME
+					ParameterSelector.VERSION_PARAM_NAME
 			);
 			if (pv == null || !(pv instanceof StringParameterValue)) {
 				continue;
 			}
 			StringParameterValue spv = (StringParameterValue) pv;
-			Map<String, Long> vMap = VersionHandler.decodeUrlParameter(spv.value);
+			Map<String, Long> vMap = VersionHandler.decodeUrlParameter(spv.getValue().toString());
 			if (vMap == null) { continue; }
 			
 			//The decoded map is registered in the thread
@@ -2022,7 +2144,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		
 		this.onScheduleBuild2(quietPeriod, c, oActions);
 		
-		ScheduleResult sched = Jenkins.getInstance().getQueue().schedule2(
+		ScheduleResult sched = Jenkins.get().getQueue().schedule2(
 				this, quietPeriod, oActions
 		);
 		if (sched == null || sched.isRefused()) {
@@ -2033,44 +2155,42 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	/**
 	 * This is a copy (not a wrapper) of getBuildCause() in
-	 * {@link AbstractProject}. This is necessary, because we can't access
-	 * that field as our parent is loaded by a different class loader.
+	 * {@link AbstractProject}. This is necessary, because we can't access that
+	 * field as our parent is loaded by a different class loader.
 	 * <p>
 	 * The function is used, because we need to splice-in one additional
 	 * {@link Action} for creation of Builds: {@link VersioningAction}.
 	 * <p>
-	 * FIXME: The ideal solution to this is to simply add an Extension Point
-	 * into Jenkins, that allows one to contribute additional actions.
+	 * Additional {@link Cause} are also queried over the
+	 * {@link BuildCauseOverride} extension interface.
 	 * 
-	 * @param req
-	 * @return
+	 * @param req the incoming user request
+	 * @return an altered {@link CauseAction} extended by suitable actions.
 	 */
 	@SuppressWarnings("deprecation")
 	public CauseAction getBuildCauseOverride(StaplerRequest req) {
-		Cause cause = null;
-		if (getAuthToken() != null &&
-				getAuthToken().getToken() != null &&
-				req.getParameter("token") != null) {
+		List<Cause> causes = BuildCauseOverride.getBuildCauseOverrideByAll(req);
+
+		if (getAuthToken() != null && getAuthToken().getToken() != null && req.getParameter("token") != null) {
 			// Optional additional cause text when starting via token
 			String causeText = req.getParameter("cause");
-			cause = new RemoteCause(req.getRemoteAddr(), causeText);
+			causes.add(new RemoteCause(req.getRemoteAddr(), causeText));
 		} else {
 			Object rebuild = req.getAttribute("rebuildCause");
 			if (rebuild != null && rebuild instanceof InheritanceRebuildAction) {
 				InheritanceRebuildAction inheritanceRebuildAction = (InheritanceRebuildAction) rebuild;
 				if (inheritanceRebuildAction.getBuild() != null) {
-					cause =
-							new RebuildCause(inheritanceRebuildAction.getBuild().number, 
-									inheritanceRebuildAction.getBuild().getUrl());
+					causes.add(new RebuildCause(inheritanceRebuildAction.getBuild().number,
+							inheritanceRebuildAction.getBuild().getUrl()));
 				}
 			} else {
-				cause = new UserIdCause();
+				causes.add(new UserIdCause());
 			}
 		}
-		return new CauseAction(cause);
+
+		return new CauseAction(causes);
 	}
-	
-	
+
 	
 	// === VERSIONING HANDLING AND DERIVATION METHODS ===
 	
@@ -2219,12 +2339,26 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return new VersionedObjectStore();
 		}
 		
+		//Update that store -- regardless of the current object
+		boolean wasModified = updateVersionedObjectStore(vos);
+		if (wasModified) {
+			try {
+				vos.save(vFile);
+			} catch (IOException ex) {
+				log.severe(String.format(
+						"Failed to save version to: %s; Reason = %s",
+						this.getVersionFile(), ex.getMessage()
+				));
+			}
+		}
+		
 		//Since we'll add/remove lots of properties, we put Jenkins in
 		//bulk-change mode
-		BulkChange bc = new BulkChange(this);
-		try {
+		try (BulkChange bc = new BulkChange(this)) {
 			//Then, we need to patch up certain fields in the store
 			for (HashMap<String, Object> m : vos.getAllValueMaps()) {
+				//The properties need to have their owner set, which happens by
+				//adding & removing them
 				Object obj = m.get("properties");
 				if (obj != null && obj instanceof List) {
 					List<JobProperty<Job<?,?>>> lst = (List<JobProperty<Job<?,?>>>) obj;
@@ -2238,20 +2372,66 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			}
 			bc.commit();
 		} catch (IOException e) {
-			//Do nothing but fall down to the finally block
-		} finally {
-			bc.abort();
+			//Nothing to do -- the BC will automatically abort
 		}
 			
 		return vos;
+	}
+	
+	private static boolean updateVersionedObjectStore(VersionedObjectStore vos) {
+		if (vos == null) { return false; }
+		boolean wasModified = false;
+		
+		//Check if the logRotator settings were correctly converted to Jenkins 2.x properties
+		for (HashMap<String, Object> vm : vos.getAllValueMaps()) {
+			//Check if the old-style setting is present at all
+			if (!vm.containsKey("logRotator")) { continue; }
+			//A log rotator setting is there, but might be null
+			Object logRotator = vm.get("logRotator");
+			if (!(logRotator instanceof BuildDiscarder)) {
+				//It was null or invalid -- hence just drop it
+				vm.remove("logRotator");
+				wasModified = true;
+				continue;
+			}
+			//There is an old-style setting -- making sure that it has been converted
+			Object pObj = vm.get("properties");
+			if (!(pObj instanceof List)) {
+				//Creating a new properties list is needed
+				LinkedList<JobProperty<? super InheritanceProject>> pLst =
+						new LinkedList<>();
+				pLst.add(new BuildDiscarderProperty((BuildDiscarder)logRotator));
+			} else {
+				List<JobProperty<? super InheritanceProject>> pLst =
+						(List) pObj;
+				boolean hasDiscarder = false;
+				for (JobProperty<? super InheritanceProject> p : pLst) {
+					if (p instanceof BuildDiscarderProperty) {
+						hasDiscarder = true;
+						break;
+					}
+				}
+				if (!hasDiscarder) {
+					pLst.add(new BuildDiscarderProperty((BuildDiscarder)logRotator));
+				}
+			}
+			//In any case, the old log rotator setting has to be dropped
+			vm.remove("logRotator");
+			wasModified = true;
+		}
+		return wasModified;
 	}
 	
 	
 	/**
 	 * Wrapper around {@link #dumpConfigToNewVersion(String)} with an empty
 	 * message.
+	 * <p>
+	 * This method should only be used outside the package, to allow test cases
+	 * to generate new versions for test purposes.<br>
+	 * External non-test code should not have any need to call this.
 	 */
-	protected synchronized void dumpConfigToNewVersion() {
+	public synchronized void dumpConfigToNewVersion() {
 		this.dumpConfigToNewVersion(null);
 	}
 	
@@ -2267,11 +2447,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * To save custom fields in subclasses, override
 	 * {@link #dumpConfigToVersion(Version)}.
 	 * <p>
-	 * This method is package-private, to allow test cases to generate new
-	 * versions for test purposes.<br/>
+	 * This method should only be used outside the package, to allow test cases
+	 * to generate new versions for test purposes.<br>
 	 * External non-test code should not have any need to call this.
+	 * 
+	 * @param message the message to be used for the new version
 	 */
-	/*package*/ synchronized void dumpConfigToNewVersion(String message) {
+	public synchronized void dumpConfigToNewVersion(String message) {
 		//Sanity checks
 		if (this.isTransient) { return; }
 		if (this.versionStore == null) {
@@ -2390,7 +2572,6 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		this.versionStore.setObjectFor(v, "scmCheckoutStrategy", super.getScmCheckoutStrategy());
 		this.versionStore.setObjectFor(v, "blockBuildWhenDownstreamBuilding", super.blockBuildWhenDownstreamBuilding());
 		this.versionStore.setObjectFor(v, "blockBuildWhenUpstreamBuilding", super.blockBuildWhenUpstreamBuilding());
-		this.versionStore.setObjectFor(v, "logRotator", super.getBuildDiscarder());
 		this.versionStore.setObjectFor(v, "customWorkspace", super.getCustomWorkspace());
 		this.versionStore.setObjectFor(v, "parameterizedWorkspace", this.getRawParameterizedWorkspace());
 	}
@@ -2469,9 +2650,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		onSelfChangeBuffer.set(this, "getStableVersions()", lst);
 		return lst;
 	}
-
+	
 	public VersionedObjectStore getVersionedObjectStore() {
 		return this.versionStore;
+	}
+	
+	public void saveVersionedObjectStore() throws IOException {
+		this.versionStore.save(this.getVersionFile());
 	}
 	
 	public Long getStableVersion() {
@@ -2578,6 +2763,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * tree to the list of versions (say, downstream projects). For the
 	 * purpose of cycle-avoidance, calling this static method might be necessary.
 	 * 
+	 * @param root the project for which to fetch versions
 	 * @param build the build for which to generate the versions.
 	 * @return a list of versions only derived from the inheritance relationship.
 	 */
@@ -2628,7 +2814,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			
 			//Explore references from local wrappers, builders and publishers later
 			for (String ref : getReferencers(ap)) {
-				AbstractProject it = Jenkins.getInstance().getItemByFullName(
+				AbstractProject it = Jenkins.get().getItemByFullName(
 						ref, AbstractProject.class
 				);
 				if (it == null) { continue; }
@@ -2716,6 +2902,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lst;
 	}
 	
+	/**
+	 * Returns the immediate parents of this job in the order they have on
+	 * the config page.
+	 * <p>
+	 * If you need the full scope of parents, use
+	 * {@link InheritanceGovernor#getFullScopeOrdered(InheritanceProject, SELECTOR, Set)}
+	 * 
+	 * @return a list of projects. May be empty, but never null.
+	 */
 	public List<InheritanceProject> getParentProjects() {
 		LinkedList<InheritanceProject> lst =
 				new LinkedList<InheritanceProject>();
@@ -2730,6 +2925,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lst;
 	}
 	
+	
 	/**
 	 * This method re-parents a given trigger, to ensure that it belongs to the
 	 * current project.
@@ -2742,7 +2938,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * slower than if it had a reliable direct copying method available.
 	 * 
 	 * @param trigger
-	 * @return
+	 * @return a copy of the trigger owned by this instance.
 	 */
 	private <T extends Trigger> T getReparentedTrigger(T trigger) {
 		//Copy the trigger by looping it through XSTREAM and then calling start()
@@ -2850,8 +3046,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	/**
-	 * Wrapper for {@link #getAllParentReferences(SELECTOR)}, but will add
-	 * a reference to this project too, if needed.
+	 * Wrapper for {@link #getAllParentReferences(ProjectReference.PrioComparator.SELECTOR)},
+	 * but will add a reference to this project too, if needed.
 	 * 
 	 * @param sortKey the key specifying the order in which projects are returned.
 	 * @param addSelf if true, add a self-reference in the correct spot
@@ -3038,6 +3234,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * Creates a list of temporary {@link Action}s as they are contributed
 	 * by the various Builders, Publishers, etc. from the correct version and
 	 * with the the correct inheritance.
+	 * <p>
+	 * Note: This overrides the implementation of the super-classes, because
+	 * {@link AbstractProject} accesses the Properties of the class directly
+	 * without calling {@link #getProperties()}, which circumvents inheritance.
+	 * <p>
+	 * As such, the code needs to be copied as-is, unless the Jenkins Core gets
+	 * changed on that point.
+	 * 
+	 * @return a temporary list of actions.
 	 */
 	protected List<Action> createVersionAwareTransientActions() {
 		Vector<Action> ta = new Vector<Action>();
@@ -3048,27 +3253,46 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		}
 		
 		for (TransientProjectActionFactory tpaf : TransientProjectActionFactory.all()) {
-			ta.addAll(Util.fixNull(tpaf.createFor(this))); // be defensive against null
+			try {
+				ta.addAll(Util.fixNull(tpaf.createFor(this))); // be defensive against null
+			} catch (Throwable e) {
+				log.log(Level.SEVERE, "Could not load actions from " + tpaf + " for " + this, e);
+			}
 		}
 		// END Implementation from AbstractProject
 		
 		// START Implementation from Project
 		for (BuildStep step : this.getBuildersList()) {
-			ta.addAll(step.getProjectActions(this));
+			try {
+				ta.addAll(step.getProjectActions(this));
+			} catch (Exception e) {
+				log.log(Level.SEVERE, "Error loading build step.", e);
+			}
 		}
 		for (BuildStep step : this.getPublishersList()) {
-			ta.addAll(step.getProjectActions(this));
+			try {
+				ta.addAll(step.getProjectActions(this));
+			} catch (Exception e) {
+				log.log(Level.SEVERE, "Error loading publisher.", e);
+			}
 		}
 		for (BuildWrapper step : this.getBuildWrappersList()) {
-			ta.addAll(step.getProjectActions(this));
+			try {
+				ta.addAll(step.getProjectActions(this));
+			} catch (Exception e) {
+				log.log(Level.SEVERE, "Error loading build wrapper.", e);
+			}
 		}
 		
-		//FIXME: Triggers are not yet versioned! Correct this!
-		for (Trigger trigger : this.getTriggers().values())
-		 {
-			ta.addAll(trigger.getProjectActions());
-		// END Implementation from Project
+		//TODO: Triggers are not versioned! Eventually, this should be corrected
+		for (Trigger trigger : this.getTriggers().values()) {
+			try {
+				ta.addAll(trigger.getProjectActions());
+			} catch (Exception e) {
+				log.log(Level.SEVERE, "Error loading trigger.", e);
+			}
 		}
+		// END Implementation from Project
 		
 		return ta;
 	}
@@ -3345,8 +3569,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			@Override
 			protected List<JobProperty<? super InheritanceProject>> reduceFromFullInheritance(
 					Deque<List<JobProperty<? super InheritanceProject>>> list) {
-				//First, we add the variances for the root project
-				InheritanceParametersDefinitionProperty variance =
+				//Add the variances for the root project
+				ParametersDefinitionProperty variance =
 						rootProject.getVarianceParameters();
 				if (variance != null) {
 					List<JobProperty<? super InheritanceProject>> varLst =
@@ -3366,55 +3590,14 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	/**
 	 * This method will fetch all properties defined for the current project
 	 * and only those defined on it.
-	 * <p>
-	 * There are two complications though:
-	 * <ol>
-	 * <li>
-	 * 		{@link ParametersDefinitionProperty} instances need to be replaced
-	 * 		with {@link InheritanceParametersDefinitionProperty} instances,
-	 * 		to make sure that versioning details are correctly stored.
-	 * 		Also, we wish to make sure that the more advanced Jelly-files from
-	 * 		the latter class are used for build-purposes.
-	 * </li>
-	 * <li>
-	 * 		Variances define additional properties; so that we can make sure
-	 * 		to splice-in those additional properties if a request for
-	 * 		parameters comes from a direct child with the correct variance.
-	 * </li>
-	 * </ol>
-	 * <p>
-	 * Also note, that Jenkins does not allow direct access to the properties
-	 * list. So clearing or modifying this list will not work.
 	 * 
 	 * @return the local list of properties.
 	 */
 	public List<JobProperty<? super InheritanceProject>> getRawAllProperties() {
-		LinkedList<JobProperty<? super InheritanceProject>> out =
-				new LinkedList<JobProperty<? super InheritanceProject>>();
-		
-		//First, we add the global properties defined for this project
-		List<JobProperty<? super InheritanceProject>> origProps =
-				super.getAllProperties();
-		
-		//Filling the output list with the adjusted original properties
-		for (JobProperty<? super InheritanceProject> prop : origProps) {
-			if (!(prop instanceof ParametersDefinitionProperty)) {
-				out.add(prop);
-				continue;
-			}
-			//Converting a PDP to an IPDP
-			ParametersDefinitionProperty pdp = (ParametersDefinitionProperty) prop;
-			InheritanceParametersDefinitionProperty ipdp =
-					new InheritanceParametersDefinitionProperty(
-							pdp.getOwner(),
-							pdp
-					);
-			out.add(ipdp);
-		}
-		return out;
+		return super.getAllProperties();
 	}
 	
-	public InheritanceParametersDefinitionProperty getVarianceParameters() {
+	public ParametersDefinitionProperty getVarianceParameters() {
 		if (this.isTransient == false) {
 			//No variance is or can possibly be defined
 			return null;
@@ -3468,11 +3651,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				}
 				
 				//The correct variance description was found; adding its parameters
-				InheritanceParametersDefinitionProperty ipdp =
-						new InheritanceParametersDefinitionProperty(
-								this, ppr.getParameters()
-						);
-				return ipdp;
+				return new ParametersDefinitionProperty(ppr.getParameters());
 			}
 		}
 		
@@ -3893,10 +4072,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	/**
-	 * @deprecated as of 1.503
-	 *	  Use {@link #getBuildDiscarder()}.
+	 * Inheritance-aware Handler for {@link #getLogRotator()}
 	 * 
-	 * @see #getLogRotator()
+	 * @param mode the inheritance mode
+	 * @return the {@link BuildDiscarder} as a {@link LogRotator}.
+	 *  
+	 * @deprecated as of 1.503
+	 *	  Use {@link #getBuildDiscarder(IMode)}.
 	 */
 	@Deprecated
 	public LogRotator getLogRotator(IMode mode) {
@@ -3912,36 +4094,19 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return this.getBuildDiscarder(IMode.AUTO);
 	}
 	
+	/**
+	 * Inheritance-aware wrapper for {@link #getBuildDiscarder()}
+	 * 
+	 * @param mode the inheritance mode to use
+	 * @return a build discarder, or null if none is present
+	 */
 	public BuildDiscarder getBuildDiscarder(IMode mode) {
-		InheritanceGovernor<BuildDiscarder> gov =
-				new InheritanceGovernor<BuildDiscarder>(
-						"logRotator", SELECTOR.MISC, this) {
-			@Override
-			protected BuildDiscarder castToDestinationType(
-					Object o) {
-				if (o instanceof BuildDiscarder) {
-					return (BuildDiscarder) o;
-				} else if (o instanceof LogRotator) {
-					// Old-style log-rotator object; LR is a subtype of BD
-					return (LogRotator) o;
-				}
-				return null;
-			}
-			
-			@Override
-			public BuildDiscarder getRawField(
-					InheritanceProject ip) {
-				return ip.getRawBuildDiscarder();
-			}
-		};
-		
-		return gov.retrieveFullyDerivedField(this, mode);
+		//Only resolve it via the properties (new Jenkins 2.x approach)
+		//The old data gets converted in #updateVersionedObjectStore()
+		BuildDiscarderProperty bdProp = 
+				this.getProperty(BuildDiscarderProperty.class, mode);
+		return (bdProp != null) ? bdProp.getStrategy() : null;
 	}
-	
-	public BuildDiscarder getRawBuildDiscarder() {
-		return super.getBuildDiscarder();
-	}
-	
 	
 	
 	/**
@@ -3949,7 +4114,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * <p>
 	 * Contrary to all the other properties methods, this will ALWAYS return
 	 * the fully inherited version and will cache the result.
-	 * <br/>
+	 * <br>
 	 * This is done, because the only time when no inheritance is needed, is
 	 * when the project is configured, and this will call
 	 * {@link #getAssignedLabel(IMode)} instead with the {@link IMode#LOCAL_ONLY}
@@ -3958,7 +4123,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * The reason for the caching is, that this method is called quite often
 	 * by {@link Queue#maintain()}, a function that potentially blocks the
 	 * entire server from progressing with builds.
-	 * <br/>
+	 * <br>
 	 * Thus, this method must take the minimum possible amount of time, which
 	 * means that reflection is too expensive.
 	 * <p>
@@ -3980,7 +4145,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			 * See getAssignedLabel(IMode) to see why the "" quoting
 			 * is needed.
 			 */
-			return Jenkins.getInstance().getLabel(
+			return Jenkins.get().getLabel(
 					'"' + lbl.getName() + '"'
 			);
 		}
@@ -4052,7 +4217,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		 * We "solve" this by adding a pointless quote around the label's
 		 * string representation
 		 */
-		return Jenkins.getInstance().getLabel(
+		return Jenkins.get().getLabel(
 				'"' + lbl.getName() + '"'
 		);
 	}
@@ -4098,7 +4263,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * will not even bother with versioning and skip reflection at all, if no
 	 * inheritance is needed.
 	 * 
-	 * @return
+	 * @param inherit whether or not to care about inheritance (versioning is
+	 * always ignored)
+	 * @return true, if the job is set to run concurrently.
 	 */
 	public boolean isConcurrentBuildFast(boolean inherit) {
 		if (!inherit) {
@@ -4126,8 +4293,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * For faster, non-reflected access, use {@link #isConcurrentBuildFast(boolean)},
 	 * if you can live without versioning.
 	 * 
-	 * @param mode
-	 * @return
+	 * @param mode the inheritance mode
+	 * @return true, if the job is set to run concurrently.
 	 */
 	public boolean isConcurrentBuild(IMode mode) {
 		InheritanceGovernor<Boolean> gov =
@@ -4264,8 +4431,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	
-	// === RELATIONSHIP ACCESS METHODS ===
 	
+	// === RELATIONSHIP ACCESS METHODS ===
 	
 	private static class ProjectGraphNode {
 		public HashSet<String> parents = new HashSet<String>();
@@ -4346,8 +4513,11 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	/**
-	 * we are interested in getting the children ordered by last build time
-	 * if last build time exists
+	 * Returns the children in this relationship map ordered by last build
+	 * start time, if a last build exists
+	 * 
+	 * @param relationships the map containing the inheritance relationships
+	 * @return a collections of children, ordered by their last build start date.
 	 */
 	public Collection<InheritanceProject> getChildrenByBuildDate(Map<InheritanceProject, Relationship> relationships) {
 		//Using a TreeSet to do the sorting for last-build-time for us
@@ -4502,37 +4672,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		return lst;
 	}
 	
+	/**
+	 * Wrapper around {@link ParameterSelector#getAllScopedParameterDefinitions(InheritanceProject)}.
+	 * 
+	 * @return a list of scoped entries, never null but may be empty.
+	 */
 	private List<ScopeEntry> getFullParameterScope() {
-		//Fetching the correct definition property
-		ParametersDefinitionProperty pdp = this.getProperty(
-				ParametersDefinitionProperty.class, IMode.INHERIT_FORCED
-		);
-		if (pdp == null) {
-			//No parameters set, so we return an empty list
-			return Collections.emptyList();
-		}
-		
-		//Checking if it is a fully scoped inheritance-aware one; if yes, we
-		//fetch the full scope of parameters.
-		List<ScopeEntry> fullScope = null;
-		if (pdp instanceof InheritanceParametersDefinitionProperty) {
-			InheritanceParametersDefinitionProperty ipdp =
-					(InheritanceParametersDefinitionProperty) pdp;
-			fullScope = ipdp.getAllScopedParameterDefinitions();
-		} else {
-			String ownerName = (pdp.getOwner() != null)
-					? pdp.getOwner().getFullName() : "";
-			fullScope = new LinkedList<ScopeEntry>();
-			for (ParameterDefinition pd : pdp.getParameterDefinitions()) {
-				fullScope.add(new ScopeEntry(ownerName, pd));
-			}
-		}
-		
-		if (fullScope != null) {
-			return fullScope;
-		} else {
-			return Collections.emptyList();
-		}
+		return ParameterSelector.instance.getAllScopedParameterDefinitions(this);
 	}
 	
 	public List<ParameterDerivationDetails> getParameterDerivationList() {
@@ -4588,7 +4734,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			ParameterValue pv = pd.getDefaultParameterValue();
 			if (pv != null && pv instanceof StringParameterValue) {
 				b.append(": ");
-				b.append(((StringParameterValue)pv).value);
+				b.append(((StringParameterValue)pv).getValue().toString());
 			}
 			b.append('\n');
 		}
@@ -4769,7 +4915,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			
 			//Add jobs pointed-to by referencer instances from that job
 			for (String ref : getReferencers(ap)) {
-				AbstractProject<?, ?> next = Jenkins.getInstance().getItemByFullName(
+				AbstractProject<?, ?> next = Jenkins.get().getItemByFullName(
 						ref, AbstractProject.class
 				);
 				if (next == null) {
@@ -4812,6 +4958,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	 * This means, that the result of this method is <b><i>not</i></b> version
 	 * aware. If you need an uncached and version-aware result, call
 	 * {@link #hasCyclicDependency(boolean, String...)} directly.
+	 * 
+	 * @return true, if a cycle or diamond was detected.
 	 */
 	public final boolean hasCyclicDependency() {
 		//TODO: Make this method version-aware
@@ -4830,10 +4978,10 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	/**
-	 * Wrapper around {@link #hasCyclicDependency(boolean, String...), with
+	 * Wrapper around {@link #hasCyclicDependency(boolean, String...)}, with
 	 * addExisting set to true.
 	 * 
-	 * @param whenTheseProjectsAdded
+	 * @param whenTheseProjectsAdded the project to check for cycles for
 	 * @return true, if there is a cyclic, diamond or repeated dependency among
 	 * this project's parents.
 	 */
@@ -4843,10 +4991,13 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	
 	/**
 	 * Tests if this project's configuration leads to a cyclic, diamond or
-	 * multiple dependency.<br/>
-	 * <br/>
+	 * multiple dependency.<br>
+	 * <br>
 	 * See <a href="http://en.wikipedia.org/wiki/Cycle_detection">cycle detection</a> and
 	 * <a href="http://en.wikipedia.org/wiki/Diamond_problem">diamond problem</a>.
+	 * 
+	 * @param addExisting whether or not to consider existing jobs for cyclicality.
+	 * @param whenTheseProjectsAdded projects about to be added to the dependency graph
 	 * 
 	 * @return true, if there is a cyclic, diamond or repeated dependency among
 	 * this project's parents.
@@ -4868,20 +5019,16 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		Deque<InheritanceProject> open = new LinkedList<>();
 		if (whenTheseProjectsAdded != null) {
 			for (String ref : whenTheseProjectsAdded) {
-				InheritanceProject p = Jenkins.getInstance().getItemByFullName(
+				InheritanceProject p = Jenkins.get().getItemByFullName(
 						ref, InheritanceProject.class
 				);
-				//Possible cycle, by virtue of a missing dependency
-				if (p == null) { return true; }
-				open.add(p);
+				if (p != null) { open.add(p); }
 			}
 		}
 		if (addExisting) {
 			for (AbstractProjectReference par : this.getParentReferences()) {
 				InheritanceProject p = par.getProject();
-				//Possible cycle, by virtue of a missing dependency
-				if (p == null) { return true; }
-				open.add(p);
+				if (p != null) { open.add(p); }
 			}
 		}
 		
@@ -4914,13 +5061,27 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	}
 	
 	
+	/**
+	 * This method checks if the current project has a valid set of parameters
+	 * through inheritance.
+	 * <p>
+	 * Do note that this check is different from and complementary to
+	 * {@link InheritanceParametersDefinitionProperty#checkParameterSanity(InheritanceBuild, hudson.model.BuildListener)}.
+	 * <p>
+	 * Of special note here is that this method does not (and can't) check the
+	 * final values of the variables. This mostly affects the 'mustBeAssigned'
+	 * flag.
+	 * 
+	 * @return a tuple of whether the assignment is sane and a human-readable
+	 * representation of the error -- if any.
+	 */
 	public final AbstractMap.SimpleEntry<Boolean, String> getParameterSanity() {
 		//Creating a small local class to store sanity information
 		final class SanityRestrictions {
 			public Class<?> hasToBeOfThisClass;
 			
-			public boolean hasToHaveDefaultSet;
-			public boolean hasToBeAssigned;
+			public boolean mustHaveDefault;
+			public boolean mustBeAssigned;
 			
 			public boolean hadDefaultSet;
 			public IModes previousMode;
@@ -4945,15 +5106,15 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				if (pd instanceof InheritableStringParameterDefinition) {
 					InheritableStringParameterDefinition ispd =
 							(InheritableStringParameterDefinition) pd;
-					s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
-					s.hasToBeAssigned = ispd.getMustBeAssigned();
+					s.mustHaveDefault = ispd.getMustHaveDefaultValue();
+					s.mustBeAssigned = ispd.getMustBeAssigned();
 					
 					String defVal = ispd.getDefaultValue();
 					s.hadDefaultSet = !(defVal == null || defVal.isEmpty());
 					
 					s.previousMode = ispd.getInheritanceModeAsVar();
 				} else {
-					s.hasToHaveDefaultSet = false;
+					s.mustHaveDefault = false;
 					s.previousMode = IModes.OVERWRITABLE;
 				}
 				
@@ -5021,7 +5182,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				}
 				
 				//Check if the "force-default-value" flag was unset
-				if (s.hasToHaveDefaultSet && !ispd.getMustHaveDefaultValue()) {
+				if (s.mustHaveDefault && !ispd.getMustHaveDefaultValue()) {
 					return new AbstractMap.SimpleEntry<Boolean, String>(
 							false, "Parameter '" + pd.getName() +
 							"' may not unset the flag that ensures that a" +
@@ -5029,7 +5190,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 							);
 				}
 				//Check if the "must-be-assigned" flag was unset
-				if (s.hasToBeAssigned && !ispd.getMustBeAssigned()) {
+				if (s.mustBeAssigned && !ispd.getMustBeAssigned()) {
 					return new AbstractMap.SimpleEntry<Boolean, String>(
 							false, "Parameter '" + pd.getName() +
 							"' may not unset the flag that ensures that a" +
@@ -5038,8 +5199,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 				}
 				//Overwrite the flags, now that their sanity is ensured
 				s.previousMode = ispd.getInheritanceModeAsVar();
-				s.hasToHaveDefaultSet = ispd.getMustHaveDefaultValue();
-				s.hasToBeAssigned = ispd.getMustBeAssigned();
+				s.mustHaveDefault = ispd.getMustHaveDefaultValue();
+				s.mustBeAssigned = ispd.getMustBeAssigned();
 			}
 		}
 		
@@ -5049,7 +5210,7 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			List<String> mandatoryParams = new ArrayList<>();
 			for (Map.Entry<String, SanityRestrictions> e : resMap.entrySet()) {
 				SanityRestrictions s = e.getValue();
-				if (s.hasToHaveDefaultSet && !s.hadDefaultSet) {
+				if (s.mustHaveDefault && !s.hadDefaultSet) {
 					mandatoryParams.add(e.getKey());
 				}
 			}
@@ -5171,7 +5332,8 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	// === HELPER METHODS FOR READONLY VIEW ===
 
 	public Map<AbstractProjectReference, List<Builder>> getBuildersFor(
-			Map<String, Long> verMap, Class<?> clazz) {
+			Map<String, Long> verMap, Class<?> clazz
+	) {
 		Map<String, Long> oldVerMap = VersionHandler.getVersions();
 		try {
 			//Set the current thread's versioning map
@@ -5216,23 +5378,23 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 	// === PROJECT DESCRIPTOR IMPLEMENTATION ===
 	
 	/**
-	 * Returns the {@link Descriptor} for the parent object.<br/>
-	 * <br/>
+	 * Returns the {@link Descriptor} for the parent object.<br>
+	 * <br>
 	 * The returned object should be a class-singleton that
 	 * can be used to create an instance of its parent class and thereafter
-	 * display a configuration dialog.<br/>
+	 * display a configuration dialog.<br>
 	 * As such, this class has the responsibility of creating a suitable
 	 * instance, serving up the HTML/Jelly configuration fields, reading their
-	 * values and modifying the created instance accordingly.<br/>
-	 * <br/>
+	 * values and modifying the created instance accordingly.<br>
+	 * <br>
 	 * Do note that the configuration-dialog for the object is displayed
-	 * <i>after</i> the instance was created.<br/>
+	 * <i>after</i> the instance was created.<br>
 	 */
- 	public DescriptorImpl getDescriptor() {
+	public DescriptorImpl getDescriptor() {
 		return DESCRIPTOR;
 	}
 
-	@Extension(ordinal = 1000)
+	@Extension(ordinal = 10000)
 	public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
 	public static class DescriptorImpl extends AbstractProjectDescriptor {
@@ -5251,8 +5413,41 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 			return Messages.InheritanceProject_DisplayName();
 		}
 		
+		@Override
 		public String getDescription() {
-			return "";
+			return Messages.InheritanceProject_Description();
+		}
+		
+		@Override
+		public boolean isApplicable(Descriptor descriptor) {
+			//If the descriptor is ArtifactAchiver, do not add it
+			if (descriptor.isSubTypeOf(ArtifactArchiver.class)) {
+				return false;
+			}
+			
+			return super.isApplicable(descriptor);
+		}
+		
+		@Override
+		public String getCategoryId() {
+			return InheritableProjectsCategory.ID;
+		}
+		
+		@Override
+		public String getIconFilePathPattern() {
+			return "plugin/project-inheritance/images/:size/gear.png";
+		}
+		
+		@Override
+		public String getIconClassName() {
+			return "icon-inheritance-project";
+		}
+		
+		static {
+			IconSet.icons.addIcon(new Icon("icon-inheritance-project icon-sm", "plugin/project-inheritance/images/16x16/gear.png", Icon.ICON_SMALL_STYLE));
+			IconSet.icons.addIcon(new Icon("icon-inheritance-project icon-md", "plugin/project-inheritance/images/24x24/gear.png", Icon.ICON_MEDIUM_STYLE));
+			IconSet.icons.addIcon(new Icon("icon-inheritance-project icon-lg", "plugin/project-inheritance/images/32x32/gear.png", Icon.ICON_LARGE_STYLE));
+			IconSet.icons.addIcon(new Icon("icon-inheritance-project icon-xlg", "plugin/project-inheritance/images/48x48/gear.png", Icon.ICON_XLARGE_STYLE));
 		}
 
 		@Override
@@ -5279,7 +5474,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		/**
 		 * Wrapper around {@link DescriptorImpl#doFillCreationClassItems()} to
 		 * account for slightly different field names used by
-		 * {@link InheritanceViewAction}'s groovy scripts.
+		 * {@link BuildFlowScriptAction}'s groovy scripts.
+		 * 
+		 * @return the content of the select box
 		 */
 		public ListBoxModel doFillProjectClassItems() {
 			return this.doFillCreationClassItems();
@@ -5307,6 +5504,9 @@ public class InheritanceProject	extends Project<InheritanceProject, InheritanceB
 		 * ancestor; but if that is unavailable it looks at the HTTP request
 		 * to check for the name of the project under configuration.
 		 * It then tries to retrieve the object associated with that name.
+		 * 
+		 * @param req the user request
+		 * @return the project under configuration by the given request
 		 */
 		public InheritanceProject getConfiguredProject(StaplerRequest req) {
 			//Fetching the current request from the user

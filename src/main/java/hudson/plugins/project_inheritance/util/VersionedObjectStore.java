@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -283,7 +284,7 @@ public class VersionedObjectStore implements Serializable {
 	 * 
 	 * @param file the file to save the data to. The data is dumped
 	 * as GZIP-compressed XML.
-	 * @throws IOException 
+	 * @throws IOException in case the save file can't be read.
 	 */
 	public synchronized void save(File file) throws IOException {
 		if (file == null) {
@@ -327,6 +328,7 @@ public class VersionedObjectStore implements Serializable {
 	 * @return a newly created VersionedObjectStore.
 	 * @throws IOException in case the file can't be read.
 	 * @throws IllegalArgumentException in case the file contains invalid data.
+	 * @throws XStreamException in case of XML serialisation error
 	 */
 	public static VersionedObjectStore load(File file)
 			throws IllegalArgumentException, IOException, XStreamException {
@@ -418,8 +420,8 @@ public class VersionedObjectStore implements Serializable {
 	
 	/**
 	 * This retrieves the actual last versioned object.
-	 * Use this in favour of {@link #getLatestVersionID()} if you actually
-	 * want to alter the internal fields of that Version object.
+	 * 
+	 * @return the latest version, or null if no version exists
 	 */
 	public Version getLatestVersion() {
 		if (this.store.isEmpty()) {
@@ -457,8 +459,8 @@ public class VersionedObjectStore implements Serializable {
 	
 	/**
 	 * gets all the more recent version ids since the sinceVersionId
-	 * @param sinceVersionId
-	 * @return
+	 * @param sinceVersionId timestamp in milliseconds since the epoch
+	 * @return all versions since the given timestamp
 	 */
 	public LinkedList<Version> getAllVersionsSince(Long sinceVersionId) {
 		LinkedList<Version> allVersionsSince = new LinkedList<Version>();
@@ -512,7 +514,8 @@ public class VersionedObjectStore implements Serializable {
 	/**
 	 * This method creates the next version and copies all key/value object
 	 * entries from the previous one.
-	 * @return
+	 * 
+	 * @return a blank next version.
 	 */
 	public Version createNextVersion() {
 		if (this.store.isEmpty()) {
@@ -554,7 +557,8 @@ public class VersionedObjectStore implements Serializable {
 	
 	/**
 	 * Creates the next version with an empty key/value object mapping.
-	 * @return
+	 * 
+	 * @return a blank, next version
 	 */
 	public Version createNextVersionAsEmpty() {
 		Version v = this.getLatestVersion();
@@ -647,7 +651,9 @@ public class VersionedObjectStore implements Serializable {
 	 *   <li>user is editing the last stable version which is the last version (Info)</li>
 	 *   <li>user is editing some stable version which is not the latest stable version (Warning)</li>
 	 * </ol>
-	 * @return
+	 * 
+	 * @param version the specific version for which to get the notification
+	 * @return a notification about the suitability of the given version
 	 */
 	public VersionsNotification getUserNotificationFor(Long version) {
 		if (version == null || this.getAllVersions().isEmpty()) {

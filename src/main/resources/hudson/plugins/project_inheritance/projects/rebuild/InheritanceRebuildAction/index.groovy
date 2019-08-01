@@ -51,8 +51,8 @@ l.layout(title: _("Rebuild"), permission: Job.BUILD, norefresh: "true") {
 	// Add a very simply side panel that only allows moving back
 	l.side_panel() {
 		l.tasks() {
-			l.task(icon: "images/24x24/up.gif", title: _("Back to Dashboard"), href: "/")
-			l.task(icon: "images/24x24/up.gif", title: _("Back to Project"), href: "/job/" + my.getProject().getFullName())
+			l.task(icon: "images/24x24/up.gif", title: _("Back to Dashboard"), href: rootURL)
+			l.task(icon: "images/24x24/up.gif", title: _("Back to Project"), href: rootURL + "/job/" + my.getProject().getFullName())
 		}
 	}
 	
@@ -131,9 +131,7 @@ l.layout(title: _("Rebuild"), permission: Job.BUILD, norefresh: "true") {
 			// The parameters, taken from the previous build
 			tbody() {
 				f.block() {
-					div(style: "margin-top:1em;")
-					hr()
-					div(style: "margin-top:1em;")
+					hr(style: "margin-top:1em; margin-bottom:em")
 				}
 			}
 			f.block() {

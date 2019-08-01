@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -45,10 +46,10 @@ import hudson.model.Result;
 import hudson.model.StringParameterValue;
 import hudson.model.Cause.UserIdCause;
 import hudson.model.queue.QueueTaskFuture;
-import hudson.plugins.project_inheritance.TestInheritanceMain.XmlProject;
 import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.Dependency;
+import hudson.plugins.project_inheritance.utils.XmlProject;
 import jenkins.model.Jenkins;
 
 public class TestInheritanceSanity {
@@ -165,7 +166,8 @@ public class TestInheritanceSanity {
 		printInfo("testConcurrency()");
 		
 		//Fetch the jenkins instance; which is a valid build host
-		Jenkins j = Jenkins.getInstance();
+		Jenkins j = jRule.jenkins;
+		
 		//Set its executor count to 4, just to be sure
 		j.setNumExecutors(4);
 		try {

@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -61,14 +62,29 @@ public class TestParameterInheritance {
 	
 	@Rule public final JenkinsRule jRule = new JenkinsRule();
 	
+	/**
+	 * This provides the same value as the ParametersAction
+	 * "KEEP_UNDEFINED_PARAMETERS_SYSTEM_PROPERTY_NAME" static field.
+	 * The reason it needs to be done that way is because it is marked as
+	 * restricted to "noExternalUse", which is plainly idiotic.
+	 */
+	private final static String paramSysProp = ParametersAction.class.getName() + ".keepUndefinedParameters";
+	private String oldParamSysPropVal = "";
+	
 	@Before
 	public void setUp() {
-		//Nothing to do now
+		//These tests only work right if arbitrary parameters are permitted
+		oldParamSysPropVal = System.getProperty(paramSysProp);
+		System.setProperty(paramSysProp, "true");
 	}
 	
 	@After
 	public void tearDown() {
-		//Nothing to do now
+		if (oldParamSysPropVal == null) {
+			System.getProperties().remove(paramSysProp);
+		} else {
+			System.setProperty(paramSysProp, oldParamSysPropVal);
+		}
 	}
 	
 	
@@ -133,7 +149,7 @@ public class TestParameterInheritance {
 		};
 		
 		for (WhitespaceMode wsMode : wsModes) {
-			//Creating first with KEEP flag
+			//Creating a parameter with that flag
 			InheritableStringParameterDefinition ispd = new InheritableStringParameterDefinition(
 					"VAR", pVal, "",
 					IModes.OVERWRITABLE,

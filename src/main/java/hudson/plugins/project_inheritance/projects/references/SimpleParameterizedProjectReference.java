@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -28,9 +29,6 @@ import org.kohsuke.stapler.StaplerRequest;
 import hudson.Extension;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParameterDefinition.ParameterDescriptor;
-import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition;
-import hudson.plugins.project_inheritance.projects.parameters.InheritanceParametersDefinitionProperty;
 import net.sf.json.JSONObject;
 
 
@@ -51,18 +49,6 @@ public class SimpleParameterizedProjectReference extends SimpleProjectReference 
 			String targetJob,
 			List<ParameterDefinition> parameters) {
 		super(targetJob);
-		InheritanceProject project = this.getProject();
-		if (project != null && parameters != null) {
-			for (ParameterDefinition pd : parameters) {
-				if (pd instanceof InheritableStringParameterDefinition) {
-					InheritableStringParameterDefinition ispd =
-							(InheritableStringParameterDefinition) pd;
-					ispd.setRootProperty(project.getProperty(
-							InheritanceParametersDefinitionProperty.class
-					));
-				}
-			}
-		}
 		if (parameters == null) {
 			this.parameters = new LinkedList<ParameterDefinition>();
 		} else {

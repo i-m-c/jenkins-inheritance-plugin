@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -74,7 +75,7 @@ public class NodeFileSeparator {
 	 * If the separator can't be determined, is invalid, or the node is null,
 	 * the path is returned unmodified.
 	 * 
-	 * @param n
+	 * @param n the node
 	 * @param path the path to ensure correctness for
 	 * @return a path with correct separators, or the original, if the separator
 	 * 		could not be determined.

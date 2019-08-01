@@ -1,3 +1,6 @@
+/**
+ * Copyright (c) 2019 Intel Corporation
+ */
 var inlineSVG = function() {
 	// Fetch the two versions from the select boxes
 	var graphDiv = document.getElementById("svgRelGraph")

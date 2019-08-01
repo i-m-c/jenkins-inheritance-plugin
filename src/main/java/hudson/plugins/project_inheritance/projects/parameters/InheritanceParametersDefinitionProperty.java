@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2018-2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -19,15 +20,18 @@
  */
 package hudson.plugins.project_inheritance.projects.parameters;
 
+import static javax.servlet.http.HttpServletResponse.SC_CREATED;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.TreeSet;
+import java.util.Map;
 
 import javax.annotation.CheckForNull;
 import javax.servlet.ServletException;
@@ -38,25 +42,28 @@ import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.export.Flavor;
 
+import hudson.AbortException;
+import hudson.Util;
 import hudson.model.AbstractProject;
 import hudson.model.Action;
-import hudson.model.Build;
+import hudson.model.BuildListener;
 import hudson.model.Cause;
 import hudson.model.CauseAction;
-import hudson.model.Job;
-import hudson.model.JobPropertyDescriptor;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParameterValue;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
-import hudson.model.RunParameterDefinition;
+import hudson.model.Run;
 import hudson.model.StringParameterValue;
 import hudson.model.Queue.Task;
+import hudson.model.Run.RunnerAbortedException;
+import hudson.model.queue.ScheduleResult;
+import hudson.plugins.project_inheritance.projects.InheritanceBuild;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
-import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
 import hudson.plugins.project_inheritance.projects.actions.VersioningAction;
-import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
-import hudson.plugins.project_inheritance.projects.references.ProjectReference.PrioComparator.SELECTOR;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector;
+import hudson.plugins.project_inheritance.projects.inheritance.ParameterSelector.ScopeEntry;
+import hudson.plugins.project_inheritance.projects.parameters.InheritableStringParameterDefinition.IModes;
 import hudson.plugins.project_inheritance.projects.versioning.VersionHandler;
 import hudson.plugins.project_inheritance.projects.view.BuildViewExtension;
 import hudson.plugins.project_inheritance.util.Reflection;
@@ -68,116 +75,33 @@ import net.sf.json.JSONObject;
 /**
  * This class is a wrapper around {@link ParametersDefinitionProperty}.
  * <p>
- * This is necessary, because the derivation of parameters is a lot more
- * complicated than the base class can deal with as soon as inheritance and
- * versioning are introduced.
+ * This is necessary, because {@link ParametersDefinitionProperty} does not
+ * expose the setOwner() method, which is needed for the GUI to work correctly.
  * <p>
- * The problem is that in Vanilla-Jenkins, a {@link Job} stores a single
- * instance of {@link ParametersDefinitionProperty} in its list of properties.
- * In turn, this instance stores single instances of the various
- * {@link ParameterDefinition}s that you can set-up via the GUI.
- * <br/>
- * This means that, no matter how many builds are started at the same time,
- * they all make use of the same {@link ParametersDefinitionProperty} and thus
- * the same {@link ParameterDefinition}. The differences between the builds are
- * exclusively stored inside the {@link ParameterValue}s created by the
- * {@link ParameterDefinition}s.
- * <br/>
- * If you reconfigure a project and click on "save", a new
- * {@link ParametersDefinitionProperty} is created with a new set of
- * {@link ParameterDefinition}s.
- * <br/>
- * This approach works, because the {@link ParameterDefinition}s can create
- * the values without needing to refer to the {@link Job} that desires and
- * needs them. Currently running builds will still make use of the old
- * instances and will thus not be silently corrupted.
- * <p>
- * Unfortunately, this causes extreme problems with inheritance and
- * versioning, as those not only need to refer to the one {@link Job} that 
- * they are stored in, but also to all of its parents in their correct
- * versions to generate the correct final values.
- * <p>
- * Thus, the following altered behaviour is necessary:
- * <ol>
- * 	<li>
- * 		Jobs keep storing the unaltered {@link ParametersDefinitionProperty}
- * 		objects. This is necessary to support legacy behaviour of Jenkins and
- * 		keep the saving/loading of Jobs intact and unaltered.
- * </li><li>
- * 		Whenever any part of Jenkins request this property, it is instead
- * 		presented with a new instance of this class. This instance is able to
- * 		walk the inheritance tree, to gather the correct final values upon
- * 		building.
- * </li><li>
- * 		Additionally, this class is capable of returning a full "paper-trail"
- * 		of which project set which parameter in which way.
- * </li><li>
- * 		The copies of the {@link InheritableStringParameterDefinition}s also
- * 		get a reference back to the instance of this class. This can then be
- * 		used by them to create the correctly derived {@link ParameterValue}s.
- * </li>
- * </ol>
- * The obvious downside to this approach is that the number of created objects
- * increases. Instead of only creating one {@link ParameterValue}
- * per {@link ParameterDefinition} for each {@link Build}, numerous
- * copies of {@link ParametersDefinitionProperty}s and {@link ParameterDefinition}
- * are created every time {@link Job#getProperties()} or a similar
- * method is called.
- * <p>
- * Finally, this class displays the interstitial, that asks the
- * user to input values for the project's parameters when the build is triggered
- * via the GUI. Here, a specific option needs to be displayed to allow the user
- * to alter the versions of each parent used for the next build.
+ * It also changes the parameter GUI to correctly handle the "isHidden" property
+ * of parameters.
  * 
  * @author mhschroe
  */
 public class InheritanceParametersDefinitionProperty extends
 		ParametersDefinitionProperty {
 	
-	public static final String VERSION_PARAM_NAME = "JENKINS_JOB_VERSIONS";
-	
-	
-	public static class ScopeEntry {
-		public final String owner;
-		public final ParameterDefinition param;
-		
-		public ScopeEntry(String owner, ParameterDefinition param) {
-			this.owner = owner;
-			this.param = param;
-		}
-
+	public static Comparator<ParameterDefinition> paramComp = new Comparator<ParameterDefinition>() {
 		@Override
-		public String toString() {
-			StringBuilder b = new StringBuilder();
-			b.append('[');
-			b.append(owner);
-			b.append(", ");
-			b.append(param.toString());
-			b.append(']');
-			return b.toString();
+		public int compare(ParameterDefinition o1, ParameterDefinition o2) {
+			return o1.getName().compareTo(o2.getName());
 		}
-	}
-	
-	/**
-	 * Since {@link InheritanceParametersDefinitionProperty} instances are
-	 * generated uniquely for each call, we can cache the scope, without
-	 * having to worry about changing inheritance or versioning.
-	 */
-	private transient List<ScopeEntry> scopeCache = null;
-	
+	};
 	
 	// === CONSTRUCTORS AND CONSTRUCTOR HELPERS ===
 	
 	public InheritanceParametersDefinitionProperty(
 			AbstractProject<?,?> owner,
 			List<ParameterDefinition> parameterDefinitions) {
-		super(copyAndSortParametersByName(parameterDefinitions));
+		super(copySortParameters(parameterDefinitions));
 		
 		//Save the final owner that created this IPDP
 		this.owner = owner;
-		
-		//Applying the current owner and this object to the PDs, if necessary.
-		this.applyOwnerToDefinitions();
 	}
 	
 	public InheritanceParametersDefinitionProperty(
@@ -192,77 +116,14 @@ public class InheritanceParametersDefinitionProperty extends
 		this(owner, other.getParameterDefinitions());
 	}
 	
-	public static final List<ParameterDefinition> copyAndSortParametersByName(List<ParameterDefinition> in) {
-		//Crate a copy of all PDs in that list
-		TreeSet<ParameterDefinition> tree = new TreeSet<ParameterDefinition>(
-				new Comparator<ParameterDefinition>() {
-					@Override
-					public int compare(ParameterDefinition o1, ParameterDefinition o2) {
-						return o1.getName().compareTo(o2.getName());
-					}
-				}
-		);
-		for (ParameterDefinition pd : in) {
-			// if a parameter definition of type RunParameterDefinition is not configured with a valid project,
-			// ParameterDefinition(RunParameterDefinition)#copyWithDefaultValue will raise a NullPointerException
-			if (pd instanceof RunParameterDefinition) {
-				Job<?, ?> job = ((RunParameterDefinition) pd).getProject();
-
-				if (job != null) {
-					tree.add(pd);
-				}
-			} else {
-				tree.add(pd.copyWithDefaultValue(pd.getDefaultParameterValue()));
-			}
-
-		}
-		return new LinkedList<ParameterDefinition>(tree);
+	public static final List<ParameterDefinition> copySortParameters(List<ParameterDefinition> in) {
+		//Create a sorted copy of all PDs in that list
+		ArrayList<ParameterDefinition> ret = new ArrayList<>(in);
+		Collections.sort(ret, paramComp);
+		return ret;
 	}
 	
-	public static InheritanceParametersDefinitionProperty createMerged(
-			ParametersDefinitionProperty prior,
-			ParametersDefinitionProperty latter) {
-		//Determining which owner to use for the new merge.
-		//It needs to be an InheritanceProject!
-		InheritanceProject newOwner = null;
-		ParametersDefinitionProperty[] pdps = {latter, prior};
-		
-		for (ParametersDefinitionProperty pdp : pdps) {
-			if (pdp.getOwner() != null && pdp.getOwner() instanceof InheritanceProject) {
-				newOwner = (InheritanceProject) pdp.getOwner();
-				break;
-			}
-		}
-		
-		//Then, we merge their ParameterDefinitions based on their name
-		HashMap<String, ParameterDefinition> unifyMap =
-				new HashMap<String, ParameterDefinition>();
-		for (int i = pdps.length-1; i >= 0; i--) {
-			ParametersDefinitionProperty pdp = pdps[i];
-			for (ParameterDefinition pd : pdp.getParameterDefinitions()) {
-				unifyMap.put(pd.getName(), pd);
-			}
-		}
-		List<ParameterDefinition> unifyList =
-				new LinkedList<ParameterDefinition>(unifyMap.values());
-		
-		//With that, we create a new IPDP
-		InheritanceParametersDefinitionProperty out =
-				new InheritanceParametersDefinitionProperty(newOwner, unifyList);
-		
-		return out;
-	}
 	
-	private void applyOwnerToDefinitions() {
-		for (ParameterDefinition pd : this.getParameterDefinitions()) {
-			if (!(pd instanceof InheritableStringParameterDefinition)) {
-				continue;
-			}
-			InheritableStringParameterDefinition ispd =
-					(InheritableStringParameterDefinition) pd;
-			ispd.setRootProperty(this);
-		}
-	}
 	
 	
 	
@@ -347,13 +208,30 @@ public class InheritanceParametersDefinitionProperty extends
 		//Merge the ParametersActions, if any
 		BuildViewExtension.mergeParameters(actions);
 		
-		Jenkins.getInstance().getQueue().schedule2(
+		ScheduleResult res = Jenkins.get().getQueue().schedule2(
 				(Task) owner, delay.getTime(),
 				actions
 		);
-
-		//Send the user back to the job page, except if "rebuildNoRedirect" is set
-		if (req.getAttribute("rebuildNoRedirect") == null) {
+		
+		if (req.getAttribute("rebuildNoRedirect") != null) {
+			//The user specified not to get a redirect
+			return;
+		}
+		//Note: The following is taken (almost) verbatim from the super-class
+		if (res.isAccepted()) {
+			//Redirect to the project
+			String url = formData.optString("redirectTo");
+			if (StringUtils.isEmpty(url) || !Util.isSafeToRedirectTo(url)) {
+				//No redirect specified, or an open redirect (e.g. to an absolute URL)
+				//The former is useless, the latter must be avoided. 
+				rsp.sendRedirect(".");
+				
+				//Note: Super-method redirects to the QueueItem -- which does not work
+				//url = req.getContextPath() + '/' + res.getCreateItem().getUrl();
+			}
+			rsp.sendRedirect(formData.optInt("statusCode", SC_CREATED), url);
+		} else {
+			// send the user back to the job top page.
 			rsp.sendRedirect(".");
 		}
 	}
@@ -409,7 +287,7 @@ public class InheritanceParametersDefinitionProperty extends
 		}
 		
 		//Issue the job
-		Jenkins.getInstance().getQueue().schedule2(
+		Jenkins.get().getQueue().schedule2(
 				(Task) owner, delay.getTime(),
 				actions
 		);
@@ -436,7 +314,114 @@ public class InheritanceParametersDefinitionProperty extends
 	}
 	
 	
+	
 	// === PARAMETER RETRIEVAL AND SUBSET GENERATION ===
+	
+	/**
+	 * This checks if the assignment of all variables via Inheritance
+	 * is sane and okay.
+	 * <p>
+	 * It checks if:
+	 * <ul>
+	 * <li>A fixed value was overwritten</li>
+	 * <li>The mustHaveValue flag was set, but no value is present</li>
+	 * <li>Parameters do not override incompatible classes</li>
+	 * </ul>
+	 * If any of these is the case, the process throws a suitable
+	 * {@link AbortException}.
+	 * <p>
+	 * Do note that this check is different from and complementary to the
+	 * check in {@link InheritanceProject#getParameterSanity()}.
+	 * <p>
+	 * Of special note here is that this method does <b>not</b> check whether
+	 * the parameters have compatible classes during inheritance. That is
+	 * done on the level of the project as a pre-build check.
+	 * 
+	 * @param build the build that uses a value
+	 * @param listener the log emitter for that build
+	 * 
+	 * @throws RunnerAbortedException thrown in case of an invalid assignment.
+	 */
+	public static void checkParameterSanity(
+			InheritanceBuild build, BuildListener listener
+	) throws RunnerAbortedException {
+		//Get the scope of parameters for the parent of that build
+		List<ScopeEntry> scope = ParameterSelector
+				.instance
+				.getAllScopedParameterDefinitions(build.getParent());
+		
+		//Break the assigned parameters into a nice-to-use hashmap
+		HashMap<String, StringParameterValue> valMap = new HashMap<>();
+		for (ParameterValue pv : getParameterValues(build)) {
+			if (!(pv instanceof StringParameterValue)) {
+				continue;
+			}
+			valMap.put(pv.getName(), (StringParameterValue)pv);
+		}
+		
+		//Looping over the scope -- it goes from close to further ancestors
+		for (ScopeEntry sc : scope) {
+			//Ignore non-inheritance parameters, as they guarantee nothing
+			if (!(sc.param instanceof InheritableStringParameterDefinition)) {
+				continue;
+			}
+			if (sc.param instanceof InheritableStringParameterReferenceDefinition) {
+				//References only contribute values, no assurances
+				continue;
+			}
+			
+			InheritableStringParameterDefinition scDef =
+					(InheritableStringParameterDefinition) sc.param;
+			//Grab the assigned value from the build (if any -- can be null)
+			StringParameterValue val = valMap.get(sc.param.getName());
+			
+			//Check if the "must have value" was violated
+			if (scDef.getMustBeAssigned()) {
+				if (StringUtils.isEmpty(val.getValue().toString())) {
+					//Detected a violation
+					listener.fatalError(String.format(
+							"Parameter '%s' has no value, but was required to be set. Aborting!",
+							val.getName()
+					));
+					throw new RunnerAbortedException();
+				}
+			}
+			
+			/* Check if the "FIXED" mode was violated
+			 * Note: This is also check in the project, but a user might have
+			 * added a custom parameter for only that one build.
+			 */
+			if (scDef.getInheritanceModeAsVar() == IModes.FIXED) {
+				if (!StringUtils.equals(val.getValue().toString(), scDef.getDefaultValue())) {
+					//Detected a violation
+					listener.fatalError(String.format(
+							"Parameter '%s' was fixed in '%s' to the value"
+							+ " '%s', but it was overwritten to '%s'. Aborting!",
+							val.getName(),
+							sc.owner,
+							scDef.getDefaultValue(),
+							val.getValue().toString()
+					));
+					throw new RunnerAbortedException();
+				}
+			}
+		}
+	}
+	
+	public static Collection<ParameterValue> getParameterValues(Run<?,?> run) {
+		Map<String, ParameterValue> map = new HashMap<String, ParameterValue>();
+		List<ParametersAction> actions =
+				run.getActions(ParametersAction.class);
+		
+		for (ParametersAction pa : actions) {
+			for (ParameterValue pv : pa.getParameters()) {
+				if (pv == null || pv.getName() == null) { continue; }
+				map.put(pv.getName(), pv);
+			}
+		}
+		
+		return map.values();
+	}
 	
 	public List<ParameterDefinition> getParameterDefinitionSubset(boolean showHidden) {
 		LinkedList<ParameterDefinition> out =
@@ -461,111 +446,7 @@ public class InheritanceParametersDefinitionProperty extends
 		}
 		return out;
 	}
-
-	@Override
-	public List<ParameterDefinition> getParameterDefinitions() {
-		return super.getParameterDefinitions();
-	}
-
-	@Override
-	public ParameterDefinition getParameterDefinition(String name) {
-		return super.getParameterDefinition(name);
-	}
-
-	@Override
-	public List<String> getParameterDefinitionNames() {
-		return super.getParameterDefinitionNames();
-	}
 	
-	
-	// === PARAMETER SCOPE COMPUTATION ===
-	
-	/**
-	 * Returns all parameter definitions that are involved in generating parameter values.
-	 * <p>
-	 * It walks the inheritance tree for the current request and
-	 * generates a list of all parameter declarations that are involved in
-	 * generating the final values of all parameters.
-	 * <p>
-	 * The returned list is sorted in order of when each definition is
-	 * encountered. Do note that it is likely, that parameters with the same
-	 * name are not stored sequentially.
-	 * <p>
-	 * Do note that the list might be cached, in which case the generated list
-	 * is unmodifiable.
-	 * <p>
-	 * <b>Beware:</b> The returned scope contains the original
-	 * {@link ParameterDefinition}s, as they are stored in the project class
-	 * instances. As such, they are not glued together with an
-	 * {@link InheritableStringParameterDefinition} and as such have no
-	 * contact to each other. Thus, you can't use their methods that need to
-	 * access the other parameters. This especially applies to instances of
-	 * {@link InheritableStringParameterReferenceDefinition}!
-	 * <p>
-	 * To correct this, simply copy the definitions with
-	 * {@link ParameterDefinition#copyWithDefaultValue(ParameterValue)} and then
-	 * set the reference to 'this' property via:
-	 * {@link InheritableStringParameterDefinition#setRootProperty(InheritanceParametersDefinitionProperty)}.
-	 * 
-	 * @return a list of {@link ScopeEntry} instances, sorted by order of
-	 * derivation by inheritance.
-	 */
-	public List<ScopeEntry> getAllScopedParameterDefinitions() {
-		if (this.scopeCache != null) {
-			return this.scopeCache;
-		}
-		
-		List<ScopeEntry> lst = new LinkedList<ScopeEntry>();
-		
-		//Fetch the current owner
-		AbstractProject<?, ?> p = this.getOwner();
-		if (p == null || !(p instanceof InheritanceProject)) {
-			return lst;
-		}
-		InheritanceProject ip = (InheritanceProject) p;
-		
-		//Now, we get the sorted list of all parents
-		for (AbstractProjectReference ref : ip.getAllParentReferences(SELECTOR.PARAMETER, true)) {
-			InheritanceProject par = ref.getProject();
-			if (par == null) { continue; }
-			
-			//Grab the LOCALLY defined parameters for the project
-			ParametersDefinitionProperty parPDP = par.getProperty(
-					ParametersDefinitionProperty.class,
-					IMode.LOCAL_ONLY
-			);
-			if (parPDP == null) { continue; }
-			
-			for (ParameterDefinition pd : parPDP.getParameterDefinitions()) {
-				lst.add(new ScopeEntry(par.getFullName(), pd));
-			}
-		}
-		
-		//At the end, we must also add the parameters from a possible variance
-		InheritanceParametersDefinitionProperty variance = ip.getVarianceParameters();
-		if (variance != null) {
-			for (ParameterDefinition pd : variance.getParameterDefinitions()) {
-				lst.add(new ScopeEntry(ip.getFullName(), pd));
-			}
-		}
-		
-		//Caching & returning the result
-		this.scopeCache = Collections.unmodifiableList(lst);
-		return this.scopeCache;
-	}
-	
-	
-	public List<ScopeEntry> getScopedParameterDefinition(String name) {
-		List<ScopeEntry> all = getAllScopedParameterDefinitions();
-		List<ScopeEntry> out = new LinkedList<ScopeEntry>();
-		for (ScopeEntry se : all) {
-			String sName = se.param.getName();
-			if (StringUtils.equals(sName, name)) {
-				out.add(se);
-			}
-		}
-		return out;
-	}
 	
 	/**
 	 * We need to override this method do prevent Jenkins from trying to
@@ -581,9 +462,9 @@ public class InheritanceParametersDefinitionProperty extends
 	 * {@link ParametersDefinitionProperty} class.
 	 */
 	@Override
-	public JobPropertyDescriptor getDescriptor() {
+	public OptionalJobPropertyDescriptor getDescriptor() {
 		//return super.getDescriptor();
-		return (JobPropertyDescriptor) Jenkins.getInstance().getDescriptorOrDie(
+		return (OptionalJobPropertyDescriptor) Jenkins.get().getDescriptorOrDie(
 				ParametersDefinitionProperty.class
 		);
 	}

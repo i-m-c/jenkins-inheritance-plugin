@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -34,7 +35,7 @@ import jenkins.model.Jenkins;
 
 /**
  * Extension point that allows other plugins to decide how a particular type
- * of object should be treated during inheritenace.
+ * of object should be treated during inheritance.
  * <p>
  * During inheritance, the settings of multiple projects need to be merged into
  * one object, since the leaf project needs to respond to Jenkins as if it did
@@ -50,6 +51,8 @@ import jenkins.model.Jenkins;
  * <p>
  *  
  * @author Martin Schroeder
+ * 
+ * @param <T> the type of the objects handled by this selector
  */
 public abstract class InheritanceSelector<T> implements Serializable, ExtensionPoint {
 	private static final long serialVersionUID = 6297336734737162857L;
@@ -57,7 +60,7 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	/**
 	 * This enumeration lists the various modes of inheritance that can be
 	 * specified. The modes mean:
-	 * <table border="1" bordercolor="black" style="border-collapse:collapse">
+	 * <table summary="" border="1" style="border-collapse:collapse">
 	 * 	<tr>
 	 * 		<td>Mode</td><td>Meaning</td>
 	 * 	</tr>
@@ -74,9 +77,9 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	 * 		<td>MERGE</td>
 	 * 		<td>
 	 * 			This will call
-	 * 			{@link InheritanceModeSelector#merge(Object, Object)} to
-	 * 			merge identical definitions and put them at the position of the
-	 * 			last definition.
+	 * 			{@link InheritanceSelector#merge(Object, Object, InheritanceProject)}
+	 * 			to merge identical definitions and put them at the position of
+	 * 			the last definition.
 	 * 		</td>
 	 * 	</tr>
 	 * 	<tr>
@@ -115,7 +118,8 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	 * Expect to see lots of {@link ClassCastException}s or your code not
 	 * even being called, if you violate this.
 	 * 
-	 * @return
+	 * @param clazz the type of objects to check
+	 * @return true, if this selector applies to the given type of objects.
 	 */
 	public abstract boolean isApplicableFor(Class<?> clazz);
 	
@@ -130,6 +134,9 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	 * The default mode if no selector is matches is {@link MODE#USE_LAST},
 	 * meaning that the last object overwrites and hides all the others defined
 	 * earlier.
+	 * 
+	 * @param clazz the class of elements under inspection
+	 * @return how to handle lists containing these elements
 	 */
 	public abstract MODE getModeFor(Class<?> clazz);
 	
@@ -157,9 +164,9 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	public abstract String getObjectIdentifier(T obj);
 	
 	/**
-	 * This function is called when {@link #isApplicable(Object)} returned the
-	 * {@link MODE#EXTEND} mode and the two objects have the same ID as returned
-	 * by {@link #getInheritanceIdFor(Object)}.
+	 * This function is called when {@link #isApplicableFor(Class)} returned the
+	 * {@link MODE#MERGE} mode and the two objects have the same ID as returned
+	 * by {@link #getObjectIdentifier(Object)}.
 	 * <p>
 	 * It is expected of this function to merge the two objects together. This
 	 * may or may not create a new object, but should not modify the two given
@@ -167,7 +174,13 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	 * <p>
 	 * Do note that this function is only called, if there are at least 2
 	 * elements to merge. If any post-processing or singleton-handling is
-	 * necessary, use {@link #handleSingleton(Object)}.
+	 * necessary, use {@link #handleSingleton(Object, InheritanceProject)}.
+	 * 
+	 * @param prior the earlier defined object
+	 * @param latter the later defined object
+	 * @param caller the job for which the merge is done
+	 * 
+	 * @return a merged instance. Maybe be new, or one of the input elements
 	 */
 	public abstract T merge(T prior, T latter, InheritanceProject caller);
 	
@@ -181,6 +194,8 @@ public abstract class InheritanceSelector<T> implements Serializable, ExtensionP
 	 * will be called for each occurrence.
 	 * 
 	 * @param object the object selected to be returned to Jenkins.
+	 * @param caller the project for which the inheritance is determined.
+	 * 
 	 * @return the object that should <i>actually</i> be returned to Jenkins. Do
 	 * note that it may be part of a list, in which case the returned value
 	 * replaces the original value.

@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -37,7 +38,9 @@ public interface SVGPrimitive {
 	/**
 	 * This function should return an element containing the primitive in
 	 * question at its current location that can be inserted into the given
-	 * {@link Document}. 
+	 * {@link Document}.
+	 *  
+	 * @param doc the document to render into
 	 * 
 	 * @return an XML {@link Element} that contains the necessary attributes
 	 * to draw the primitive into an SVG document. Must return a new copy of the
@@ -66,7 +69,7 @@ public interface SVGPrimitive {
 	 * or rotations for example do not need to be moved; as they only alter
 	 * their child primitives and do not have a "location" to speak of.
 	 * 
-	 * @param offset the new position in the (x,y) plane.
+	 * @param pos the new position in the (x,y) plane.
 	 */
 	public void moveTo(Point2D.Double pos);
 	
@@ -94,8 +97,8 @@ public interface SVGPrimitive {
 	 * element can, but does not have to be a new object.
 	 * <p>
 	 * If you want to get the center of this element, call this function
-	 * followed by {@link Rectangle2D.Double#getCenterX()} and
-	 * {@link Rectangle2D.Double#getCenterY()}.
+	 * followed by {@link java.awt.geom.Rectangle2D.Double#getCenterX()} and
+	 * {@link java.awt.geom.Rectangle2D.Double#getCenterY()}.
 	 * <p>
 	 * 
 	 * @return the outer bounds of this object; or null if not a graphical

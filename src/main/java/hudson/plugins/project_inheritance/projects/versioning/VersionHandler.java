@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -105,7 +106,7 @@ public class VersionHandler {
 	}
 	
 	public static Map<InheritanceProject, Long> resolve(Map<String, Long> in) {
-		if (in == null) { return null; }
+		if (in == null) { return Collections.emptyMap(); }
 		Map<InheritanceProject, Long> out = new HashMap<InheritanceProject, Long>();
 		for (Entry<String, Long> entry : in.entrySet()) {
 			InheritanceProject ip = resolve(entry.getKey());
@@ -132,23 +133,13 @@ public class VersionHandler {
 	 */
 	public static Map<String, Long> getVersions() {
 		Map<String, Long> map;
-		//Try to fetch via the Request attribute (fast)
+		//Try to fetch via the Request attribute (URL attributes or form content)
 		map = getFromRequest();
-		if (map != null) {
-			return map;
-		}
+		if (!map.isEmpty()) { return map; }
 		
-		//Try to use the fast thread storage
+		//Try to use the thread storage
 		map = getFromThread();
-		if (map != null) {
-			return map;
-		}
-		
-		//At last, try to fetch from URL parameters (slow)
-		map = getFromUrlParameter();
-		if (map != null) {
-			return map;
-		}
+		if (!map.isEmpty()) { return map; }
 		
 		//If everything failed; return the empty map
 		return Collections.emptyMap();
@@ -174,8 +165,8 @@ public class VersionHandler {
 	 * from the given projects, with the former one overwriting values of the
 	 * latter one.
 	 * 
-	 * @param root the project to initialize from
-	 * @return
+	 * @param root the project to initialize the environment for
+	 * @return all versions for the given project
 	 */
 	public static Map<String, Long> initVersions(AbstractProject<?, ?> root) {
 		//Fetch currently configured versions
@@ -206,8 +197,8 @@ public class VersionHandler {
 	 * <p>
 	 * It will take the information as given in the passed-in map.
 	 * 
-	 * @param root
-	 * @return
+	 * @param map the map to set in the current environment
+	 * @return all versions for the given project
 	 */
 	public static Map<String, Long> initVersions(Map<String, Long> map) {
 		setVersions(map);
@@ -257,14 +248,21 @@ public class VersionHandler {
 	
 	// ==== Project-based version retrieval ====
 	
+	/**
+	 * This method loads the map of versions from the parameters passed in
+	 * via the current StaperRequest's URL.
+	 * 
+	 * @param root the project to retrieve versions for
+	 * @return a map, may be empty, but never null
+	 */
 	public static Map<String, Long> getFromProject(AbstractProject<?, ?> root) {
 		if (root == null || !(root instanceof InheritanceProject)) {
-			return null;
+			return Collections.emptyMap();
 		}
 		InheritanceProject ip = (InheritanceProject) root;
 		
 		List<InheritedVersionInfo> versions = ip.getAllInheritedVersionsList();
-		if (versions == null) { return null; }
+		if (versions == null) { return Collections.emptyMap(); }
 		
 		Map<String,Long> map = new HashMap<String, Long>();
 		for (InheritedVersionInfo v : versions) {
@@ -280,11 +278,12 @@ public class VersionHandler {
 	/**
 	 * This method loads the map of versions from the parameters passed in
 	 * via the current StaperRequest's URL.
-	 * @return
+	 * 
+	 * @return a map, may be empty, but never nulll
 	 */
-	private static Map<String, Long> getFromUrlParameter() {
+	public static Map<String, Long> getFromUrlParameter() {
 		StaplerRequest req = Stapler.getCurrentRequest();
-		if (req == null) { return null; }
+		if (req == null) { return Collections.emptyMap(); }
 		
 		Map<String, Long> out = new HashMap<String, Long>();
 		
@@ -306,12 +305,7 @@ public class VersionHandler {
 				}
 			}
 		}
-		
-		if (out.isEmpty()) {
-			return null;
-		} else {
-			return out;
-		}
+		return (out.isEmpty()) ? Collections.emptyMap() : out;
 	}
 	
 	public static String getFullUrlParameter(Map<String, Long> vMap) {
@@ -360,7 +354,7 @@ public class VersionHandler {
 	public static Map<String, Long> decodeUrlParameter(String in) {
 		//Sanity check
 		if (in == null || in.isEmpty()) {
-			return null;
+			return Collections.emptyMap();
 		}
 		
 		//Check if we already have decoded that string recently
@@ -420,15 +414,26 @@ public class VersionHandler {
 	
 	// ==== Request-based version retrieval ====
 	
-	private static Map<String, Long> getFromRequest() {
+	/**
+	 * Attempts to read the active versions from the current request, no
+	 * matter if stored as inside the URL parameters or the form part of the
+	 * request.
+	 * <p>
+	 * This is safer than calling {@link #getFromFormRequest(StaplerRequest)},
+	 * since it will only do that, if the project/version parameter are set in
+	 * the request. 
+	 * 
+	 * @return a map, may be empty, but never null
+	 */
+	public static Map<String, Long> getFromRequest() {
 		//Checking if we were invoked through an HTTP URL request
 		StaplerRequest req = Stapler.getCurrentRequest();
-		if (req == null) {
-			return null;
-		}
+		if (req == null) { return Collections.emptyMap(); }
 		
 		//FIXME: This method should allow using the ?version=<num> everywhere,
 		//not just in structured form submissions.
+		Map<String, Long> versionMap = getFromUrlParameter();
+		if (!versionMap.isEmpty()) { return versionMap; }
 		
 		Object verObj = req.getAttribute("versions");
 		if (verObj == null) {
@@ -436,13 +441,9 @@ public class VersionHandler {
 			if (StringUtils.isEmpty(req.getParameter("project"))
 					|| StringUtils.isEmpty(req.getParameter("version"))
 			) {
-				return null;
+				return Collections.emptyMap();
 			}
-			Map<String, Long> versionMap = getFromFormRequest(req);
-			if (versionMap == null || versionMap.isEmpty()) {
-				return null;
-			}
-			return versionMap;
+			return getFromFormRequest(req);
 		}
 		try {
 			@SuppressWarnings("unchecked")
@@ -454,7 +455,7 @@ public class VersionHandler {
 				"ClassCaseException when attempting to decode 'versions' attribute of HTTP-Request"
 			);
 		}
-		return null;
+		return Collections.emptyMap();
 	}
 	
 	private static void setInRequest(Map<String, Long> map) {
@@ -477,9 +478,14 @@ public class VersionHandler {
 	
 	// ==== Thread-based version retrieval ====
 	
+	/**
+	 * Attempts to read the active versions from the thread-local storage.
+	 * 
+	 * @return a map, may be empty, but never null
+	 */
 	private static Map<String, Long> getFromThread() {
 		Object verObj = ThreadAssocStore.getInstance().getValue("versions");
-		if (verObj == null) { return null; }
+		if (verObj == null) { return Collections.emptyMap(); }
 		try {
 			@SuppressWarnings("unchecked")
 			Map<String, Long> verMap =
@@ -490,7 +496,7 @@ public class VersionHandler {
 				"ClassCaseException when attempting to decode 'versions' attribute of ThreadAssocStore"
 			);
 		}
-		return null;
+		return Collections.emptyMap();
 	}
 
 	private static void setInThread(Map<String, Long> map) {
@@ -505,12 +511,27 @@ public class VersionHandler {
 	
 	// ==== Form-based version retrieval ====
 	
+	/**
+	 * Decodes the versions stored in the form-part of the given request.
+	 * <p>
+	 * Avoid calling this, if the request has no form, as it can lead to
+	 * a HTTP error being send to the remote client.
+	 * 
+	 * @param req the request to check
+	 * @return a map, may be empty, but never null
+	 */
 	public static Map<String, Long> getFromFormRequest(StaplerRequest req) {
+		if (req == null) { return Collections.emptyMap(); }
 		JSONObject jForm;
 		try {
 			jForm = req.getSubmittedForm();
 		} catch (ServletException e) {
-			return null;
+			return Collections.emptyMap();
+		}
+		
+		if (!jForm.has("project") || !jForm.has("version")) {
+			//No projects or versions present -- so return the empty map
+			return Collections.emptyMap();
 		}
 		
 		String[] projects = null;
@@ -551,7 +572,7 @@ public class VersionHandler {
 		
 		if (projects == null || versions == null ||
 				versions.length != projects.length) {
-			return null;
+			return Collections.emptyMap();
 		}
 
 		//Decoding the version map from the submission

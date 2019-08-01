@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -29,7 +30,7 @@ import hudson.plugins.project_inheritance.projects.rebuild.RebuildValidatorSuppr
  * This class implements a RunListener specifically geared towards the
  * InheritanceBuild class.
  * <p>
- * Its sole purpose is to append the {@link InheritanceViewAction} to
+ * Its sole purpose is to append the {@link BuildFlowScriptAction} to
  * newly completed {@link InheritanceBuild} runs
  * 
  * @see RebuildValidatorSuppressor
@@ -43,7 +44,7 @@ public class InheritanceViewConfigurer extends RunListener<InheritanceBuild> {
 
 	@Override
 	public void onCompleted(InheritanceBuild build, TaskListener listener) {
-		InheritanceViewAction view = new InheritanceViewAction();
-		build.getActions().add(view);
+		BuildFlowScriptAction view = new BuildFlowScriptAction();
+		build.addAction(view);
 	}
 }

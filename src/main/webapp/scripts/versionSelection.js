@@ -1,3 +1,6 @@
+/**
+ * Copyright (c) 2019 Intel Corporation
+ */
 var alterUrlToVersion = function(url, newVersion) {
 	var baseURL = url.replace(/\?.*/, "");
 	var paramStr = url.replace(/^[^\?]*/, "");

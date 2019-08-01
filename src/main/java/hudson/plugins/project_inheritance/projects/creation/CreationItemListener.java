@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015-2017, Intel Deutschland GmbH
- * Copyright (c) 2011-2015, Intel Mobile Communications GmbH
+ * Copyright (c) 2019 Intel Corporation
+ * Copyright (c) 2015-2017 Intel Deutschland GmbH
+ * Copyright (c) 2011-2015 Intel Mobile Communications GmbH
  *
  * This file is part of the Inheritance plug-in for Jenkins.
  *
@@ -75,7 +76,7 @@ public class CreationItemListener extends ItemListener {
 		pce().notifyJenkinsStartupComplete();
 		
 		//And rebuild the job graph
-		Jenkins.getInstance().rebuildDependencyGraph();
+		Jenkins.get().rebuildDependencyGraph();
 	}
 	
 	/**
@@ -93,7 +94,7 @@ public class CreationItemListener extends ItemListener {
 	@Initializer(before=JOB_LOADED,fatal=false)
 	public static void onJenkinsStart() {
 		//We must wait until all static jobs have been loaded
-		Jenkins j = Jenkins.getInstance();
+		Jenkins j = Jenkins.get();
 		
 		int currItems = 0;
 		while (true) {
@@ -148,7 +149,7 @@ public class CreationItemListener extends ItemListener {
 			);
 		}
 		//Now, that all jobs are present; we rebuild the Jenkins job graph
-		Jenkins.getInstance().rebuildDependencyGraph();
+		Jenkins.get().rebuildDependencyGraph();
 	}
 	
 	

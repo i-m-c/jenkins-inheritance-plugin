@@ -1,3 +1,6 @@
+/**
+ * Copyright (c) 2019 Intel Corporation
+ */
 function changeAllBuilderVisibility(tag, prefix, projectClass) {
 	//First, we hide fields matching the prefix
 	_doForAll(tag, prefix, null, null, "hide");

@@ -1,3 +1,7 @@
+/**
+ * Copyright (c) 2019 Intel Corporation
+ */
+
 // Add observer to window load event
 Event.observe(window,"load",function(){
 	// Remove action from form tag in order to prevent submitting the form accidentelly
