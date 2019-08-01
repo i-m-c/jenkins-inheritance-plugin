@@ -907,6 +907,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			//Only permit running this when the user has jobCreate rights
 			if (!Jenkins.get().hasPermission(Job.CREATE)) {
 				rsp.sendError(SC_FORBIDDEN, "User lacks the Job.CREATE permission");
+				return;
 			}
 			
 			//Trigger the project creation
