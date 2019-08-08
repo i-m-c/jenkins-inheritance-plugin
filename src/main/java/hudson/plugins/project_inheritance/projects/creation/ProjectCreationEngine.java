@@ -55,9 +55,9 @@ import org.acegisecurity.context.SecurityContextHolder;
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import com.google.common.base.Joiner;
 
@@ -447,6 +447,7 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		xml.write(this);
 	}
 	
+	@RequirePOST
 	public synchronized void doConfigSubmit(
 			StaplerRequest req, StaplerResponse rsp)
 			throws IOException, ServletException, FormException {
@@ -900,10 +901,9 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	 * <b>Do NOT call this directly</b>, if not triggered by the user. Instead
 	 * call {@link #triggerCreateProjects()}.
 	 */
-	public void doCreateProjects() {
+	@RequirePOST
+	public void doCreateProjects(StaplerRequest req, StaplerResponse rsp) {
 		try {
-			StaplerResponse rsp = Stapler.getCurrentResponse();
-			
 			//Only permit running this when the user has jobCreate rights
 			if (!Jenkins.get().hasPermission(Job.CREATE)) {
 				rsp.sendError(SC_FORBIDDEN, "User lacks the Job.CREATE permission");
@@ -916,8 +916,21 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			Jenkins j = Jenkins.get();
 			String rootURL = j.getRootUrlFromRequest();
 			
-			//Redirect to the status page for job creation
-			rsp.sendRedirect(rootURL + "/project_creation/showCreationResults");
+			/* Redirect to the status page for job creation.
+			 * 
+			 * Note: If the URL is called via a "task" tag, this will
+			 * not work. The browser will do the request, but show nothing to
+			 * the user. Instead, a custom "redirectTask" tag needs to be used.
+			 * 
+			 * If the user arrived via browser built-in "retry with POST"
+			 * feature it should also work, even without JavaScript magic,
+			 * because of the POST-REDIRECT-GET logic.
+			 * 
+			 * See: https://en.wikipedia.org/wiki/Post/Redirect/Get
+			 */
+			rsp.sendRedirect(
+					rootURL + "/project_creation/showCreationResults"
+			);
 		} catch (IOException ex) {
 			//Ignore
 		} catch (NullPointerException ex) {

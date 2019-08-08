@@ -1,4 +1,5 @@
 /**
+ * Copyright (c) 2019 Intel Corporation
  * Copyright (c) 2011-2014, Intel Mobile Communications GmbH
  * 
  * 
@@ -21,7 +22,7 @@
 f = namespace(lib.FormTagLib);
 l = namespace(lib.LayoutTagLib);
 t = namespace(lib.JenkinsTagLib);
-
+ct = namespace(lib.CustomTagLib);
 
 l.side_panel() {
 	l.tasks() {
@@ -36,11 +37,14 @@ l.side_panel() {
 				permission: app.ADMINISTER,
 				href: rootURL + "/manage"
 		)
-		l.task(
+		ct.redirectTask(
 				icon: "images/24x24/clock.png",
 				title: _("Create Projects"),
 				permission: app.ADMINISTER,
-				href: rootURL + "/project_creation/createProjects"
+				href: rootURL + "/project_creation/createProjects",
+				//Make this send a POST upon click, to prevent CSRF issues and
+				//browser link preloading from triggering job creations
+				post: true
 		)
 		l.task(
 				icon: "images/24x24/clipboard.png",

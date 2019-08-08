@@ -63,4 +63,9 @@ public interface CustomTagLib extends TypedTagLibrary {
     void expandHyperlink(Closure<?> body);
     void expandHyperlink(Map<?,?> args);
     void expandHyperlink();
+    
+    void redirectTask(Map<?,?> args, Closure<?> body);
+    void redirectTask(Closure<?> body);
+    void redirectTask(Map<?,?> args);
+    void redirectTask();
 }
