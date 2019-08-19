@@ -44,6 +44,12 @@ l.main_panel() {
 			) {
 				f.textarea()
 			}
+			f.entry(
+				title: _("DisallowVanillaArchiver"),
+				field: "disallowVanillaArchiver"
+			) {
+				f.checkbox()
+			}
 		}
 		
 		f.section(title: _("CreationSection")) {

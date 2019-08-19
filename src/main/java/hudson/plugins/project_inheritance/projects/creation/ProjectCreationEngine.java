@@ -332,6 +332,8 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 	protected LinkedList<CreationMating> matings =
 			new LinkedList<ProjectCreationEngine.CreationMating>();
 	
+	protected boolean disallowVanillaArchiver = false;
+	
 	protected boolean enableCreation = false;
 	protected boolean triggerOnChange = true;
 	protected boolean triggerOnStartup = true;
@@ -460,6 +462,12 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 			JSONObject json = req.getSubmittedForm();
 			
 			//Reading the state of the checkboxes
+			try {
+				this.disallowVanillaArchiver = json.getBoolean("disallowVanillaArchiver");
+			} catch (JSONException ex) {
+				this.disallowVanillaArchiver = false;
+			}
+			
 			try {
 				this.enableCreation = json.getBoolean("enableCreation");
 			} catch (JSONException ex) {
@@ -1066,6 +1074,9 @@ public class ProjectCreationEngine extends ManagementLink implements Saveable, D
 		}
 	}
 	
+	public boolean getDisallowVanillaArchiver() {
+		return disallowVanillaArchiver;
+	}
 	
 	/**
 	 * Returns the list of error URLs that are safe to ignore when checking the

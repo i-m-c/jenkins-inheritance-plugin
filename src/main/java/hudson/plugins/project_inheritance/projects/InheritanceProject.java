@@ -5420,11 +5420,13 @@ public class InheritanceProject extends Project<InheritanceProject, InheritanceB
 		
 		@Override
 		public boolean isApplicable(Descriptor descriptor) {
-			//If the descriptor is ArtifactAchiver, do not add it
-			if (descriptor.isSubTypeOf(ArtifactArchiver.class)) {
-				return false;
+			//If the descriptor is ArtifactAchiver, and the admin selected that it
+			//should be suppressed, do not add these post-build steps
+			if (ProjectCreationEngine.instance.getDisallowVanillaArchiver()) {
+				if (descriptor.isSubTypeOf(ArtifactArchiver.class)) {
+					return false;
+				}
 			}
-			
 			return super.isApplicable(descriptor);
 		}
 		
