@@ -3,6 +3,7 @@
 #
 .classpath
 .project
+.groovy
 eclipse-launch
 target-eclipse
 

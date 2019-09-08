@@ -91,16 +91,16 @@ public class CreationItemListener extends ItemListener {
 	 * But since that is unreliable, we trigger the recreation again via
 	 * {@link #onJenkinsJobsGuaranteedLoaded()}.
 	 */
-	@Initializer(before=JOB_LOADED,fatal=false)
+	@Initializer(after=JOB_LOADED, fatal=false)
 	public static void onJenkinsStart() {
 		//We must wait until all static jobs have been loaded
 		Jenkins j = Jenkins.get();
 		
 		int currItems = 0;
 		while (true) {
-			//Sleeping a full second
+			//Sleep for a bit
 			try {
-				Thread.sleep(1000);
+				Thread.sleep(100);
 			} catch (InterruptedException e) {
 				//We were probably told to shut down
 				break;
