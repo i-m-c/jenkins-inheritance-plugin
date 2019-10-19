@@ -27,6 +27,7 @@ import hudson.model.Describable;
 import hudson.model.Queue;
 import hudson.model.Saveable;
 import hudson.model.Descriptor;
+import hudson.model.Hudson;
 import hudson.model.Project;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
@@ -67,8 +68,6 @@ import org.kohsuke.stapler.StaplerRequest;
  * @param <T> the target type of the field this helper is written for.
  */
 public abstract class InheritanceGovernor<T> {
-	public static final Pattern runUriRegExp = Pattern.compile(".*/job/[^/]+/[0-9]+/.*");
-	
 	public final String fieldName;
 	public final SELECTOR orderMode;
 	public final InheritanceProject caller;
@@ -490,14 +489,9 @@ public abstract class InheritanceGovernor<T> {
 		StaplerRequest req = Stapler.getCurrentRequest();
 		if (req != null) {
 			String uri = req.getRequestURI();
-			//Check if we request the build page
-			if (uri.endsWith("/build")) {
-				return true;
-			}
-			//Check if we were requested by page for a run
-			if (runUriRegExp.matcher(uri).matches()) {
-				return true;
-			}
+			if (inheritanceRequiredByRequestURI(uri)) {
+                return true;
+            }
 		}
 		
 		//Check via expensive stack reflection
@@ -518,6 +512,17 @@ public abstract class InheritanceGovernor<T> {
 		//In all other cases, we don't require (or want) inheritance
 		return false;
 	}
+	
+    private static boolean inheritanceRequiredByRequestURI(String uri) {
+        List<RequestInheritanceChecker> list = Hudson.getInstance().getExtensionList(
+                RequestInheritanceChecker.class);
+        for (RequestInheritanceChecker requestInheritanceChecker : list) {
+            if (requestInheritanceChecker.isInheritanceRequired(uri)) {
+                return true;
+            }
+        }
+        return false;
+    }
 	
 	/**
 	 * This method uses reflection to tell whether the current state means
