@@ -20,6 +20,7 @@
 
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.references.AbstractProjectReference;
+import hudson.model.Project;
 
 f = namespace(lib.FormTagLib)
 l = namespace(lib.LayoutTagLib)
@@ -61,13 +62,10 @@ ct.colored_block(backCol: "LightGreen", borderCol: "navy") {
 //that labels can be generated quickly
 f.section(title: _("Base Project Configuration")) {
 	//include(my, "/hudson/model/Project/configure-entries")
-	
+
 	include(my, "base/configure-base-settings")
 
-	p.config_trigger() {
-		p.config_upstream_pseudo_trigger()
-	}
-
+	p.config_trigger()
 	p.config_buildWrappers()
 	p.config_builders()
 	p.config_publishers2()

@@ -98,6 +98,12 @@ f.section(title: _("Advanced Project Options")) {
 					checkUrl: "'" + rootURL + "/checkDisplayName?displayName=' + encodeURIComponent(this.value) + '&jobName=' + encodeURIComponent('" + escapedName + "')"
 			)
 		}
+		f.optionalBlock(
+				name: "keepDependencies",
+				checked: my.keepDependencies,
+				title: _("Keep the build logs of dependencies"),
+				help: "/help/tasks/fingerprint/keepDependencies.html"
+		)
 	}
 }
 
