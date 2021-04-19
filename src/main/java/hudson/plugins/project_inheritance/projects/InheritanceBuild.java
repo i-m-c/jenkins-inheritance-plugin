@@ -39,7 +39,6 @@ import hudson.model.Build;
 import hudson.model.BuildListener;
 import hudson.model.Executor;
 import hudson.model.Job;
-import hudson.model.Messages;
 import hudson.model.Node;
 import hudson.model.ParameterValue;
 import hudson.model.Result;
@@ -266,7 +265,7 @@ public class InheritanceBuild extends Build<InheritanceProject, InheritanceBuild
 			} catch (InterruptedException e) {
 				//Exception handling code copied from Run.execute()
 				result = Executor.currentExecutor().abortResult();
-				listener.getLogger().println(Messages.Run_BuildAborted());
+				listener.getLogger().println(Messages.InheritanceBuild_BuildAborted());
 				Executor.currentExecutor().recordCauseOfInterruption(
 						run, listener
 				);
