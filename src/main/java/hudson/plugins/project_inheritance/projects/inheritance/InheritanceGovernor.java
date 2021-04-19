@@ -27,6 +27,7 @@ import hudson.model.Describable;
 import hudson.model.Queue;
 import hudson.model.Saveable;
 import hudson.model.Descriptor;
+import hudson.model.ParametersAction;
 import hudson.model.Project;
 import hudson.plugins.project_inheritance.projects.InheritanceProject;
 import hudson.plugins.project_inheritance.projects.InheritanceProject.IMode;
@@ -505,7 +506,8 @@ public abstract class InheritanceGovernor<T> {
 				Build.class, BuildCommand.class,
 				Queue.class, BuildTrigger.class,
 				Trigger.class, BuildStep.class,
-				ParameterizedJobMixIn.class
+				ParameterizedJobMixIn.class,
+				ParametersAction.class
 			) ||
 			Reflection.calledFromMethod(
 					InheritanceProject.class,
@@ -514,6 +516,17 @@ public abstract class InheritanceGovernor<T> {
 		) {
 			return true;
 		}
+		
+		/* A special case is the GitStatus class from the GIT plugin. Calls
+		 * originating from that class need to use full inheritance, since they
+		 * must resolve all jobs triggering from it.
+		 */
+		try {
+			Class<?> clazz = Class.forName("hudson.plugins.git.GitStatus");
+			if (clazz != null && Reflection.calledFromClass(clazz)) {
+				return true;
+			}
+		} catch (ClassNotFoundException ex) {}
 		
 		//In all other cases, we don't require (or want) inheritance
 		return false;
