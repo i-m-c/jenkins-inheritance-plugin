@@ -1273,7 +1273,7 @@ public class InheritanceProject extends Project<InheritanceProject, InheritanceB
 	// === URL-BOUND ACTION METHODS ===
 	
 	/**
-	 * Accepts <tt>config.xml</tt> submission, as well as serve it.
+	 * Accepts config.xml submission, as well as serve it.
 	 */
 	@Override
 	@WebMethod(name = "config.xml")
