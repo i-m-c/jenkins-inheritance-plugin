@@ -17,12 +17,9 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public
-License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+License along with this library.  If not, see <http://www.gnu.org/licenses />.
 -->
-<project 
-		xmlns="http://maven.apache.org/POM/4.0.0"
-		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-		xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	
 	<parent>
@@ -39,7 +36,7 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 	<name>Project Inheritance Plugin</name>
 	<groupId>hudson.plugins</groupId>
 	<artifactId>project-inheritance</artifactId>
-	<version>19.09.01-SNAPSHOT</version>
+	<version>21.04.03-SNAPSHOT</version>
 	<packaging>hpi</packaging>
 	<!-- Link to wiki -->
 	<url>https://wiki.jenkins-ci.org/display/JENKINS/inheritance-plugin</url>
@@ -77,9 +74,7 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 		
 		<!--
 			Needed for test-cases by the rebuild plugin (and others), that do
-			not declare it, since it used to be implied in Jenkins < 2.2, but
-			is now optional.
-			The scope is "test", since it's not actually needed for compilation,
+			not declare it, since it used to be implied in Jenkins < 2.2, but is now optional. The scope is "test", since it's not actually needed for compilation,
 			only running tests.
 		-->
 		<dependency>
@@ -194,7 +189,8 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 		<url>https://github.com/i-m-c/jenkins-inheritance-plugin</url>
 		<connection>scm:git:github.com/i-m-c/jenkins-inheritance-plugin.git</connection>
 		<developerConnection>scm:git:git@github.com:i-m-c/jenkins-inheritance-plugin.git</developerConnection>
-	</scm>
+	  <tag>HEAD</tag>
+  </scm>
 	
 	<!-- Set up repository locations for Jenkins and its plugins -->
 	<repositories>
