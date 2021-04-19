@@ -71,15 +71,13 @@ l.layout(
 			include(my, "configure-header-warnings")
 			
 			ct.colored_block(backCol: "LightGoldenRodYellow ", borderCol: "navy") {
-				f.section(title: _("Parameters")) {}
-				//This description list only renders correctly, if there's an
-				//entry (even a blank one) in the same table
-				ct.blankEntry()
-				f.descriptorList(
-						field: "properties",
-						forceRowSet: "true",
-						descriptors: my.getJobPropertyDescriptors(my.getClass(), false, "ParametersDefinitionProperty")
-				)
+				f.section(title: _("Parameters")) {
+					f.descriptorList(
+							field: "properties",
+							forceRowSet: "true",
+							descriptors: my.getJobPropertyDescriptors(my.getClass(), false, "ParametersDefinitionProperty")
+					)
+				}
 			}
 			
 			// Add the box with the sub-job definitions

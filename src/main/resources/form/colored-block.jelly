@@ -46,11 +46,9 @@ THE SOFTWARE.
 			table cells.
 		</st:attribute>
 	</st:documentation>
-	<tr>
-		<td colspan="3">
-			<table width="100%" style="border:1px dashed ${attrs.borderCol};background-color:${attrs.backCol}">
-				<d:invokeBody />
-			</table>
-		</td>
-	</tr>
+	<div class='tr'>
+		<div colspan="4" style="border:1px dashed ${attrs.borderCol};background-color:${attrs.backCol};padding:4pt">
+			<d:invokeBody />
+		</div>
+	</div>
 </j:jelly>

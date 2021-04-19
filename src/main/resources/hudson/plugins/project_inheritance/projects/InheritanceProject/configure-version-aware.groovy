@@ -106,13 +106,13 @@ l.layout(title: my.getDisplayName() + " Config", permission: my.EXTENDED_READ, n
 			}
 			
 			ct.colored_block(backCol: "LightGoldenRodYellow ", borderCol: "navy") {
-				f.section(title: _("Properties")) {}
-				ct.blankEntry();
-				f.descriptorList(
-						field: "properties",
-						forceRowSet: "true",
-						descriptors: my.getJobPropertyDescriptors(my.getClass(), true)
-				)
+				f.section(title: _("Properties")) {
+					f.descriptorList(
+							field: "properties",
+							forceRowSet: "true",
+							descriptors: my.getJobPropertyDescriptors(my.getClass(), true)
+					)
+				}
 			}
 			
 			//Load the extended configuration

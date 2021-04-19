@@ -34,13 +34,13 @@ script(
 f.section(title: _("Version Control")) {
 	//Print a warning message that outlines what kind of version you've loaded
 	note = my.getCurrentVersionNotification()
-	tr() { td(colspan: 3) {
+	f.block() {
 		color = (note.isWarning) ? "darkred" : "darkgreen"
 		span(style: "font-size:125%; font-weight:bold; color:" + color) {
 			msg = note.getNotificationMessage();
 			span(style: "margin-right:1em", msg)
 		}
-	}}
+	}
 	
 	//The actual version selection box
 	f.entry(

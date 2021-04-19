@@ -49,11 +49,6 @@ public interface CustomTagLib extends TypedTagLibrary {
     void hetero_list(Map<?,?> args);
     void hetero_list();
     
-    void blankEntry(Map<?,?> args, Closure<?> body);
-    void blankEntry(Closure<?> body);
-    void blankEntry(Map<?,?> args);
-    void blankEntry();
-    
     void leftExpandButton(Map<?,?> args, Closure<?> body);
     void leftExpandButton(Closure<?> body);
     void leftExpandButton(Map<?,?> args);
