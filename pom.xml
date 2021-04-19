@@ -131,7 +131,7 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 			</plugin>
 
 		
-		<!-- Must upgrade animal-sniffer to deal with Java 9 without crash -->
+			<!-- Must upgrade animal-sniffer to deal with Java 9 without crash -->
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>animal-sniffer-maven-plugin</artifactId>
@@ -142,6 +142,15 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 						<artifactId>java18</artifactId>
 						<version>1.0</version>
 					</signature>
+				</configuration>
+			</plugin>
+			
+			<!-- Disable spotbugs plugin, for now -->
+			<plugin>
+				<groupId>com.github.spotbugs</groupId>
+				<artifactId>spotbugs-maven-plugin</artifactId>
+				<configuration>
+					<skip>true</skip>
 				</configuration>
 			</plugin>
 		</plugins>
