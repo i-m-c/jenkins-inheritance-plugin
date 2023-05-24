@@ -48,7 +48,7 @@ License along with this library.  If not, see <http://www.gnu.org/licenses />.
 		<animal-sniffer-maven-plugin.version>1.16</animal-sniffer-maven-plugin.version>
 		<diffutils.version>1.2.1</diffutils.version>
 		<maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
-		<matrix-project.version>1.18</matrix-project.version>
+		<matrix-project.version>1.18.1</matrix-project.version>
 		<rebuild.version>1.31</rebuild.version>
 		
 		<slf4j-api.version>1.7.30</slf4j-api.version>
