@@ -38,7 +38,7 @@ public class RebuildValidatorSuppressor extends RebuildValidator {
 	 * @return true if the plug-in provides its own rebuild functionality. E.g. disable the rebuild action.
 	 */
 	@SuppressWarnings("rawtypes")
-	public boolean isApplicable(AbstractBuild build) {
+	public boolean isInheritanceBuild(AbstractBuild build) {
 		if (build instanceof InheritanceBuild) {
 			return true;
 		}
